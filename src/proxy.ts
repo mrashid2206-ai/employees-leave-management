@@ -10,7 +10,7 @@ const PUBLIC_PATHS = ['/login', '/employee-login', '/api/auth']
 // Employee-only pages (require employee token)
 const EMPLOYEE_PATHS = ['/check-in', '/apply-leave']
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Allow static files

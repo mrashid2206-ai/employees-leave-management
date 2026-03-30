@@ -14,11 +14,11 @@ export default function DashboardLayout({
 }) {
   const queryClient = useQueryClient()
 
-  // Auto-refresh data every 30 seconds
+  // Auto-refresh data every 5 minutes
   useEffect(() => {
     const interval = setInterval(() => {
       queryClient.invalidateQueries()
-    }, 30000)
+    }, 300000)
     return () => clearInterval(interval)
   }, [queryClient])
 

@@ -80,14 +80,19 @@ export default function EmployeePortalPage() {
     }
   }, [activeTab, empUser])
 
-  // Load employee info + settings
+  // Load employee info + settings + approved leaves
   useEffect(() => {
     if (activeTab === 'info' && empUser) {
       Promise.all([
         fetch(`/api/employees/${empUser.id}`).then(r => r.json()),
         fetch('/api/settings').then(r => r.json()),
-      ]).then(([emp, settings]) => {
-        setEmpInfo({ ...emp, annual_leave_balance: settings.annual_leave_balance ?? 30 })
+        fetch(`/api/leaves/my-requests?employee_id=${empUser.id}`).then(r => r.json()),
+      ]).then(([emp, settings, leaves]) => {
+        const totalBalance = settings.annual_leave_balance ?? 30
+        const usedDays = (leaves as any[])
+          .filter((l: any) => l.status === 'approved')
+          .reduce((sum: number, l: any) => sum + (l.days_count || 0), 0)
+        setEmpInfo({ ...emp, annual_leave_balance: totalBalance, used_days: usedDays, remaining: totalBalance - usedDays })
       })
     }
   }, [activeTab, empUser])
@@ -364,17 +369,17 @@ export default function EmployeePortalPage() {
                     <div className="grid grid-cols-3 gap-3 text-center">
                       <div className="p-3 rounded-xl bg-blue-500/10">
                         <p className="text-[10px] text-muted-foreground mb-1">{t('totalBalance')}</p>
-                        <p className="text-2xl font-bold text-blue-500">{empInfo.annual_leave_balance ?? 30}</p>
+                        <p className="text-2xl font-bold text-blue-500">{empInfo.annual_leave_balance}</p>
                         <p className="text-[10px] text-muted-foreground">{t('days')}</p>
                       </div>
                       <div className="p-3 rounded-xl bg-amber-500/10">
                         <p className="text-[10px] text-muted-foreground mb-1">{t('leaveUsed')}</p>
-                        <p className="text-2xl font-bold text-amber-500">{(empInfo.annual_leave_balance ?? 30) - (empInfo.leave_balance ?? 0)}</p>
+                        <p className="text-2xl font-bold text-amber-500">{empInfo.used_days}</p>
                         <p className="text-[10px] text-muted-foreground">{t('days')}</p>
                       </div>
                       <div className="p-3 rounded-xl bg-emerald-500/10">
                         <p className="text-[10px] text-muted-foreground mb-1">{t('leaveBalanceRemaining')}</p>
-                        <p className="text-2xl font-bold text-emerald-500">{empInfo.leave_balance ?? 0}</p>
+                        <p className="text-2xl font-bold text-emerald-500">{empInfo.remaining}</p>
                         <p className="text-[10px] text-muted-foreground">{t('days')}</p>
                       </div>
                     </div>

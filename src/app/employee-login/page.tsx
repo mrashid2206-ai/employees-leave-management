@@ -42,8 +42,7 @@ export default function EmployeeLoginPage() {
       const data = await res.json()
       // Store employee info in sessionStorage for the client pages
       sessionStorage.setItem('emp-user', JSON.stringify(data.user))
-      router.push('/check-in')
-      router.refresh()
+      window.location.href = '/check-in'
     } catch {
       setError(t('error'))
       setLoading(false)
