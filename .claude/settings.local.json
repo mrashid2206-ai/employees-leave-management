@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx shadcn@latest init -d --defaults)"
+      "Bash(npx shadcn@latest init -d --defaults)",
+      "Bash(npx shadcn@latest add table card dialog input select badge tabs separator dropdown-menu label textarea popover calendar sheet tooltip avatar form sonner --yes)",
+      "Bash(npm install:*)",
+      "Bash(npx next:*)"
     ]
   }
 }

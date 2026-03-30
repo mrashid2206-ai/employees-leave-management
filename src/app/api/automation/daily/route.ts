@@ -1,0 +1,106 @@
+import { NextResponse } from 'next/server'
+import pool from '@/lib/db'
+
+export async function POST(request: Request) {
+  const { date } = await request.json()
+  const processDate = date || new Date().toISOString().split('T')[0]
+
+  const results = {
+    absentMarked: 0,
+    leaveDeducted: 0,
+    tardinessCreated: 0,
+    date: processDate,
+  }
+
+  // 1. Get all active employees
+  const { rows: employees } = await pool.query(
+    'SELECT id FROM employees WHERE is_active = true'
+  )
+
+  // 2. Get employees who are on approved leave today
+  const { rows: onLeave } = await pool.query(
+    `SELECT DISTINCT employee_id FROM leave_requests
+     WHERE status = 'approved' AND start_date <= $1 AND end_date >= $1`,
+    [processDate]
+  )
+  const onLeaveIds = new Set(onLeave.map(r => r.employee_id))
+
+  // 3. Get employees who already have attendance for today
+  const { rows: attended } = await pool.query(
+    'SELECT employee_id, check_in FROM attendance WHERE date = $1',
+    [processDate]
+  )
+  const attendedMap = new Map(attended.map(r => [r.employee_id, r.check_in]))
+
+  // 4. Get holidays
+  const { rows: holidays } = await pool.query(
+    'SELECT id FROM holidays WHERE date = $1',
+    [processDate]
+  )
+  const isHoliday = holidays.length > 0
+
+  // Get settings for work days and start time
+  const { rows: settingsRows } = await pool.query('SELECT work_days, work_start_time::text as work_start_time FROM settings LIMIT 1')
+  const workDays = settingsRows[0]?.work_days?.split(',').map(Number) || [0,1,2,3,4]
+  const workStartTime = settingsRows[0]?.work_start_time || '08:00'
+  const [startH, startM] = workStartTime.split(':').map(Number)
+  const workStartMinutes = startH * 60 + startM
+
+  // Skip weekends
+  const dayOfWeek = new Date(processDate).getDay()
+  const isWeekend = !workDays.includes(dayOfWeek)
+
+  if (!isHoliday && !isWeekend) {
+    for (const emp of employees) {
+      // Skip employees on leave
+      if (onLeaveIds.has(emp.id)) continue
+
+      if (!attendedMap.has(emp.id)) {
+        // No attendance record — mark as absent
+        await pool.query(`
+          INSERT INTO attendance (employee_id, date, status)
+          VALUES ($1, $2, 'absent')
+          ON CONFLICT (employee_id, date) DO NOTHING
+        `, [emp.id, processDate])
+        results.absentMarked++
+
+        // Auto-deduct: create an approved annual leave for this day
+        const { rows: existingLeave } = await pool.query(
+          `SELECT id FROM leave_requests WHERE employee_id = $1 AND start_date = $2 AND end_date = $2`,
+          [emp.id, processDate]
+        )
+        if (existingLeave.length === 0) {
+          await pool.query(`
+            INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, days_count, notes, status)
+            VALUES ($1, 1, $2, $2, 1, 'Auto-deducted: absent without leave', 'approved')
+          `, [emp.id, processDate])
+          results.leaveDeducted++
+        }
+      } else {
+        // Has attendance — check if late (after 08:00)
+        const checkIn = attendedMap.get(emp.id)
+        if (checkIn) {
+          const [h, m] = checkIn.split(':').map(Number)
+          const minutesLate = (h * 60 + m) - workStartMinutes
+          if (minutesLate > 0) {
+            // Check if tardiness record already exists
+            const { rows: existing } = await pool.query(
+              'SELECT id FROM tardiness_log WHERE employee_id = $1 AND date = $2',
+              [emp.id, processDate]
+            )
+            if (existing.length === 0) {
+              const hoursDecimal = minutesLate / 1440
+              await pool.query(`
+                INSERT INTO tardiness_log (employee_id, date, time, minutes_late, hours_late_decimal, notes)
+                VALUES ($1, $2, $3, $4, $5, 'Auto-generated from attendance')
+              `, [emp.id, processDate, checkIn, minutesLate, hoursDecimal])
+              results.tardinessCreated++
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return NextResponse.json({ success: true, ...results })
+}
