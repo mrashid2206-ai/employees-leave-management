@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { LogIn, LogOut, Clock, CheckCircle, CalendarDays, ClipboardList, User, Send } from 'lucide-react'
+import { LogIn, LogOut, Clock, CheckCircle, CalendarDays, ClipboardList, User, Send, Info, FileText, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Toaster } from '@/components/ui/sonner'
 import { useLanguage, useT } from '@/lib/language-context'
@@ -27,7 +27,7 @@ export default function EmployeePortalPage() {
   const { lang, dir } = useLanguage()
   const router = useRouter()
 
-  const [activeTab, setActiveTab] = useState<'attendance' | 'leave' | 'requests'>('attendance')
+  const [activeTab, setActiveTab] = useState<'attendance' | 'leave' | 'requests' | 'info' | 'records'>('attendance')
   const [empUser, setEmpUser] = useState<{ id: number; name: string; username: string } | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -42,6 +42,14 @@ export default function EmployeePortalPage() {
 
   // My requests
   const [myRequests, setMyRequests] = useState<any[]>([])
+
+  // My info
+  const [empInfo, setEmpInfo] = useState<any>(null)
+
+  // My records
+  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([])
+  const [tardinessRecords, setTardinessRecords] = useState<any[]>([])
+  const [recordsSubTab, setRecordsSubTab] = useState<'attendance' | 'tardiness'>('attendance')
 
   useEffect(() => {
     const stored = sessionStorage.getItem('emp-user')
@@ -69,6 +77,30 @@ export default function EmployeePortalPage() {
       fetch(`/api/leaves/my-requests?employee_id=${empUser.id}`)
         .then(r => r.json())
         .then(setMyRequests)
+    }
+  }, [activeTab, empUser])
+
+  // Load employee info + settings
+  useEffect(() => {
+    if (activeTab === 'info' && empUser) {
+      Promise.all([
+        fetch(`/api/employees/${empUser.id}`).then(r => r.json()),
+        fetch('/api/settings').then(r => r.json()),
+      ]).then(([emp, settings]) => {
+        setEmpInfo({ ...emp, annual_leave_balance: settings.annual_leave_balance ?? 30 })
+      })
+    }
+  }, [activeTab, empUser])
+
+  // Load records
+  useEffect(() => {
+    if (activeTab === 'records' && empUser) {
+      fetch(`/api/attendance?employee_id=${empUser.id}`)
+        .then(r => r.json())
+        .then(setAttendanceRecords)
+      fetch(`/api/tardiness/by-employee/${empUser.id}`)
+        .then(r => r.json())
+        .then(setTardinessRecords)
     }
   }, [activeTab, empUser])
 
@@ -320,6 +352,171 @@ export default function EmployeePortalPage() {
           </div>
         )}
 
+        {/* My Info Tab */}
+        {activeTab === 'info' && (
+          <div className="space-y-4 animate-in">
+            {empInfo ? (
+              <>
+                {/* Leave Balance Card */}
+                <Card className="border-0 shadow-md">
+                  <CardContent className="p-5">
+                    <h2 className="font-bold text-lg mb-4">{t('leaveBalance')}</h2>
+                    <div className="grid grid-cols-3 gap-3 text-center">
+                      <div className="p-3 rounded-xl bg-blue-500/10">
+                        <p className="text-[10px] text-muted-foreground mb-1">{t('totalBalance')}</p>
+                        <p className="text-2xl font-bold text-blue-500">{empInfo.annual_leave_balance ?? 30}</p>
+                        <p className="text-[10px] text-muted-foreground">{t('days')}</p>
+                      </div>
+                      <div className="p-3 rounded-xl bg-amber-500/10">
+                        <p className="text-[10px] text-muted-foreground mb-1">{t('leaveUsed')}</p>
+                        <p className="text-2xl font-bold text-amber-500">{(empInfo.annual_leave_balance ?? 30) - (empInfo.leave_balance ?? 0)}</p>
+                        <p className="text-[10px] text-muted-foreground">{t('days')}</p>
+                      </div>
+                      <div className="p-3 rounded-xl bg-emerald-500/10">
+                        <p className="text-[10px] text-muted-foreground mb-1">{t('leaveBalanceRemaining')}</p>
+                        <p className="text-2xl font-bold text-emerald-500">{empInfo.leave_balance ?? 0}</p>
+                        <p className="text-[10px] text-muted-foreground">{t('days')}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Personal Info Card */}
+                <Card className="border-0 shadow-md">
+                  <CardContent className="p-5">
+                    <h2 className="font-bold text-lg mb-4">{t('personalInfo')}</h2>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center py-2 border-b">
+                        <span className="text-sm text-muted-foreground">{t('name')}</span>
+                        <span className="text-sm font-medium">{empInfo.name}</span>
+                      </div>
+                      <div className="flex justify-between items-center py-2 border-b">
+                        <span className="text-sm text-muted-foreground">{t('username')}</span>
+                        <span className="text-sm font-medium font-mono">@{empInfo.username}</span>
+                      </div>
+                      <div className="flex justify-between items-center py-2">
+                        <span className="text-sm text-muted-foreground">{t('department')}</span>
+                        <span className="text-sm font-medium">{empInfo.department_name || empInfo.department?.name || '-'}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground text-sm">{t('loading')}</div>
+            )}
+          </div>
+        )}
+
+        {/* My Records Tab */}
+        {activeTab === 'records' && (
+          <div className="space-y-4 animate-in">
+            {/* Sub-tab toggle */}
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant={recordsSubTab === 'attendance' ? 'default' : 'outline'}
+                onClick={() => setRecordsSubTab('attendance')}
+                className="flex-1"
+              >
+                <Clock className="h-3.5 w-3.5 mr-1.5" />
+                {t('attendanceHistory')}
+              </Button>
+              <Button
+                size="sm"
+                variant={recordsSubTab === 'tardiness' ? 'default' : 'outline'}
+                onClick={() => setRecordsSubTab('tardiness')}
+                className="flex-1"
+              >
+                <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
+                {t('tardinessHistory')}
+              </Button>
+            </div>
+
+            {/* Attendance Records */}
+            {recordsSubTab === 'attendance' && (
+              <div className="space-y-3">
+                <h2 className="font-bold text-lg">{t('attendanceHistory')} ({attendanceRecords.length})</h2>
+                {attendanceRecords.length === 0 ? (
+                  <Card className="border-0 shadow-md">
+                    <CardContent className="p-8 text-center text-muted-foreground text-sm">
+                      <Clock className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                      {t('noAttendance')}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  attendanceRecords.slice(0, 30).map(rec => (
+                    <Card key={rec.id} className="border-0 shadow-md">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-semibold font-mono">{rec.date}</span>
+                          {rec.is_holiday_work && (
+                            <Badge className="bg-purple-500/10 text-purple-500 border-0 text-[10px]">
+                              {lang === 'ar' ? 'عمل في عطلة' : 'Holiday'}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                          <div className="p-1.5 rounded bg-emerald-500/10">
+                            <p className="text-[10px] text-muted-foreground">{t('checkIn')}</p>
+                            <p className="text-xs font-bold text-emerald-500 font-mono">{rec.check_in?.slice(0, 5) || '--:--'}</p>
+                          </div>
+                          <div className="p-1.5 rounded bg-amber-500/10">
+                            <p className="text-[10px] text-muted-foreground">{t('checkOut')}</p>
+                            <p className="text-xs font-bold text-amber-500 font-mono">{rec.check_out?.slice(0, 5) || '--:--'}</p>
+                          </div>
+                          <div className="p-1.5 rounded bg-blue-500/10">
+                            <p className="text-[10px] text-muted-foreground">{t('workHours')}</p>
+                            <p className="text-xs font-bold text-blue-500 font-mono">{rec.work_hours || 0}h</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Tardiness Records */}
+            {recordsSubTab === 'tardiness' && (
+              <div className="space-y-3">
+                <h2 className="font-bold text-lg">{t('tardinessHistory')} ({tardinessRecords.length})</h2>
+                {tardinessRecords.length === 0 ? (
+                  <Card className="border-0 shadow-md">
+                    <CardContent className="p-8 text-center text-muted-foreground text-sm">
+                      <AlertTriangle className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                      {t('noTardiness')}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  tardinessRecords.slice(0, 30).map(rec => (
+                    <Card key={rec.id} className="border-0 shadow-md">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-semibold font-mono">{rec.date}</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {t('arrivalTime')}: <span className="font-mono">{rec.time?.slice(0, 5)}</span>
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <Badge className="bg-rose-500/10 text-rose-500 border-0">
+                              {rec.minutes_late} {t('minutes')} {t('late')}
+                            </Badge>
+                          </div>
+                        </div>
+                        {rec.notes && (
+                          <p className="text-xs text-muted-foreground mt-2 bg-accent/30 p-2 rounded">{rec.notes}</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* My Requests Tab */}
         {activeTab === 'requests' && (
           <div className="space-y-3 animate-in">
@@ -369,6 +566,8 @@ export default function EmployeePortalPage() {
             { id: 'attendance' as const, icon: Clock, label: t('checkInBtn') },
             { id: 'leave' as const, icon: CalendarDays, label: t('applyLeave') },
             { id: 'requests' as const, icon: ClipboardList, label: t('myRequests') },
+            { id: 'info' as const, icon: Info, label: t('myInfo') },
+            { id: 'records' as const, icon: FileText, label: t('myRecords') },
           ].map(tab => {
             const Icon = tab.icon
             const isActive = activeTab === tab.id

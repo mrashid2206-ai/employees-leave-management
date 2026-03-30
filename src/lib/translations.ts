@@ -255,6 +255,20 @@ export const translations = {
   friday: { ar: 'الجمعة', en: 'Friday' },
   saturday: { ar: 'السبت', en: 'Saturday' },
   scheduleNote: { ar: 'تغيير ساعات العمل يؤثر على حساب التأخير والرصيد. مثال: في رمضان غيّر إلى 6 ساعات.', en: 'Changing work hours affects tardiness and balance calculations. Example: set to 6 hours during Ramadan.' },
+
+  // Employee Portal - My Info
+  myInfo: { ar: 'معلوماتي', en: 'My Info' },
+  leaveBalanceRemaining: { ar: 'الرصيد المتبقي', en: 'Remaining Balance' },
+  leaveUsed: { ar: 'الإجازات المستخدمة', en: 'Leave Used' },
+  totalBalance: { ar: 'الرصيد الكلي', en: 'Total Balance' },
+  personalInfo: { ar: 'المعلومات الشخصية', en: 'Personal Information' },
+
+  // Employee Portal - My Records
+  myRecords: { ar: 'سجلاتي', en: 'My Records' },
+  attendanceHistory: { ar: 'سجل الحضور', en: 'Attendance History' },
+  noAttendance: { ar: 'لا توجد سجلات حضور', en: 'No attendance records' },
+  late: { ar: 'متأخر', en: 'Late' },
+  recentRecords: { ar: 'آخر السجلات', en: 'Recent Records' },
 } as const
 
 export type TranslationKey = keyof typeof translations
