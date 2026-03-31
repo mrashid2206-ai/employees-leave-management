@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 const SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'employees-secret-key-2026-do-not-share')
 
 const USERS = [
-  { username: 'mrashid', password: 'Mrashid@1981', role: 'admin', name: 'م. راشد' },
+  { username: 'admin', password: 'Admin@2026', role: 'admin', name: 'Admin' },
 ]
 
 export async function authenticate(username: string, password: string) {
