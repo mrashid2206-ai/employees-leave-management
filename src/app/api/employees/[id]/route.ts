@@ -16,7 +16,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const body = await request.json()
-  const fields = Object.keys(body).filter(k => k !== 'id' && k !== 'department')
+  const allowedFields = ['name', 'department_id', 'leave_balance', 'is_active', 'username', 'password_hash']
+  const fields = Object.keys(body).filter(k => allowedFields.includes(k))
   if (fields.length === 0) return NextResponse.json({ error: 'No fields' }, { status: 400 })
 
   const sets = fields.map((f, i) => `${f} = $${i + 2}`).join(', ')

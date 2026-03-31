@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import pool from '@/lib/db'
+import pool, { omanToday } from '@/lib/db'
 
 export async function POST(request: Request) {
   const { date } = await request.json()
-  const processDate = date || new Date().toISOString().split('T')[0]
+  const processDate = date || omanToday()
 
   const results = {
     absentMarked: 0,

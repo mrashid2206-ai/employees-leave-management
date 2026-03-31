@@ -23,3 +23,18 @@ const pool = new Pool(
 )
 
 export default pool
+
+// Oman timezone (GMT+4)
+export function omanNow(): Date {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Muscat' }))
+}
+
+export function omanToday(): string {
+  const d = omanNow()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export function omanTime(): string {
+  const d = omanNow()
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:00`
+}

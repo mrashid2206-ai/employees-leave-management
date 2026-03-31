@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import pool from '@/lib/db'
+import pool, { omanToday, omanTime } from '@/lib/db'
 
 async function isOffDay(dateStr: string): Promise<boolean> {
   // Check holidays
@@ -20,9 +20,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
   }
 
-  const now = new Date()
-  const today = now.toISOString().split('T')[0]
-  const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`
+  const today = omanToday()
+  const currentTime = omanTime()
 
   // Check if today is a holiday/weekend
   const holidayWork = await isOffDay(today)
