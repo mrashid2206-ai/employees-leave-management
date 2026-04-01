@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
+import { verifyAdmin, unauthorized } from '@/lib/api-auth'
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const admin = await verifyAdmin(request)
+  if (!admin) return unauthorized()
   const { id } = await params
   const { status } = await request.json()
 
@@ -9,12 +12,31 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
   }
 
+  // Get current leave request to check previous status
+  const { rows: currentRows } = await pool.query('SELECT * FROM leave_requests WHERE id = $1', [id])
+  if (currentRows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const currentLeave = currentRows[0]
+  const previousStatus = currentLeave.status
+
+  // Check balance before approving
+  if (status === 'approved' && previousStatus !== 'approved') {
+    const { rows: empRows } = await pool.query('SELECT leave_balance FROM employees WHERE id = $1', [currentLeave.employee_id])
+    if (empRows[0] && empRows[0].leave_balance < currentLeave.days_count) {
+      return NextResponse.json({ error: 'Insufficient leave balance' }, { status: 400 })
+    }
+  }
+
   const { rows } = await pool.query(
     'UPDATE leave_requests SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
     [status, id]
   )
 
-  if (rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  // Deduct balance when approving, restore when un-approving
+  if (status === 'approved' && previousStatus !== 'approved') {
+    await pool.query('UPDATE employees SET leave_balance = leave_balance - $1 WHERE id = $2', [currentLeave.days_count, currentLeave.employee_id])
+  } else if (previousStatus === 'approved' && status !== 'approved') {
+    await pool.query('UPDATE employees SET leave_balance = leave_balance + $1 WHERE id = $2', [currentLeave.days_count, currentLeave.employee_id])
+  }
 
   // Try to send email notification (non-blocking)
   try {

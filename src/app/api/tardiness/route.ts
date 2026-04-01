@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
+import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 
-export async function GET() {
+export async function GET(request: Request) {
+  const user = await verifyAnyAuth(request)
+  if (!user) return unauthorized()
   const { rows } = await pool.query(`
     SELECT t.id, t.employee_id, t.date::text as date, t.time::text as time,
       t.minutes_late, t.hours_late_decimal, t.notes, t.created_at, t.updated_at,
@@ -14,6 +17,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const admin = await verifyAdmin(request)
+  if (!admin) return unauthorized()
   const body = await request.json()
 
   // Support bulk insert (array of records)

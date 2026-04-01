@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
+import { verifyAnyAuth, verifyAdmin, unauthorized, forbidden } from '@/lib/api-auth'
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const user = await verifyAnyAuth(request)
+  if (!user) return unauthorized()
   const { id } = await params
+  if (user.role === 'employee' && String(user.id) !== id) return forbidden()
   const { rows } = await pool.query(`
     SELECT e.id, e.name, e.department_id, e.leave_balance, e.is_active, e.username, e.created_at, e.updated_at, json_build_object('id', d.id, 'name', d.name) as department
     FROM employees e
@@ -14,6 +18,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const admin = await verifyAdmin(request)
+  if (!admin) return unauthorized()
   const { id } = await params
   const body = await request.json()
   const allowedFields = ['name', 'department_id', 'leave_balance', 'is_active', 'username', 'password_hash']
@@ -31,6 +37,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const admin = await verifyAdmin(request)
+  if (!admin) return unauthorized()
   const { id } = await params
   // Soft delete - set is_active to false
   const { rows } = await pool.query(

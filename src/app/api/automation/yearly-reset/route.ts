@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
+import { verifyAdmin, unauthorized } from '@/lib/api-auth'
 
-export async function POST() {
+export async function POST(request: Request) {
+  const admin = await verifyAdmin(request)
+  if (!admin) return unauthorized()
   // Get settings
   const { rows: settings } = await pool.query('SELECT * FROM settings LIMIT 1')
   if (settings.length === 0) return NextResponse.json({ error: 'No settings' }, { status: 400 })

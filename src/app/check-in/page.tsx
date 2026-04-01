@@ -51,6 +51,10 @@ export default function EmployeePortalPage() {
   const [tardinessRecords, setTardinessRecords] = useState<any[]>([])
   const [recordsSubTab, setRecordsSubTab] = useState<'attendance' | 'tardiness'>('attendance')
 
+  // Password change
+  const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
+  const [pwLoading, setPwLoading] = useState(false)
+
   useEffect(() => {
     let stored = sessionStorage.getItem('emp-user')
     if (!stored) {
@@ -408,6 +412,66 @@ export default function EmployeePortalPage() {
                         <span className="text-sm text-muted-foreground">{t('department')}</span>
                         <span className="text-sm font-medium">{empInfo.department_name || empInfo.department?.name || '-'}</span>
                       </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Change Password Card */}
+                <Card className="border-0 shadow-md">
+                  <CardContent className="p-5">
+                    <h2 className="font-bold text-lg mb-4">{lang === 'ar' ? 'تغيير كلمة المرور' : 'Change Password'}</h2>
+                    <div className="space-y-3">
+                      <Input
+                        type="password"
+                        placeholder={lang === 'ar' ? 'كلمة المرور الحالية' : 'Current password'}
+                        value={pwForm.current_password}
+                        onChange={e => setPwForm(f => ({ ...f, current_password: e.target.value }))}
+                      />
+                      <Input
+                        type="password"
+                        placeholder={lang === 'ar' ? 'كلمة المرور الجديدة' : 'New password'}
+                        value={pwForm.new_password}
+                        onChange={e => setPwForm(f => ({ ...f, new_password: e.target.value }))}
+                      />
+                      <Input
+                        type="password"
+                        placeholder={lang === 'ar' ? 'تأكيد كلمة المرور' : 'Confirm password'}
+                        value={pwForm.confirm_password}
+                        onChange={e => setPwForm(f => ({ ...f, confirm_password: e.target.value }))}
+                      />
+                      <Button
+                        className="w-full"
+                        disabled={pwLoading}
+                        onClick={async () => {
+                          if (!pwForm.current_password || !pwForm.new_password) {
+                            toast.error(t('fillRequired')); return
+                          }
+                          if (pwForm.new_password !== pwForm.confirm_password) {
+                            toast.error(lang === 'ar' ? 'كلمة المرور غير متطابقة' : 'Passwords do not match'); return
+                          }
+                          if (pwForm.new_password.length < 6) {
+                            toast.error(lang === 'ar' ? 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' : 'Password must be at least 6 characters'); return
+                          }
+                          setPwLoading(true)
+                          try {
+                            const res = await fetch('/api/employees/change-password', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ current_password: pwForm.current_password, new_password: pwForm.new_password }),
+                            })
+                            if (!res.ok) {
+                              const data = await res.json()
+                              toast.error(data.error || t('error'))
+                            } else {
+                              toast.success(lang === 'ar' ? 'تم تغيير كلمة المرور بنجاح' : 'Password changed successfully')
+                              setPwForm({ current_password: '', new_password: '', confirm_password: '' })
+                            }
+                          } catch { toast.error(t('error')) }
+                          setPwLoading(false)
+                        }}
+                      >
+                        {pwLoading ? '...' : (lang === 'ar' ? 'تغيير كلمة المرور' : 'Change Password')}
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>

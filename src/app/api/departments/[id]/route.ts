@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
+import { verifyAdmin, unauthorized } from '@/lib/api-auth'
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const admin = await verifyAdmin(request)
+  if (!admin) return unauthorized()
   const { id } = await params
   const { name } = await request.json()
   const { rows } = await pool.query(
@@ -13,6 +16,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const admin = await verifyAdmin(request)
+  if (!admin) return unauthorized()
   const { id } = await params
   // Check if department has employees
   const { rows: emps } = await pool.query('SELECT COUNT(*) as cnt FROM employees WHERE department_id = $1 AND is_active = true', [id])

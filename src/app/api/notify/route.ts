@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
+import { verifyAdmin, unauthorized } from '@/lib/api-auth'
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -12,6 +13,8 @@ const transporter = nodemailer.createTransport({
 })
 
 export async function POST(request: Request) {
+  const admin = await verifyAdmin(request)
+  if (!admin) return unauthorized()
   const { to, subject, html } = await request.json()
 
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {

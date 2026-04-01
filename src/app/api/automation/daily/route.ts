@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import pool, { omanToday } from '@/lib/db'
+import { verifyAdmin, unauthorized } from '@/lib/api-auth'
 
 export async function POST(request: Request) {
+  const admin = await verifyAdmin(request)
+  if (!admin) return unauthorized()
   const { date } = await request.json()
   const processDate = date || omanToday()
 
@@ -89,7 +92,7 @@ export async function POST(request: Request) {
               [emp.id, processDate]
             )
             if (existing.length === 0) {
-              const hoursDecimal = minutesLate / 1440
+              const hoursDecimal = Math.round((minutesLate / 60) * 100000) / 100000
               await pool.query(`
                 INSERT INTO tardiness_log (employee_id, date, time, minutes_late, hours_late_decimal, notes)
                 VALUES ($1, $2, $3, $4, $5, 'Auto-generated from attendance')

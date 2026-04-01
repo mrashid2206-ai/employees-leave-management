@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import pool, { omanToday, omanTime } from '@/lib/db'
+import { verifyAnyAuth, unauthorized, forbidden } from '@/lib/api-auth'
 
 async function isOffDay(dateStr: string): Promise<boolean> {
   // Check holidays
@@ -14,7 +15,13 @@ async function isOffDay(dateStr: string): Promise<boolean> {
 }
 
 export async function POST(request: Request) {
+  const user = await verifyAnyAuth(request)
+  if (!user) return unauthorized()
+
   const { employee_id, action } = await request.json()
+
+  // For employees, verify they can only check in for themselves
+  if (user.role === 'employee' && user.id !== employee_id) return forbidden()
 
   if (!employee_id || !action) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })

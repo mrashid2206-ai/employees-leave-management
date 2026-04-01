@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
+import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 
 export async function GET(request: Request) {
+  const user = await verifyAnyAuth(request)
+  if (!user) return unauthorized()
   const { searchParams } = new URL(request.url)
   const month = searchParams.get('month') // YYYY-MM format
   const employeeId = searchParams.get('employee_id')
@@ -36,6 +39,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const admin = await verifyAdmin(request)
+  if (!admin) return unauthorized()
   const body = await request.json()
   const records = Array.isArray(body) ? body : [body]
 

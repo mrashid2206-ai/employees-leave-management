@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
+import { verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 
 export async function POST(request: Request) {
+  const user = await verifyAnyAuth(request)
+  if (!user) return unauthorized()
   const { employee_id, start_date, end_date, exclude_request_id } = await request.json()
 
   // Get employee's department

@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
+import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 
-export async function GET() {
+export async function GET(request: Request) {
+  const user = await verifyAnyAuth(request)
+  if (!user) return unauthorized()
   const { rows } = await pool.query(`
     SELECT lr.id, lr.employee_id, lr.leave_type_id,
       lr.start_date::text as start_date, lr.end_date::text as end_date,
@@ -17,6 +20,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const admin = await verifyAdmin(request)
+  if (!admin) return unauthorized()
   const body = await request.json()
   const { employee_id, leave_type_id, start_date, end_date, days_count, notes } = body
 

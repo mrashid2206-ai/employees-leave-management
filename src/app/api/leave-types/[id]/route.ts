@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
+import { verifyAdmin, unauthorized } from '@/lib/api-auth'
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const admin = await verifyAdmin(request)
+  if (!admin) return unauthorized()
   const { id } = await params
   const { name_ar, name_en, color } = await request.json()
   const { rows } = await pool.query(
@@ -13,6 +16,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const admin = await verifyAdmin(request)
+  if (!admin) return unauthorized()
   const { id } = await params
   const { rows: used } = await pool.query('SELECT COUNT(*) as cnt FROM leave_requests WHERE leave_type_id = $1', [id])
   if (parseInt(used[0].cnt) > 0) {
