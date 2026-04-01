@@ -108,7 +108,7 @@ export default function OvertimeReportPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
-        <Select value={String(selectedYear)} onValueChange={v => setSelectedYear(parseInt(v))}>
+        <Select value={String(selectedYear)} onValueChange={v => setSelectedYear(parseInt(v ?? '2026'))}>
           <SelectTrigger className="w-32">
             <SelectValue />
           </SelectTrigger>
@@ -118,7 +118,7 @@ export default function OvertimeReportPage() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={String(selectedMonth)} onValueChange={v => setSelectedMonth(parseInt(v))}>
+        <Select value={String(selectedMonth)} onValueChange={v => setSelectedMonth(parseInt(v ?? '1'))}>
           <SelectTrigger className="w-40">
             <SelectValue />
           </SelectTrigger>
