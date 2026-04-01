@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Plus, Trash2 } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { Checkbox } from '@/components/ui/checkbox'
 import { getEmployees, getTardinessRecords, createBulkTardiness, deleteTardinessRecord, getSettings } from '@/lib/api'
@@ -30,12 +31,34 @@ export default function TardinessPage() {
   const [selectedEmployees, setSelectedEmployees] = useState<number[]>([])
   const [form, setForm] = useState({ date: '', time: '08:15', notes: '' })
   const t = useT()
-  const { dir } = useLanguage()
+  const { dir, lang } = useLanguage()
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number }>({ open: false, id: 0 })
+
+  const now = new Date()
+  const [filterYear, setFilterYear] = useState<string>('all')
+  const [filterMonth, setFilterMonth] = useState<string>('all')
+  const [filterDay, setFilterDay] = useState<string>('all')
+
+  const monthNames = lang === 'ar'
+    ? ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
+    : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+  const daysInMonth = filterYear !== 'all' && filterMonth !== 'all'
+    ? new Date(parseInt(filterYear), parseInt(filterMonth), 0).getDate()
+    : 31
 
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
   const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: records = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
+  const { data: allRecords = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
+
+  const records = allRecords.filter(r => {
+    if (!r.date) return true
+    const [y, m, d] = r.date.split('-')
+    if (filterYear !== 'all' && y !== filterYear) return false
+    if (filterMonth !== 'all' && parseInt(m) !== parseInt(filterMonth)) return false
+    if (filterDay !== 'all' && parseInt(d) !== parseInt(filterDay)) return false
+    return true
+  })
 
   const createMutation = useMutation({
     mutationFn: createBulkTardiness,
@@ -85,7 +108,7 @@ export default function TardinessPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <h1 className="text-2xl font-bold">{t('tardiness')}</h1>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger render={<Button />}>
@@ -154,6 +177,43 @@ export default function TardinessPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3">
+        <Select value={filterYear} onValueChange={v => { setFilterYear(v ?? 'all'); setFilterDay('all') }}>
+          <SelectTrigger className="w-32">
+            <SelectValue placeholder={lang === 'ar' ? 'السنة' : 'Year'} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{lang === 'ar' ? 'كل السنوات' : 'All Years'}</SelectItem>
+            {[2025, 2026, 2027].map(y => (
+              <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filterMonth} onValueChange={v => { setFilterMonth(v ?? 'all'); setFilterDay('all') }}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder={lang === 'ar' ? 'الشهر' : 'Month'} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{lang === 'ar' ? 'كل الشهور' : 'All Months'}</SelectItem>
+            {monthNames.map((m, i) => (
+              <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filterDay} onValueChange={v => setFilterDay(v ?? 'all')}>
+          <SelectTrigger className="w-32">
+            <SelectValue placeholder={lang === 'ar' ? 'اليوم' : 'Day'} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{lang === 'ar' ? 'كل الأيام' : 'All Days'}</SelectItem>
+            {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => (
+              <SelectItem key={d} value={String(d)}>{d}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <Card>

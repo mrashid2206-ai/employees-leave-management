@@ -45,9 +45,24 @@ export default function LeavesPage() {
   const [conflict, setConflict] = useState<{ conflict: boolean; message: string; absentCount: number } | null>(null)
   const [checkingConflict, setCheckingConflict] = useState(false)
 
+  const [filterYear, setFilterYear] = useState<string>('all')
+  const [filterMonth, setFilterMonth] = useState<string>('all')
+
+  const monthNames = lang === 'ar'
+    ? ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
+    : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
   const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
+  const { data: allLeaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
+
+  const leaves = allLeaves.filter(l => {
+    if (!l.start_date) return true
+    const [y, m] = l.start_date.split('-')
+    if (filterYear !== 'all' && y !== filterYear) return false
+    if (filterMonth !== 'all' && parseInt(m) !== parseInt(filterMonth)) return false
+    return true
+  })
 
   // Check conflict when employee + dates change
   useEffect(() => {
@@ -219,6 +234,32 @@ export default function LeavesPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3">
+        <Select value={filterYear} onValueChange={v => setFilterYear(v ?? 'all')}>
+          <SelectTrigger className="w-32">
+            <SelectValue placeholder={lang === 'ar' ? 'السنة' : 'Year'} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{lang === 'ar' ? 'كل السنوات' : 'All Years'}</SelectItem>
+            {[2025, 2026, 2027].map(y => (
+              <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filterMonth} onValueChange={v => setFilterMonth(v ?? 'all')}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder={lang === 'ar' ? 'الشهر' : 'Month'} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{lang === 'ar' ? 'كل الشهور' : 'All Months'}</SelectItem>
+            {monthNames.map((m, i) => (
+              <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Bulk Actions Bar */}

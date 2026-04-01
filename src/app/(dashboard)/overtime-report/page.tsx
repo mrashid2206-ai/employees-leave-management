@@ -32,15 +32,23 @@ export default function OvertimeReportPage() {
   const now = new Date()
   const [selectedYear, setSelectedYear] = useState(now.getFullYear())
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1)
+  const [selectedDay, setSelectedDay] = useState<string>('all')
 
   const monthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`
+  const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate()
 
   const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
-  const { data: records = [] } = useQuery<AttendanceRecord[]>({
+  const { data: allRecords = [] } = useQuery<AttendanceRecord[]>({
     queryKey: ['attendance-ot', monthKey],
     queryFn: () => fetch(`/api/attendance?month=${monthKey}`).then(r => r.json()),
   })
+
+  const records = useMemo(() => {
+    if (selectedDay === 'all') return allRecords
+    const dateStr = `${monthKey}-${String(selectedDay).padStart(2, '0')}`
+    return allRecords.filter(r => r.date === dateStr)
+  }, [allRecords, selectedDay, monthKey])
 
   const monthNames = lang === 'ar'
     ? ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
@@ -125,6 +133,17 @@ export default function OvertimeReportPage() {
           <SelectContent>
             {monthNames.map((m, i) => (
               <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={selectedDay} onValueChange={v => setSelectedDay(v ?? 'all')}>
+          <SelectTrigger className="w-32">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{lang === 'ar' ? 'كل الأيام' : 'All Days'}</SelectItem>
+            {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => (
+              <SelectItem key={d} value={String(d)}>{d}</SelectItem>
             ))}
           </SelectContent>
         </Select>
