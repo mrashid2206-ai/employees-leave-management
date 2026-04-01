@@ -505,34 +505,34 @@ export default function AttendancePage() {
 
       {/* Day Detail Dialog */}
       <Dialog open={dayDetailOpen} onOpenChange={setDayDetailOpen}>
-        <DialogContent className="max-w-md" dir={dir}>
+        <DialogContent className="max-w-md max-h-[85vh] flex flex-col" dir={dir}>
           <DialogHeader>
             <DialogTitle>
               {selectedDay} — {dayDetailRecords.length} {lang === 'ar' ? 'سجل' : 'records'}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="flex-1 overflow-y-auto space-y-2">
             {dayDetailRecords.length > 0 ? (
               dayDetailRecords.map(rec => (
                 <div key={rec.id} className="flex items-center justify-between p-3 rounded-xl bg-accent/20">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     {rec.status === 'present'
                       ? <UserCheck className="h-4 w-4 text-emerald-500 shrink-0" />
                       : <UserX className="h-4 w-4 text-rose-500 shrink-0" />
                     }
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium">{rec.employee?.name}</p>
-                        {rec.is_holiday_work && <Badge className="bg-purple-500/10 text-purple-500 border-0 text-[9px] h-4">⭐</Badge>}
+                        <p className="text-sm font-medium truncate">{rec.employee?.name}</p>
+                        {rec.is_holiday_work && <Badge className="bg-purple-500/10 text-purple-500 border-0 text-[9px] h-4 shrink-0">⭐</Badge>}
                       </div>
                       <p className="text-xs text-muted-foreground font-mono">
-                        {rec.check_in ? `${rec.check_in} → ${rec.check_out || '...'}` : t('absent')}
+                        {rec.check_in ? `${rec.check_in?.slice(0, 5)} → ${rec.check_out?.slice(0, 5) || '...'}` : t('absent')}
                         {rec.work_hours > 0 && ` · ${rec.work_hours}h`}
                         {rec.overtime_hours > 0 && ` (+${rec.overtime_hours}h OT)`}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     <Button
                       variant="ghost"
                       size="icon"
