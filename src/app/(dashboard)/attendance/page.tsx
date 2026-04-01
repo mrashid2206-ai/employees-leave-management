@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChevronRight, ChevronLeft, UserCheck, UserX, Clock, Plus, Pencil, Trash2, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { Checkbox } from '@/components/ui/checkbox'
-import { getEmployees, getDepartments, getSettings } from '@/lib/api'
+import { getEmployees, getDepartments, getSettings, getLeaveRequests } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
 
 const DAY_NAMES_AR = ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت']
@@ -64,6 +64,7 @@ export default function AttendancePage() {
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
   const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
+  const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
   const { data: records = [] } = useQuery<AttendanceRecord[]>({
     queryKey: ['attendance', selectedMonth],
     queryFn: () => fetch(`/api/attendance?month=${selectedMonth}`).then(r => r.json()),
@@ -525,6 +526,21 @@ export default function AttendancePage() {
             </DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto space-y-2">
+            {/* Warn about employees with both attendance and leave */}
+            {selectedDay && (() => {
+              const dayLeaves = leaves.filter(l => l.status === 'approved' && l.start_date <= selectedDay && l.end_date >= selectedDay)
+              const conflicts = dayDetailRecords.filter(rec => rec.status === 'present' && rec.check_in && dayLeaves.some(l => l.employee_id === rec.employee_id))
+              if (conflicts.length === 0) return null
+              return (
+                <div className="p-3 rounded-lg bg-amber-500/10 text-amber-600 text-xs">
+                  <p className="font-semibold mb-1">⚠️ {lang === 'ar' ? 'تعارض: حضور وإجازة في نفس اليوم' : 'Conflict: Attendance + Leave on same day'}</p>
+                  {conflicts.map(rec => {
+                    const leave = dayLeaves.find(l => l.employee_id === rec.employee_id)
+                    return <p key={rec.id}>{rec.employee?.name} — {lang === 'ar' ? 'لديه إجازة معتمدة' : 'has approved leave'} ({leave?.leave_type?.name_en})</p>
+                  })}
+                </div>
+              )
+            })()}
             {dayDetailRecords.length > 0 ? (
               dayDetailRecords.map(rec => (
                 <div key={rec.id} className="flex items-center justify-between p-3 rounded-xl bg-accent/20">

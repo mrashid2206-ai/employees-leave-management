@@ -55,8 +55,13 @@ export async function POST(request: Request) {
 
   if (!isHoliday && !isWeekend) {
     for (const emp of employees) {
-      // Skip employees on leave
-      if (onLeaveIds.has(emp.id)) continue
+      // If employee has attendance (checked in), they showed up — skip leave check
+      if (attendedMap.has(emp.id) && attendedMap.get(emp.id)?.check_in) {
+        // Employee is present — only check tardiness below
+      } else if (onLeaveIds.has(emp.id)) {
+        // On approved leave and didn't check in — skip
+        continue
+      }
 
       if (!attendedMap.has(emp.id)) {
         // No attendance record — mark as absent

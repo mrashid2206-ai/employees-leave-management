@@ -184,6 +184,7 @@ export default function EmployeePortalPage() {
     switch (status) {
       case 'approved': return <Badge className="bg-emerald-500/10 text-emerald-500 border-0 text-[11px]">{t('approved')}</Badge>
       case 'rejected': return <Badge className="bg-rose-500/10 text-rose-500 border-0 text-[11px]">{t('rejected')}</Badge>
+      case 'cancelled': return <Badge className="bg-gray-500/10 text-gray-500 border-0 text-[11px]">{t('cancelled')}</Badge>
       default: return <Badge className="bg-amber-500/10 text-amber-500 border-0 text-[11px]">{t('pending')}</Badge>
     }
   }

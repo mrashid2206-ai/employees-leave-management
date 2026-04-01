@@ -59,6 +59,7 @@ export const translations = {
   approved: { ar: 'موافق عليها', en: 'Approved' },
   rejected: { ar: 'مرفوضة', en: 'Rejected' },
   pending: { ar: 'معلقة', en: 'Pending' },
+  cancelled: { ar: 'ملغاة', en: 'Cancelled' },
 
   // Actions
   add: { ar: 'إضافة', en: 'Add' },

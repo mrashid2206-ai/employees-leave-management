@@ -20,19 +20,46 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const admin = await verifyAdmin(request)
-  if (!admin) return unauthorized()
+  const user = await verifyAnyAuth(request)
+  if (!user) return unauthorized()
   const body = await request.json()
   const { employee_id, leave_type_id, start_date, end_date, days_count, notes } = body
 
   if (!employee_id || !leave_type_id || !start_date || !end_date || !days_count) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
+
+  // Employees can only create leaves for themselves, always as pending
+  if (user.role === 'employee') {
+    if (user.id !== employee_id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    body.status = 'pending'
+  }
   if (new Date(end_date) < new Date(start_date)) {
     return NextResponse.json({ error: 'End date must be after start date' }, { status: 400 })
   }
   if (days_count <= 0) {
     return NextResponse.json({ error: 'Days count must be positive' }, { status: 400 })
+  }
+
+  // Check for attendance conflict
+  const { rows: attendanceConflicts } = await pool.query(
+    "SELECT date::text as date FROM attendance WHERE employee_id = $1 AND date >= $2 AND date <= $3 AND status = 'present' AND check_in IS NOT NULL",
+    [employee_id, start_date, end_date]
+  )
+  if (attendanceConflicts.length > 0) {
+    const dates = attendanceConflicts.map(r => r.date).join(', ')
+    return NextResponse.json({
+      error: `Employee has attendance records on: ${dates}. Cancel or delete those attendance records first.`
+    }, { status: 409 })
+  }
+
+  // Check for duplicate/overlapping pending or approved leave
+  const { rows: existingLeaves } = await pool.query(
+    "SELECT id FROM leave_requests WHERE employee_id = $1 AND status IN ('pending', 'approved') AND start_date <= $2 AND end_date >= $3",
+    [employee_id, end_date, start_date]
+  )
+  if (existingLeaves.length > 0) {
+    return NextResponse.json({ error: 'Employee already has a pending or approved leave for these dates' }, { status: 409 })
   }
 
   try {

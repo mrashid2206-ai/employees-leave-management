@@ -346,6 +346,8 @@ export default function LeavesPage() {
                             <Badge className="bg-[#4CAF50]/10 text-[#4CAF50] border-0">{t('approved')}</Badge>
                           ) : leave.status === 'rejected' ? (
                             <Badge className="bg-[#F44336]/10 text-[#F44336] border-0">{t('rejected')}</Badge>
+                          ) : leave.status === 'cancelled' ? (
+                            <Badge className="bg-gray-500/10 text-gray-500 border-0">{t('cancelled')}</Badge>
                           ) : (
                             <div className="flex items-center justify-center gap-1">
                               <Badge className="bg-[#FF9800]/10 text-[#FF9800] border-0">{t('pending')}</Badge>

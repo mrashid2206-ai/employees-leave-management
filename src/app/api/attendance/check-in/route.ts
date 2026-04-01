@@ -43,6 +43,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'already_checked_in', time: existing[0].check_in }, { status: 409 })
     }
 
+    // Auto-cancel any approved leave for today (employee showed up)
+    let leaveCancelled = false
+    const { rows: todayLeaves } = await pool.query(
+      "SELECT id, days_count FROM leave_requests WHERE employee_id = $1 AND status = 'approved' AND start_date <= $2 AND end_date >= $2",
+      [employee_id, today]
+    )
+    for (const leave of todayLeaves) {
+      // Only auto-cancel single-day leaves. Multi-day leaves need admin action.
+      if (leave.days_count === 1) {
+        await pool.query("UPDATE leave_requests SET status = 'cancelled', updated_at = NOW() WHERE id = $1", [leave.id])
+        await pool.query('UPDATE employees SET leave_balance = leave_balance + $1 WHERE id = $2', [leave.days_count, employee_id])
+        leaveCancelled = true
+      }
+    }
+
     const { rows } = await pool.query(`
       INSERT INTO attendance (employee_id, date, check_in, status, is_holiday_work)
       VALUES ($1, $2, $3, 'present', $4)
@@ -52,7 +67,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true, action: 'check-in', time: currentTime,
-      isHolidayWork: holidayWork, record: rows[0]
+      isHolidayWork: holidayWork, leaveCancelled, record: rows[0]
     })
 
   } else if (action === 'check-out') {
