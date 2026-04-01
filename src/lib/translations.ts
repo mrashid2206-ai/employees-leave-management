@@ -256,6 +256,10 @@ export const translations = {
   saturday: { ar: 'السبت', en: 'Saturday' },
   scheduleNote: { ar: 'تغيير ساعات العمل يؤثر على حساب التأخير والرصيد. مثال: في رمضان غيّر إلى 6 ساعات.', en: 'Changing work hours affects tardiness and balance calculations. Example: set to 6 hours during Ramadan.' },
 
+  // Excused tardiness
+  excused: { ar: 'مستأذن', en: 'Excused' },
+  excusedTardiness: { ar: 'تأخير مستأذن', en: 'Excused Tardiness' },
+
   // Employee Portal - My Info
   myInfo: { ar: 'معلوماتي', en: 'My Info' },
   leaveBalanceRemaining: { ar: 'الرصيد المتبقي', en: 'Remaining Balance' },

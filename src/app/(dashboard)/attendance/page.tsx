@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ChevronRight, ChevronLeft, UserCheck, UserX, Clock, Plus, Pencil, Trash2 } from 'lucide-react'
+import { ChevronRight, ChevronLeft, UserCheck, UserX, Clock, Plus, Pencil, Trash2, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { Checkbox } from '@/components/ui/checkbox'
 import { getEmployees, getDepartments, getSettings } from '@/lib/api'
@@ -31,6 +31,7 @@ interface AttendanceRecord {
   status: string
   notes: string | null
   is_holiday_work: boolean
+  excused_tardiness: boolean
   employee?: { id: number; name: string; department_id: number }
 }
 
@@ -88,6 +89,18 @@ export default function AttendancePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['attendance'] })
       toast.success(t('deletedSuccess'))
+    },
+  })
+
+  const toggleExcusedMutation = useMutation({
+    mutationFn: ({ id, excused }: { id: number; excused: boolean }) =>
+      fetch(`/api/attendance/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ excused_tardiness: excused }),
+      }).then(r => r.json()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendance'] })
     },
   })
 
@@ -524,6 +537,7 @@ export default function AttendancePage() {
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium truncate">{rec.employee?.name}</p>
                         {rec.is_holiday_work && <Badge className="bg-purple-500/10 text-purple-500 border-0 text-[9px] h-4 shrink-0">⭐</Badge>}
+                        {rec.excused_tardiness && <Badge className="bg-blue-500/10 text-blue-500 border-0 text-[9px] h-4 shrink-0">{t('excused')}</Badge>}
                       </div>
                       <p className="text-xs text-muted-foreground font-mono">
                         {rec.check_in ? `${rec.check_in?.slice(0, 5)} → ${rec.check_out?.slice(0, 5) || '...'}` : t('absent')}
@@ -533,6 +547,15 @@ export default function AttendancePage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-7 w-7 ${rec.excused_tardiness ? 'text-blue-500 bg-blue-500/10' : 'text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500'}`}
+                      title={t('excusedTardiness')}
+                      onClick={() => toggleExcusedMutation.mutate({ id: rec.id, excused: !rec.excused_tardiness })}
+                    >
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"

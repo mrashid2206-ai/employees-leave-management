@@ -27,10 +27,10 @@ export async function POST(request: Request) {
 
   // 3. Get employees who already have attendance for today
   const { rows: attended } = await pool.query(
-    'SELECT employee_id, check_in FROM attendance WHERE date = $1',
+    'SELECT employee_id, check_in, excused_tardiness FROM attendance WHERE date = $1',
     [processDate]
   )
-  const attendedMap = new Map(attended.map(r => [r.employee_id, r.check_in]))
+  const attendedMap = new Map(attended.map(r => [r.employee_id, { check_in: r.check_in, excused: r.excused_tardiness }]))
 
   // 4. Get holidays
   const { rows: holidays } = await pool.query(
@@ -77,10 +77,10 @@ export async function POST(request: Request) {
           results.leaveDeducted++
         }
       } else {
-        // Has attendance — check if late (after 08:00)
-        const checkIn = attendedMap.get(emp.id)
-        if (checkIn) {
-          const [h, m] = checkIn.split(':').map(Number)
+        // Has attendance — check if late (after work start time)
+        const record = attendedMap.get(emp.id)
+        if (record?.check_in && !record.excused) {
+          const [h, m] = record.check_in.split(':').map(Number)
           const minutesLate = (h * 60 + m) - workStartMinutes
           if (minutesLate > 0) {
             // Check if tardiness record already exists
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
               await pool.query(`
                 INSERT INTO tardiness_log (employee_id, date, time, minutes_late, hours_late_decimal, notes)
                 VALUES ($1, $2, $3, $4, $5, 'Auto-generated from attendance')
-              `, [emp.id, processDate, checkIn, minutesLate, hoursDecimal])
+              `, [emp.id, processDate, record.check_in, minutesLate, hoursDecimal])
               results.tardinessCreated++
             }
           }

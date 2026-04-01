@@ -115,6 +115,7 @@ export async function GET() {
         overtime_hours DECIMAL(4,2) DEFAULT 0,
         status VARCHAR(20) DEFAULT 'present',
         is_holiday_work BOOLEAN DEFAULT FALSE,
+        excused_tardiness BOOLEAN DEFAULT FALSE,
         notes TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(employee_id, date),
@@ -122,6 +123,12 @@ export async function GET() {
       )
     `)
     results.push('✓ attendance table created')
+
+    // Add excused_tardiness column if table already exists
+    await pool.query(`
+      ALTER TABLE attendance ADD COLUMN IF NOT EXISTS excused_tardiness BOOLEAN DEFAULT FALSE
+    `).catch(() => {})
+    results.push('✓ excused_tardiness column ensured')
 
     // Step 2: Indexes
     await pool.query(`
