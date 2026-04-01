@@ -17,8 +17,10 @@ export async function GET(request: Request) {
   const params: any[] = []
 
   if (month) {
-    params.push(month + '-01')
-    params.push(month + '-31')
+    const [y, m] = month.split('-').map(Number)
+    const lastDay = new Date(y, m, 0).getDate()
+    params.push(`${month}-01`)
+    params.push(`${month}-${lastDay}`)
     conditions.push(`a.date >= $${params.length - 1} AND a.date <= $${params.length}`)
   }
   if (employeeId) {
