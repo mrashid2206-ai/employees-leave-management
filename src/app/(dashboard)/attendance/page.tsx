@@ -132,8 +132,8 @@ export default function AttendancePage() {
       const presentDays = empRecords.filter(r => r.status === 'present').length
       const absentDays = empRecords.filter(r => r.status === 'absent').length
       const holidayDays = empRecords.filter(r => r.is_holiday_work).length
-      const totalWorkHours = empRecords.reduce((sum, r) => sum + (r.work_hours || 0), 0)
-      const totalOvertime = empRecords.reduce((sum, r) => sum + (r.overtime_hours || 0), 0)
+      const totalWorkHours = empRecords.reduce((sum, r) => sum + (parseFloat(String(r.work_hours)) || 0), 0)
+      const totalOvertime = empRecords.reduce((sum, r) => sum + (parseFloat(String(r.overtime_hours)) || 0), 0)
       return {
         ...emp,
         presentDays,
@@ -215,8 +215,8 @@ export default function AttendancePage() {
   // KPIs for the month
   const totalPresent = Object.values(calendarData).reduce((s, d) => s + d.present, 0)
   const totalAbsent = Object.values(calendarData).reduce((s, d) => s + d.absent, 0)
-  const totalWorkHours = records.reduce((s, r) => s + (r.work_hours || 0), 0)
-  const totalOvertime = records.reduce((s, r) => s + (r.overtime_hours || 0), 0)
+  const totalWorkHours = records.reduce((s, r) => s + (parseFloat(String(r.work_hours)) || 0), 0)
+  const totalOvertime = records.reduce((s, r) => s + (parseFloat(String(r.overtime_hours)) || 0), 0)
 
   return (
     <div className="space-y-6">
