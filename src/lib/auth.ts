@@ -8,7 +8,7 @@ const USERS = [
 ]
 
 export async function authenticate(username: string, password: string) {
-  const user = USERS.find(u => u.username === username && u.password === password)
+  const user = USERS.find(u => u.username === username.trim() && u.password === password.trim())
   if (!user) return null
 
   const token = await new SignJWT({ username: user.username, role: user.role, name: user.name })

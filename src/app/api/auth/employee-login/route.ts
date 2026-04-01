@@ -6,7 +6,9 @@ import pool from '@/lib/db'
 const SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'employees-secret-key-2026-do-not-share')
 
 export async function POST(request: Request) {
-  const { username, password } = await request.json()
+  const body = await request.json()
+  const username = (body.username || '').trim().toLowerCase()
+  const password = (body.password || '').trim()
 
   const { rows } = await pool.query(
     'SELECT id, name, username, password_hash, department_id FROM employees WHERE username = $1 AND is_active = true',

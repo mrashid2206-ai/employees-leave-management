@@ -73,9 +73,12 @@ export default function EmployeeLoginPage() {
                 <User className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   value={username}
-                  onChange={e => setUsername(e.target.value)}
+                  onChange={e => setUsername(e.target.value.trim().toLowerCase())}
                   placeholder={t('enterUsername')}
                   className="ps-10"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   required
                 />
               </div>
