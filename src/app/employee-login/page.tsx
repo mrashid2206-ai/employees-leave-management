@@ -32,18 +32,23 @@ export default function EmployeeLoginPage() {
         body: JSON.stringify({ username, password }),
       })
 
+      const data = await res.json()
+
       if (!res.ok) {
-        const data = await res.json()
         setError(data.error || t('error'))
         setLoading(false)
         return
       }
 
-      const data = await res.json()
       // Store employee info in sessionStorage for the client pages
-      sessionStorage.setItem('emp-user', JSON.stringify(data.user))
+      try {
+        sessionStorage.setItem('emp-user', JSON.stringify(data.user))
+      } catch {
+        // sessionStorage blocked — store in cookie as fallback
+        document.cookie = `emp-user=${encodeURIComponent(JSON.stringify(data.user))};path=/;max-age=43200`
+      }
       window.location.href = '/check-in'
-    } catch {
+    } catch (err) {
       setError(t('error'))
       setLoading(false)
     }

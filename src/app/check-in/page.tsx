@@ -52,7 +52,12 @@ export default function EmployeePortalPage() {
   const [recordsSubTab, setRecordsSubTab] = useState<'attendance' | 'tardiness'>('attendance')
 
   useEffect(() => {
-    const stored = sessionStorage.getItem('emp-user')
+    let stored = sessionStorage.getItem('emp-user')
+    if (!stored) {
+      // Fallback: read from cookie if sessionStorage is blocked
+      const match = document.cookie.match(/emp-user=([^;]+)/)
+      if (match) stored = decodeURIComponent(match[1])
+    }
     if (stored) {
       setEmpUser(JSON.parse(stored))
     }
