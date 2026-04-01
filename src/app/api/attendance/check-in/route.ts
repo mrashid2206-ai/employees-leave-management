@@ -27,6 +27,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
   }
 
+  // Check employee is active
+  const { rows: empCheck } = await pool.query('SELECT is_active FROM employees WHERE id = $1', [employee_id])
+  if (empCheck.length === 0 || !empCheck[0].is_active) {
+    return NextResponse.json({ error: 'Employee account is inactive' }, { status: 403 })
+  }
+
   const today = omanToday()
   const currentTime = omanTime()
 

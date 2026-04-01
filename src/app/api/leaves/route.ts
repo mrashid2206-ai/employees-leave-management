@@ -2,6 +2,31 @@ import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 
+async function countWorkingDays(startDate: string, endDate: string): Promise<number> {
+  // Get work days from settings
+  const { rows: settingsRows } = await pool.query('SELECT work_days FROM settings LIMIT 1')
+  const workDays = settingsRows[0]?.work_days?.split(',').map(Number) || [0,1,2,3,4]
+
+  // Get holidays in range
+  const { rows: holidays } = await pool.query(
+    'SELECT date::text as date FROM holidays WHERE date >= $1 AND date <= $2',
+    [startDate, endDate]
+  )
+  const holidaySet = new Set(holidays.map(h => h.date))
+
+  let count = 0
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const dayOfWeek = d.getDay()
+    const dateStr = d.toISOString().split('T')[0]
+    if (workDays.includes(dayOfWeek) && !holidaySet.has(dateStr)) {
+      count++
+    }
+  }
+  return count
+}
+
 export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
@@ -37,8 +62,11 @@ export async function POST(request: Request) {
   if (new Date(end_date) < new Date(start_date)) {
     return NextResponse.json({ error: 'End date must be after start date' }, { status: 400 })
   }
-  if (days_count <= 0) {
-    return NextResponse.json({ error: 'Days count must be positive' }, { status: 400 })
+
+  // Server-side: calculate actual working days (excludes weekends + holidays)
+  const actualDays = await countWorkingDays(start_date, end_date)
+  if (actualDays <= 0) {
+    return NextResponse.json({ error: 'No working days in selected range' }, { status: 400 })
   }
 
   // Check for attendance conflict
@@ -67,7 +95,7 @@ export async function POST(request: Request) {
       INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, days_count, notes, status)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *
-    `, [employee_id, leave_type_id, start_date, end_date, days_count, notes || null, body.status || 'pending'])
+    `, [employee_id, leave_type_id, start_date, end_date, actualDays, notes || null, body.status || 'pending'])
 
     return NextResponse.json(rows[0])
   } catch (err: any) {

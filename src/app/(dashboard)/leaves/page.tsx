@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
@@ -44,6 +44,7 @@ export default function LeavesPage() {
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [conflict, setConflict] = useState<{ conflict: boolean; message: string; absentCount: number } | null>(null)
   const [checkingConflict, setCheckingConflict] = useState(false)
+  const [workingDays, setWorkingDays] = useState<number | null>(null)
 
   const [filterYear, setFilterYear] = useState<string>('all')
   const [filterMonth, setFilterMonth] = useState<string>('all')
@@ -63,6 +64,25 @@ export default function LeavesPage() {
     if (filterMonth !== 'all' && parseInt(m) !== parseInt(filterMonth)) return false
     return true
   })
+
+  // Fetch working days when dates change
+  useEffect(() => {
+    if (form.start_date && form.end_date && new Date(form.end_date) >= new Date(form.start_date)) {
+      fetch(`/api/working-days?start=${form.start_date}&end=${form.end_date}`)
+        .then(r => r.json())
+        .then(d => setWorkingDays(d.workingDays))
+        .catch(() => setWorkingDays(null))
+    } else {
+      setWorkingDays(null)
+    }
+  }, [form.start_date, form.end_date])
+
+  // Get selected employee's balance
+  const selectedEmpBalance = useMemo(() => {
+    if (!form.employee_id) return null
+    const emp = employees.find(e => e.id === parseInt(form.employee_id))
+    return emp?.leave_balance ?? null
+  }, [form.employee_id, employees])
 
   // Check conflict when employee + dates change
   useEffect(() => {
@@ -203,7 +223,22 @@ export default function LeavesPage() {
                 </div>
               </div>
               {daysCount > 0 && (
-                <p className="text-sm text-muted-foreground">{t('daysCount')}: <strong>{daysCount}</strong></p>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">
+                    {t('daysCount')}: <strong>{workingDays ?? daysCount}</strong>
+                    {workingDays !== null && workingDays < daysCount && (
+                      <span className="text-xs ml-1">({lang === 'ar' ? 'أيام عمل فقط' : 'working days only'})</span>
+                    )}
+                  </p>
+                  {selectedEmpBalance !== null && (
+                    <p className={`text-sm ${(workingDays ?? daysCount) > selectedEmpBalance ? 'text-rose-500 font-semibold' : 'text-muted-foreground'}`}>
+                      {t('leaveBalance')}: <strong>{selectedEmpBalance}</strong> {t('days')}
+                      {(workingDays ?? daysCount) > selectedEmpBalance && (
+                        <span className="ml-1">⚠️ {lang === 'ar' ? 'رصيد غير كافي' : 'Insufficient balance'}</span>
+                      )}
+                    </p>
+                  )}
+                </div>
               )}
               {/* Conflict indicator */}
               {conflict && (

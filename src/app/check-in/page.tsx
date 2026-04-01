@@ -22,6 +22,18 @@ function calculateDaysCount(start: string, end: string): number {
   return diff > 0 ? diff : 0
 }
 
+function useWorkingDays(start: string, end: string) {
+  const [days, setDays] = useState<{ workingDays: number; totalDays: number } | null>(null)
+  useEffect(() => {
+    if (!start || !end || new Date(end) < new Date(start)) { setDays(null); return }
+    fetch(`/api/working-days?start=${start}&end=${end}`)
+      .then(r => r.json())
+      .then(setDays)
+      .catch(() => setDays(null))
+  }, [start, end])
+  return days
+}
+
 export default function EmployeePortalPage() {
   const t = useT()
   const { lang, dir } = useLanguage()
@@ -192,6 +204,7 @@ export default function EmployeePortalPage() {
   const currentTime = new Date().toLocaleTimeString(lang === 'ar' ? 'ar-OM' : 'en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
   const currentDate = new Date().toLocaleDateString(lang === 'ar' ? 'ar-OM' : 'en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
   const leaveDays = calculateDaysCount(leaveForm.start_date, leaveForm.end_date)
+  const workingDaysInfo = useWorkingDays(leaveForm.start_date, leaveForm.end_date)
 
   return (
     <div className="min-h-screen bg-background flex flex-col" dir={dir}>
@@ -344,7 +357,14 @@ export default function EmployeePortalPage() {
                     {leaveDays > 0 && (
                       <div className="flex items-center gap-2">
                         <CalendarDays className="h-4 w-4 text-[#1976D2]" />
-                        <span className="text-sm font-medium">{leaveDays} {t('days')}</span>
+                        <span className="text-sm font-medium">
+                          {workingDaysInfo ? workingDaysInfo.workingDays : leaveDays} {t('days')}
+                          {workingDaysInfo && workingDaysInfo.workingDays < leaveDays && (
+                            <span className="text-xs text-muted-foreground ml-1">
+                              ({lang === 'ar' ? 'أيام عمل فقط' : 'working days only'})
+                            </span>
+                          )}
+                        </span>
                       </div>
                     )}
                     <div>

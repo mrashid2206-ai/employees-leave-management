@@ -72,16 +72,19 @@ export async function POST(request: Request) {
         `, [emp.id, processDate])
         results.absentMarked++
 
-        // Auto-deduct: create an approved annual leave for this day
+        // Auto-deduct: create an approved annual leave for this day (only if balance > 0)
+        const { rows: empBalance } = await pool.query('SELECT leave_balance FROM employees WHERE id = $1', [emp.id])
+        const balance = empBalance[0]?.leave_balance || 0
         const { rows: existingLeave } = await pool.query(
           `SELECT id FROM leave_requests WHERE employee_id = $1 AND start_date = $2 AND end_date = $2`,
           [emp.id, processDate]
         )
-        if (existingLeave.length === 0) {
+        if (existingLeave.length === 0 && balance > 0) {
           await pool.query(`
             INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, days_count, notes, status)
             VALUES ($1, 1, $2, $2, 1, 'Auto-deducted: absent without leave', 'approved')
           `, [emp.id, processDate])
+          await pool.query('UPDATE employees SET leave_balance = leave_balance - 1 WHERE id = $1', [emp.id])
           results.leaveDeducted++
         }
       } else {
