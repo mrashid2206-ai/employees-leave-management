@@ -133,6 +133,12 @@ export default function EmployeeLoginPage() {
               </div>
             </div>
           </div>
+
+          <div className="mt-4 pt-4 border-t text-center">
+            <a href="/login" className="text-xs text-muted-foreground hover:text-foreground">
+              {lang === 'ar' ? 'دخول المدير' : 'Admin Login'}
+            </a>
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -107,6 +107,15 @@ export default function LoginPage() {
               {loading ? t('loggingIn') : t('login')}
             </Button>
           </form>
+
+          <div className="mt-4 pt-4 border-t text-center">
+            <p className="text-xs text-muted-foreground mb-2">
+              {dir === 'rtl' ? 'هل أنت موظف؟' : 'Are you an employee?'}
+            </p>
+            <a href="/employee-login" className="text-sm text-[#1976D2] hover:underline font-medium">
+              {dir === 'rtl' ? 'الدخول من بوابة الموظف' : 'Go to Employee Portal'}
+            </a>
+          </div>
         </CardContent>
       </Card>
     </div>

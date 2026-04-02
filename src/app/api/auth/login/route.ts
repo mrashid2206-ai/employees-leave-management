@@ -6,7 +6,7 @@ export async function POST(request: Request) {
 
   const result = await authenticate(username, password)
   if (!result) {
-    return NextResponse.json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' }, { status: 401 })
+    return NextResponse.json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة', hint: 'employee_portal' }, { status: 401 })
   }
 
   const response = NextResponse.json({ user: result.user })
