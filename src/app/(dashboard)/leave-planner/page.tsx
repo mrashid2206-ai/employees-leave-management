@@ -32,7 +32,7 @@ export default function LeavePlannerPage() {
     return emps.map(emp => {
       const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
       const usedDays = empLeaves.reduce((sum, l) => sum + l.days_count, 0)
-      const remaining = emp.leave_balance - usedDays
+      const remaining = emp.leave_balance
 
       // Build month-by-month data
       const months = FISCAL_MONTHS.map((monthIdx, fiscalIdx) => {
@@ -62,7 +62,7 @@ export default function LeavePlannerPage() {
         id: emp.id,
         name: emp.name,
         department: emp.department?.name || '',
-        balance: emp.leave_balance,
+        balance: settings?.annual_leave_balance || 30,
         used: usedDays,
         remaining,
         months,

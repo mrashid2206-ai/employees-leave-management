@@ -121,7 +121,7 @@ export default function EmployeePortalPage() {
         const usedDays = (leaves as any[])
           .filter((l: any) => l.status === 'approved')
           .reduce((sum: number, l: any) => sum + (l.days_count || 0), 0)
-        setEmpInfo({ ...emp, annual_leave_balance: totalBalance, used_days: usedDays, remaining: totalBalance - usedDays })
+        setEmpInfo({ ...emp, annual_leave_balance: totalBalance, used_days: usedDays, remaining: emp.leave_balance })
       })
     }
   }, [activeTab, empUser])

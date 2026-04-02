@@ -50,7 +50,7 @@ export default function ReportsPage() {
       const empTardiness = tardiness.filter(t => t.employee_id === emp.id)
       const tardMinutes = empTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
       const tardDays = settings ? tardMinutes / 60 / settings.work_hours_per_day : 0
-      const remaining = Math.round((emp.leave_balance - usedDays - tardDays) * 10) / 10
+      const remaining = emp.leave_balance
       const deduction = settings ? Math.round(tardMinutes / 60 * settings.deduction_per_hour * 1000) / 1000 : 0
 
       // By type breakdown

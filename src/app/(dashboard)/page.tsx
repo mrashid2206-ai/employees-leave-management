@@ -57,9 +57,9 @@ export default function DashboardPage() {
     const empTardiness = tardiness.filter(t => t.employee_id === emp.id)
     const tardMinutes = empTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
     const tardDays = settings ? tardMinutes / 60 / settings.work_hours_per_day : 0
-    const remaining = emp.leave_balance - usedDays - tardDays
+    const remaining = emp.leave_balance
     const isOnLeave = empLeaves.some(l => l.start_date <= today && l.end_date >= today)
-    return { ...emp, usedDays, tardMinutes, remaining: Math.round(remaining * 10) / 10, isOnLeave }
+    return { ...emp, usedDays, tardMinutes, remaining, isOnLeave }
   })
 
   const avgRemaining = employeeStats.length > 0
@@ -442,7 +442,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="space-y-2">
               {employeeStats.slice(0, 8).map((emp) => {
-                const usedPercent = Math.round(emp.usedDays / Math.max(emp.leave_balance, 1) * 100)
+                const usedPercent = Math.round(emp.usedDays / Math.max(settings?.annual_leave_balance || 30, 1) * 100)
                 return (
                   <div key={emp.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/30 transition-colors cursor-pointer" onClick={() => router.push(`/employees/${emp.id}`)}>
                     <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${

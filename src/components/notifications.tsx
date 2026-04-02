@@ -40,7 +40,7 @@ export function NotificationBell() {
       const empTard = tardiness.filter(t => t.employee_id === emp.id)
       const tardMinutes = empTard.reduce((sum, t) => sum + t.minutes_late, 0)
       const tardDays = tardMinutes / 60 / settings.work_hours_per_day
-      const remaining = emp.leave_balance - usedDays - tardDays
+      const remaining = emp.leave_balance
 
       if (remaining <= 3) {
         notifications.push({

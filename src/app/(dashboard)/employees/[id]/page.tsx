@@ -49,7 +49,7 @@ export default function EmployeeCardPage() {
   const usedDays = approvedLeaves.reduce((sum, l) => sum + l.days_count, 0)
   const tardMinutes = tardiness.reduce((sum, t) => sum + t.minutes_late, 0)
   const tardDays = settings ? tardMinutes / 60 / settings.work_hours_per_day : 0
-  const remaining = Math.round((employee.leave_balance - usedDays - tardDays) * 10) / 10
+  const remaining = employee.leave_balance
   const deduction = settings ? Math.round(tardMinutes / 60 * settings.deduction_per_hour * 1000) / 1000 : 0
   const isOnLeave = approvedLeaves.some(l => l.start_date <= today && l.end_date >= today)
 
@@ -95,7 +95,7 @@ export default function EmployeeCardPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="text-center p-3 rounded-lg bg-[#1976D2]/10">
                 <p className="text-sm text-muted-foreground">{t('balance')}</p>
-                <p className="text-xl font-bold text-[#1976D2]">{employee.leave_balance}</p>
+                <p className="text-xl font-bold text-[#1976D2]">{settings?.annual_leave_balance || 30}</p>
               </div>
               <div className="text-center p-3 rounded-lg bg-[#FF9800]/10">
                 <p className="text-sm text-muted-foreground">{t('used')}</p>
@@ -209,15 +209,15 @@ export default function EmployeeCardPage() {
               <div>
                 <div className="flex items-center justify-between text-sm mb-2">
                   <span className="text-muted-foreground">{t('used')} / {t('balance')}</span>
-                  <span className="font-bold">{usedDays} / {employee.leave_balance}</span>
+                  <span className="font-bold">{usedDays} / {settings?.annual_leave_balance || 30}</span>
                 </div>
                 <div className="h-3 rounded-full bg-muted overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${
-                      usedDays / employee.leave_balance > 0.8 ? 'bg-rose-500' :
-                      usedDays / employee.leave_balance > 0.5 ? 'bg-amber-500' : 'bg-emerald-500'
+                      usedDays / (settings?.annual_leave_balance || 30) > 0.8 ? 'bg-rose-500' :
+                      usedDays / (settings?.annual_leave_balance || 30) > 0.5 ? 'bg-amber-500' : 'bg-emerald-500'
                     }`}
-                    style={{ width: `${Math.min(100, usedDays / employee.leave_balance * 100)}%` }}
+                    style={{ width: `${Math.min(100, usedDays / (settings?.annual_leave_balance || 30) * 100)}%` }}
                   />
                 </div>
               </div>
