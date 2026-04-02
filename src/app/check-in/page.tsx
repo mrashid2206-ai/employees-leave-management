@@ -63,12 +63,14 @@ export default function EmployeePortalPage() {
   // My records
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([])
   const [tardinessRecords, setTardinessRecords] = useState<any[]>([])
-  const [recordsSubTab, setRecordsSubTab] = useState<'attendance' | 'tardiness'>('attendance')
+  const [recordsSubTab, setRecordsSubTab] = useState<'attendance' | 'tardiness' | 'permissions'>('attendance')
 
   // Permission request
   const [permissionForm, setPermissionForm] = useState({ reason: '' })
   const [showPermission, setShowPermission] = useState(false)
   const [permitting, setPermitting] = useState(false)
+  const [activePermission, setActivePermission] = useState<any>(null)
+  const [myPermissions, setMyPermissions] = useState<any[]>([])
 
   // Notifications
   const [notifications, setNotifications] = useState<any[]>([])
@@ -114,6 +116,20 @@ export default function EmployeePortalPage() {
     }
   }, [empUser])
 
+  // Load active permission for today
+  useEffect(() => {
+    if (empUser) {
+      fetch(`/api/permissions?employee_id=${empUser.id}`)
+        .then(r => r.ok ? r.json() : [])
+        .then(data => {
+          const today = new Date().toISOString().split('T')[0]
+          const active = data.find((p: any) => p.date === today && !p.return_time && p.status !== 'rejected')
+          setActivePermission(active || null)
+        })
+        .catch(() => {})
+    }
+  }, [empUser])
+
   // Load requests when tab changes
   useEffect(() => {
     if (activeTab === 'requests' && empUser) {
@@ -149,6 +165,10 @@ export default function EmployeePortalPage() {
       fetch(`/api/tardiness/by-employee/${empUser.id}`)
         .then(r => r.json())
         .then(setTardinessRecords)
+      fetch(`/api/permissions?employee_id=${empUser.id}`)
+        .then(r => r.ok ? r.json() : [])
+        .then(setMyPermissions)
+        .catch(() => {})
     }
   }, [activeTab, empUser])
 
@@ -380,55 +400,107 @@ export default function EmployeePortalPage() {
               </Button>
             </div>
 
-            {/* Permission Request */}
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => setShowPermission(!showPermission)}
-            >
-              {lang === 'ar' ? '\uD83C\uDFAB طلب إذن خروج' : '\uD83C\uDFAB Request Permission to Leave'}
-            </Button>
-
-            {showPermission && (
-              <Card className="border-0 shadow-md">
+            {/* Active Permission Banner */}
+            {activePermission && (
+              <Card className="border-0 shadow-md ring-1 ring-amber-500/30">
                 <CardContent className="p-4 space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    {lang === 'ar' ? 'طلب إذن للخروج مؤقتاً والعودة' : 'Request permission to leave temporarily and return'}
-                  </p>
-                  <Textarea
-                    placeholder={lang === 'ar' ? 'سبب الخروج...' : 'Reason for leaving...'}
-                    value={permissionForm.reason}
-                    onChange={e => setPermissionForm({ reason: e.target.value })}
-                    rows={2}
-                  />
-                  <Button
-                    className="w-full"
-                    disabled={permitting}
-                    onClick={async () => {
-                      if (!empUser) return
-                      setPermitting(true)
-                      try {
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-amber-500">
+                        {lang === 'ar' ? '🎫 إذن خروج نشط' : '🎫 Active Permission'}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {lang === 'ar' ? 'غادرت الساعة' : 'Left at'} {activePermission.leave_time?.slice(0, 5)}
+                        {activePermission.reason && ` — ${activePermission.reason}`}
+                      </p>
+                    </div>
+                    <Badge className={activePermission.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500 border-0' : 'bg-amber-500/10 text-amber-500 border-0'}>
+                      {activePermission.status === 'approved' ? (lang === 'ar' ? 'موافق' : 'Approved') : (lang === 'ar' ? 'معلق' : 'Pending')}
+                    </Badge>
+                  </div>
+                  {activePermission.status === 'approved' && !activePermission.return_time && (
+                    <Button
+                      className="w-full bg-emerald-600 hover:bg-emerald-700"
+                      onClick={async () => {
                         const now = new Date()
                         const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`
-                        const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-                        const res = await fetch('/api/permissions', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ employee_id: empUser.id, date, leave_time: time, reason: permissionForm.reason }),
-                        })
-                        if (res.ok) {
-                          toast.success(lang === 'ar' ? 'تم تقديم طلب الإذن' : 'Permission request submitted')
-                          setShowPermission(false)
-                          setPermissionForm({ reason: '' })
-                        } else { toast.error(t('error')) }
-                      } catch { toast.error(t('error')) }
-                      setPermitting(false)
-                    }}
-                  >
-                    {permitting ? '...' : (lang === 'ar' ? 'تقديم الطلب' : 'Submit Request')}
-                  </Button>
+                        try {
+                          await fetch(`/api/permissions/${activePermission.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ return_time: time }),
+                          })
+                          toast.success(lang === 'ar' ? 'تم تسجيل العودة' : 'Return logged')
+                          setActivePermission(null)
+                        } catch { toast.error(t('error')) }
+                      }}
+                    >
+                      {lang === 'ar' ? '✅ أنا عدت' : '✅ I\'m Back'}
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
+            )}
+
+            {/* Request Permission Button */}
+            {!activePermission && todayStatus?.check_in && !todayStatus?.check_out && (
+              <>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setShowPermission(!showPermission)}
+                >
+                  {lang === 'ar' ? '🎫 طلب إذن خروج مؤقت' : '🎫 Request Permission to Leave'}
+                </Button>
+
+                {showPermission && (
+                  <Card className="border-0 shadow-md">
+                    <CardContent className="p-4 space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        {lang === 'ar' ? 'طلب إذن للخروج مؤقتاً والعودة لاحقاً' : 'Request permission to leave temporarily and return later'}
+                      </p>
+                      <Textarea
+                        placeholder={lang === 'ar' ? 'سبب الخروج (مثل: موعد بنك، مراجعة مستشفى)' : 'Reason (e.g., bank appointment, hospital visit)'}
+                        value={permissionForm.reason}
+                        onChange={e => setPermissionForm({ reason: e.target.value })}
+                        rows={2}
+                      />
+                      <Button
+                        className="w-full"
+                        disabled={permitting}
+                        onClick={async () => {
+                          if (!empUser) return
+                          if (!permissionForm.reason.trim()) {
+                            toast.error(lang === 'ar' ? 'يرجى إدخال السبب' : 'Please enter a reason')
+                            return
+                          }
+                          setPermitting(true)
+                          try {
+                            const now = new Date()
+                            const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`
+                            const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+                            const res = await fetch('/api/permissions', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ employee_id: empUser.id, date, leave_time: time, reason: permissionForm.reason }),
+                            })
+                            if (res.ok) {
+                              const data = await res.json()
+                              setActivePermission(data)
+                              toast.success(lang === 'ar' ? 'تم تقديم الطلب — انتظر موافقة المدير' : 'Request submitted — waiting for admin approval')
+                              setShowPermission(false)
+                              setPermissionForm({ reason: '' })
+                            } else { toast.error(t('error')) }
+                          } catch { toast.error(t('error')) }
+                          setPermitting(false)
+                        }}
+                      >
+                        {permitting ? '...' : (lang === 'ar' ? 'تقديم الطلب' : 'Submit Request')}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
             )}
 
             {/* Last Action Feedback */}
@@ -673,6 +745,14 @@ export default function EmployeePortalPage() {
                 <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
                 {t('tardinessHistory')}
               </Button>
+              <Button
+                size="sm"
+                variant={recordsSubTab === 'permissions' ? 'default' : 'outline'}
+                onClick={() => setRecordsSubTab('permissions')}
+                className="flex-1"
+              >
+                {lang === 'ar' ? 'الأذونات' : 'Permissions'}
+              </Button>
             </div>
 
             {/* Attendance Records */}
@@ -749,6 +829,61 @@ export default function EmployeePortalPage() {
                         </div>
                         {rec.notes && (
                           <p className="text-xs text-muted-foreground mt-2 bg-accent/30 p-2 rounded">{rec.notes}</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Permissions Records */}
+            {recordsSubTab === 'permissions' && (
+              <div className="space-y-3">
+                <h2 className="font-bold text-lg">{lang === 'ar' ? 'أذونات الخروج' : 'My Permissions'} ({myPermissions.length})</h2>
+                {myPermissions.length === 0 ? (
+                  <Card className="border-0 shadow-md">
+                    <CardContent className="p-8 text-center text-muted-foreground text-sm">
+                      {lang === 'ar' ? 'لا توجد أذونات' : 'No permissions'}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  myPermissions.map((p: any) => (
+                    <Card key={p.id} className="border-0 shadow-md">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-semibold font-mono">{p.date}</span>
+                          <Badge className={
+                            p.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500 border-0' :
+                            p.status === 'rejected' ? 'bg-rose-500/10 text-rose-500 border-0' :
+                            'bg-amber-500/10 text-amber-500 border-0'
+                          }>
+                            {p.status === 'approved' ? t('approved') : p.status === 'rejected' ? t('rejected') : t('pending')}
+                          </Badge>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                          <div className="p-1.5 rounded bg-amber-500/10">
+                            <p className="text-[10px] text-muted-foreground">{lang === 'ar' ? 'خروج' : 'Left'}</p>
+                            <p className="text-xs font-bold text-amber-500 font-mono">{p.leave_time?.slice(0, 5)}</p>
+                          </div>
+                          <div className="p-1.5 rounded bg-emerald-500/10">
+                            <p className="text-[10px] text-muted-foreground">{lang === 'ar' ? 'عودة' : 'Return'}</p>
+                            <p className="text-xs font-bold text-emerald-500 font-mono">{p.return_time?.slice(0, 5) || '--:--'}</p>
+                          </div>
+                          <div className="p-1.5 rounded bg-blue-500/10">
+                            <p className="text-[10px] text-muted-foreground">{lang === 'ar' ? 'المدة' : 'Duration'}</p>
+                            <p className="text-xs font-bold text-blue-500 font-mono">
+                              {p.return_time ? (() => {
+                                const [lh, lm] = p.leave_time.split(':').map(Number)
+                                const [rh, rm] = p.return_time.split(':').map(Number)
+                                const mins = (rh * 60 + rm) - (lh * 60 + lm)
+                                return mins > 0 ? `${Math.floor(mins/60)}h ${mins%60}m` : '-'
+                              })() : '-'}
+                            </p>
+                          </div>
+                        </div>
+                        {p.reason && (
+                          <p className="text-xs text-muted-foreground mt-2 bg-accent/30 p-2 rounded">{p.reason}</p>
                         )}
                       </CardContent>
                     </Card>

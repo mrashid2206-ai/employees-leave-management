@@ -196,6 +196,7 @@ export const translations = {
   deleteLeaveType: { ar: 'حذف نوع إجازة', en: 'Delete Leave Type' },
   usageCount: { ar: 'مرات الاستخدام', en: 'Usage Count' },
 
+  permissions: { ar: 'أذونات الخروج', en: 'Permissions' },
   attendance: { ar: 'سجل الحضور', en: 'Attendance' },
   checkIn: { ar: 'وقت الحضور', en: 'Check In' },
   checkOut: { ar: 'وقت الانصراف', en: 'Check Out' },

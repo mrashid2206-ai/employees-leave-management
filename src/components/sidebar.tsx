@@ -33,6 +33,7 @@ const navItems: { href: string; labelKey: TranslationKey; icon: typeof LayoutDas
   { href: '/tardiness', labelKey: 'tardiness', icon: Clock },
   { href: '/calendar', labelKey: 'calendar', icon: Calendar },
   { href: '/attendance', labelKey: 'attendance', icon: ClipboardCheck },
+  { href: '/permissions', labelKey: 'permissions', icon: Clock },
   { href: '/salary-report', labelKey: 'salaryReport', icon: DollarSign },
   { href: '/overtime-report', labelKey: 'overtimeReport', icon: Clock },
   { href: '/leave-planner', labelKey: 'leavePlanner', icon: CalendarRange },
