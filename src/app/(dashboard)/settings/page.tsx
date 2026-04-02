@@ -446,6 +446,9 @@ export default function SettingsPage() {
                       const isPast = daysLeft < 0
                       const isToday = daysLeft === 0
                       const isSoon = daysLeft > 0 && daysLeft <= 7
+                      const workDaysArr = (settings?.work_days || '0,1,2,3,4').split(',').map(Number)
+                      const holidayDayOfWeek = new Date(h.date + 'T00:00:00').getDay()
+                      const fallsOnWeekend = !workDaysArr.includes(holidayDayOfWeek)
                       return (
                         <div key={h.id} className={`flex items-center justify-between p-4 rounded-xl transition-colors ${
                           isPast ? 'bg-muted/30 opacity-60' : isToday ? 'bg-emerald-500/10 ring-1 ring-emerald-500/30' : 'bg-accent/20 hover:bg-accent/30'
@@ -461,6 +464,9 @@ export default function SettingsPage() {
                             <div>
                               <p className="font-semibold text-sm">{h.name}</p>
                               <p className="text-xs text-muted-foreground">{formatHolidayDate(h.date)}</p>
+                              {fallsOnWeekend && (
+                                <Badge className="bg-amber-500/10 text-amber-500 border-0 text-[10px]">{lang === 'ar' ? 'يصادف عطلة' : 'Falls on weekend'}</Badge>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">

@@ -123,6 +123,12 @@ export async function POST(request: Request) {
     }
   }
 
+  // Max consecutive leave days (30 days max)
+  const maxConsecutive = 30
+  if (actualDays > maxConsecutive) {
+    return NextResponse.json({ error: `Maximum consecutive leave is ${maxConsecutive} working days` }, { status: 400 })
+  }
+
   // Check for attendance conflict
   const { rows: attendanceConflicts } = await pool.query(
     "SELECT date::text as date FROM attendance WHERE employee_id = $1 AND date >= $2 AND date <= $3 AND status = 'present' AND check_in IS NOT NULL",

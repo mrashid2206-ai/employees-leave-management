@@ -249,6 +249,10 @@ export default function AttendancePage() {
               ))}
             </SelectContent>
           </Select>
+          <Button variant="outline" size="sm" onClick={() => { setSelectedDay(new Date().toISOString().split('T')[0]); setDialogOpen(true); setEditRecord(null) }}>
+            <Plus className="h-4 w-4 mr-1.5" />
+            {lang === 'ar' ? 'تسجيل يدوي' : 'Manual Record'}
+          </Button>
           <Button variant="outline" size="sm" onClick={handleExportAttendance}>
             <Download className="h-4 w-4 mr-1.5" />
             {t('exportExcel')}
@@ -463,6 +467,10 @@ export default function AttendancePage() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <div>
+              <Label>{t('date')} *</Label>
+              <Input type="date" value={selectedDay || ''} onChange={e => setSelectedDay(e.target.value)} />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>{t('checkIn')} *</Label>

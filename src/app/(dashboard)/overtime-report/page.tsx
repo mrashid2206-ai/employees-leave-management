@@ -21,6 +21,7 @@ interface AttendanceRecord {
   work_hours: string | number
   overtime_hours: string | number
   status: string
+  is_holiday_work?: boolean
   employee?: { id: number; name: string; department_id: number }
 }
 
@@ -63,6 +64,9 @@ export default function OvertimeReportPage() {
       const daysWorked = empRecords.length
       const totalWorkHours = empRecords.reduce((sum, r) => sum + (parseFloat(String(r.work_hours)) || 0), 0)
       const totalOvertime = empRecords.reduce((sum, r) => sum + (parseFloat(String(r.overtime_hours)) || 0), 0)
+      const holidayOvertime = empRecords
+        .filter(r => r.is_holiday_work)
+        .reduce((sum, r) => sum + (parseFloat(String(r.overtime_hours)) || 0), 0)
       const avgWorkHours = daysWorked > 0 ? totalWorkHours / daysWorked : 0
 
       return {
@@ -72,6 +76,7 @@ export default function OvertimeReportPage() {
         daysWorked,
         totalWorkHours: Math.round(totalWorkHours * 100) / 100,
         totalOvertime: Math.round(totalOvertime * 100) / 100,
+        holidayOvertime: Math.round(holidayOvertime * 100) / 100,
         avgWorkHours: Math.round(avgWorkHours * 100) / 100,
       }
     }).sort((a, b) => b.totalOvertime - a.totalOvertime)
@@ -88,6 +93,7 @@ export default function OvertimeReportPage() {
       [lang === 'ar' ? 'أيام العمل' : 'Days Worked']: r.daysWorked,
       [lang === 'ar' ? 'ساعات العمل' : 'Work Hours']: r.totalWorkHours,
       [lang === 'ar' ? 'ساعات إضافية' : 'Overtime Hours']: r.totalOvertime,
+      [lang === 'ar' ? 'إضافي عطلة' : 'Holiday OT']: r.holidayOvertime,
       [lang === 'ar' ? 'المعدل اليومي' : 'Avg Daily Hours']: r.avgWorkHours,
     }))
     exportToExcel(data, `overtime-report-${monthKey}`, lang === 'ar' ? 'تقرير الإضافي' : 'Overtime Report')
@@ -203,13 +209,14 @@ export default function OvertimeReportPage() {
                   <TableHead className="text-center">{lang === 'ar' ? 'أيام العمل' : 'Days'}</TableHead>
                   <TableHead className="text-center">{t('workHours')}</TableHead>
                   <TableHead className="text-center">{t('overtime')}</TableHead>
+                  <TableHead className="text-center">{lang === 'ar' ? 'إضافي عطلة' : 'Holiday OT'}</TableHead>
                   <TableHead className="text-center">{lang === 'ar' ? 'المعدل اليومي' : 'Avg/Day'}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {reportData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{t('noData')}</TableCell>
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">{t('noData')}</TableCell>
                   </TableRow>
                 ) : (
                   reportData.map(emp => (
@@ -223,6 +230,13 @@ export default function OvertimeReportPage() {
                       <TableCell className="text-center">
                         {emp.totalOvertime > 0 ? (
                           <span className="text-amber-500 font-mono font-semibold">+{emp.totalOvertime}h</span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {emp.holidayOvertime > 0 ? (
+                          <span className="text-purple-500 font-mono font-semibold">+{emp.holidayOvertime}h</span>
                         ) : (
                           <span className="text-muted-foreground">-</span>
                         )}

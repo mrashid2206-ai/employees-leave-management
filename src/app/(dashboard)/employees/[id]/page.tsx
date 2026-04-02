@@ -13,6 +13,7 @@ import { getEmployee, getLeaveRequestsByEmployee, getTardinessByEmployee, getSet
 import { format } from 'date-fns'
 import { useLanguage, useT } from '@/lib/language-context'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { useState, useEffect } from 'react'
 
 function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -41,6 +42,23 @@ export default function EmployeeCardPage() {
   })
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
+
+  const [activity, setActivity] = useState<any[]>([])
+
+  useEffect(() => {
+    if (employee) {
+      fetch('/api/audit')
+        .then(r => r.ok ? r.json() : [])
+        .then(data => {
+          const empActivity = data.filter((a: any) =>
+            a.details?.includes(`emp ${employee.id}`) ||
+            a.details?.includes(`Employee ${employee.id}`)
+          )
+          setActivity(empActivity)
+        })
+        .catch(() => {})
+    }
+  }, [employee])
 
   if (!employee) return <div className="p-6">{t('loading')}</div>
 
@@ -341,6 +359,25 @@ export default function EmployeeCardPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Activity Log */}
+      {activity.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">{lang === 'ar' ? 'سجل النشاط' : 'Activity Log'}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {activity.map((a: any) => (
+                <div key={a.id} className="flex justify-between items-center text-sm py-1 border-b">
+                  <span className="text-muted-foreground">{a.action}</span>
+                  <span className="text-xs text-muted-foreground">{new Date(a.created_at).toLocaleDateString()}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
