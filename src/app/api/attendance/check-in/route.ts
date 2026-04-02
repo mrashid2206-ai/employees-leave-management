@@ -114,6 +114,12 @@ export async function POST(request: Request) {
       RETURNING id, date::text as date, check_in::text as check_in, check_out::text as check_out, work_hours, overtime_hours, is_holiday_work
     `, [currentTime, workHours, overtime, employee_id, today])
 
+    // Auto-close any open permission (employee forgot to click "I'm Back")
+    await pool.query(
+      "UPDATE permissions SET return_time = $1 WHERE employee_id = $2 AND date = $3 AND return_time IS NULL AND status = 'approved'",
+      [currentTime, employee_id, today]
+    ).catch(() => {}) // Table might not exist yet
+
     return NextResponse.json({
       success: true, action: 'check-out', time: currentTime,
       workHours, overtime, isHolidayWork: holidayWork, record: rows[0]
