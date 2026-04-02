@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { SignJWT } from 'jose'
 import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
+import { checkRateLimit, resetRateLimit } from '@/lib/rate-limit'
 
 const SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'employees-secret-key-2026-do-not-share')
 
@@ -9,6 +10,13 @@ export async function POST(request: Request) {
   const body = await request.json()
   const username = (body.username || '').trim().toLowerCase()
   const password = (body.password || '').trim()
+
+  // Rate limit: 5 attempts per 15 minutes per username
+  const rateKey = `emp-login:${username}`
+  const { allowed } = checkRateLimit(rateKey, 5, 900000)
+  if (!allowed) {
+    return NextResponse.json({ error: 'Too many login attempts. Try again in 15 minutes.' }, { status: 429 })
+  }
 
   const { rows } = await pool.query(
     'SELECT id, name, username, password_hash, department_id FROM employees WHERE username = $1 AND is_active = true',
@@ -18,6 +26,9 @@ export async function POST(request: Request) {
   if (rows.length === 0 || !(await bcrypt.compare(password, rows[0].password_hash))) {
     return NextResponse.json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' }, { status: 401 })
   }
+
+  // Reset rate limit on successful login
+  resetRateLimit(rateKey)
 
   const emp = rows[0]
   const token = await new SignJWT({

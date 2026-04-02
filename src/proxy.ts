@@ -18,12 +18,34 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Allow fully public paths
-  if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
-    return NextResponse.next()
+  // Security headers on all responses
+  const addSecurityHeaders = (response: NextResponse) => {
+    response.headers.set('X-Content-Type-Options', 'nosniff')
+    response.headers.set('X-Frame-Options', 'DENY')
+    response.headers.set('X-XSS-Protection', '1; mode=block')
+    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+    return response
   }
 
-  // Allow all API routes
+  // Block external API requests (CORS-like protection)
+  if (pathname.startsWith('/api/') && !pathname.startsWith('/api/auth')) {
+    const origin = request.headers.get('origin')
+    const referer = request.headers.get('referer')
+    const host = request.headers.get('host') || ''
+
+    // Allow same-origin requests and requests with no origin (server-side, curl for testing)
+    if (origin && !origin.includes(host)) {
+      return addSecurityHeaders(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+    }
+  }
+
+  // Allow fully public paths
+  if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
+    const response = NextResponse.next()
+    return addSecurityHeaders(response)
+  }
+
+  // Allow all API routes (auth checked per-route)
   if (pathname.startsWith('/api/')) {
     return NextResponse.next()
   }
