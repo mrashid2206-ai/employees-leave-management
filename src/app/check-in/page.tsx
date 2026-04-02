@@ -9,11 +9,13 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { LogIn, LogOut, Clock, CheckCircle, CalendarDays, ClipboardList, User, Send, Info, FileText, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Toaster } from '@/components/ui/sonner'
 import { useLanguage, useT } from '@/lib/language-context'
 import { LanguageToggle } from '@/components/language-toggle'
+import { ThemeToggle } from '@/components/theme-toggle'
 import type { Employee, LeaveType } from '@/lib/types'
 
 function calculateDaysCount(start: string, end: string): number {
@@ -50,7 +52,7 @@ export default function EmployeePortalPage() {
   // Leave form state
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([])
   const [leaveSubmitted, setLeaveSubmitted] = useState(false)
-  const [leaveForm, setLeaveForm] = useState({ leave_type_id: '', start_date: '', end_date: '', notes: '' })
+  const [leaveForm, setLeaveForm] = useState({ leave_type_id: '', start_date: '', end_date: '', notes: '', is_half_day: false })
 
   // My requests
   const [myRequests, setMyRequests] = useState<any[]>([])
@@ -188,14 +190,15 @@ export default function EmployeePortalPage() {
           leave_type_id: parseInt(leaveForm.leave_type_id),
           start_date: leaveForm.start_date,
           end_date: leaveForm.end_date,
-          days_count: days,
+          days_count: leaveForm.is_half_day && leaveForm.start_date === leaveForm.end_date ? 0.5 : days,
           notes: leaveForm.notes || undefined,
           status: 'pending',
+          is_half_day: leaveForm.is_half_day,
         }),
       })
       if (!res.ok) throw new Error()
       setLeaveSubmitted(true)
-      setLeaveForm({ leave_type_id: '', start_date: '', end_date: '', notes: '' })
+      setLeaveForm({ leave_type_id: '', start_date: '', end_date: '', notes: '', is_half_day: false })
     } catch { toast.error(t('error')) }
     setLoading(false)
   }
@@ -232,6 +235,7 @@ export default function EmployeePortalPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <LanguageToggle />
           <Button variant="ghost" size="sm" className="text-rose-500 text-xs" onClick={handleLogout}>
             <LogOut className="h-3.5 w-3.5 ml-1" />
@@ -362,11 +366,23 @@ export default function EmployeePortalPage() {
                         <Input type="date" value={leaveForm.end_date} onChange={e => setLeaveForm(f => ({ ...f, end_date: e.target.value }))} />
                       </div>
                     </div>
+                    {leaveForm.start_date && leaveForm.end_date && leaveForm.start_date === leaveForm.end_date && (
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="half-day-emp"
+                          checked={leaveForm.is_half_day || false}
+                          onCheckedChange={(checked) => setLeaveForm(f => ({ ...f, is_half_day: !!checked }))}
+                        />
+                        <Label htmlFor="half-day-emp" className="text-sm">
+                          {lang === 'ar' ? 'نصف يوم' : 'Half Day'}
+                        </Label>
+                      </div>
+                    )}
                     {leaveDays > 0 && (
                       <div className="flex items-center gap-2">
                         <CalendarDays className="h-4 w-4 text-[#1976D2]" />
                         <span className="text-sm font-medium">
-                          {workingDaysInfo ? workingDaysInfo.workingDays : leaveDays} {t('days')}
+                          {leaveForm.is_half_day && leaveForm.start_date === leaveForm.end_date ? 0.5 : (workingDaysInfo ? workingDaysInfo.workingDays : leaveDays)} {t('days')}
                           {workingDaysInfo && workingDaysInfo.workingDays < leaveDays && (
                             <span className="text-xs text-muted-foreground ml-1">
                               ({lang === 'ar' ? 'أيام عمل فقط' : 'working days only'})

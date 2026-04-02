@@ -37,6 +37,7 @@ export default function LeavesPage() {
     start_date: '',
     end_date: '',
     notes: '',
+    is_half_day: false,
   })
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number }>({ open: false, id: 0 })
   const t = useT()
@@ -113,7 +114,7 @@ export default function LeavesPage() {
       queryClient.invalidateQueries({ queryKey: ['leaves'] })
       queryClient.invalidateQueries({ queryKey: ['employees'] })
       setOpen(false)
-      setForm({ employee_id: '', leave_type_id: '', start_date: '', end_date: '', notes: '' })
+      setForm({ employee_id: '', leave_type_id: '', start_date: '', end_date: '', notes: '', is_half_day: false })
       toast.success(t('addedSuccess'))
     },
     onError: () => toast.error(t('error')),
@@ -161,8 +162,9 @@ export default function LeavesPage() {
       leave_type_id: parseInt(form.leave_type_id),
       start_date: form.start_date,
       end_date: form.end_date,
-      days_count: daysCount,
+      days_count: form.is_half_day && form.start_date === form.end_date ? 0.5 : daysCount,
       notes: form.notes || undefined,
+      is_half_day: form.is_half_day,
     })
   }
 
@@ -222,10 +224,23 @@ export default function LeavesPage() {
                   />
                 </div>
               </div>
+              {form.start_date && form.end_date && form.start_date === form.end_date && (
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="half-day"
+                    checked={form.is_half_day || false}
+                    onCheckedChange={(checked) => setForm(f => ({ ...f, is_half_day: !!checked }))}
+                    disabled={form.start_date !== form.end_date}
+                  />
+                  <Label htmlFor="half-day" className="text-sm">
+                    {lang === 'ar' ? 'نصف يوم' : 'Half Day'}
+                  </Label>
+                </div>
+              )}
               {daysCount > 0 && (
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">
-                    {t('daysCount')}: <strong>{workingDays ?? daysCount}</strong>
+                    {t('daysCount')}: <strong>{form.is_half_day && form.start_date === form.end_date ? 0.5 : (workingDays ?? daysCount)}</strong>
                     {workingDays !== null && workingDays < daysCount && (
                       <span className="text-xs ml-1">({lang === 'ar' ? 'أيام عمل فقط' : 'working days only'})</span>
                     )}

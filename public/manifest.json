@@ -1,0 +1,21 @@
+{
+  "name": "Employee Leave Management",
+  "short_name": "EmpLeave",
+  "description": "Employee Leave & Attendance Management System",
+  "start_url": "/employee-login",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#1976D2",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

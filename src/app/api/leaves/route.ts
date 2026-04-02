@@ -48,7 +48,7 @@ export async function POST(request: Request) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
   const body = await request.json()
-  const { employee_id, leave_type_id, start_date, end_date, days_count, notes } = body
+  const { employee_id, leave_type_id, start_date, end_date, days_count, notes, is_half_day } = body
 
   if (!employee_id || !leave_type_id || !start_date || !end_date || !days_count) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -68,6 +68,9 @@ export async function POST(request: Request) {
   if (actualDays <= 0) {
     return NextResponse.json({ error: 'No working days in selected range' }, { status: 400 })
   }
+
+  // Half-day support: if half-day selected and single day, use 0.5
+  const finalDays = is_half_day && start_date === end_date ? 0.5 : actualDays
 
   // Check for attendance conflict
   const { rows: attendanceConflicts } = await pool.query(
@@ -95,7 +98,7 @@ export async function POST(request: Request) {
       INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, days_count, notes, status)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *
-    `, [employee_id, leave_type_id, start_date, end_date, actualDays, notes || null, body.status || 'pending'])
+    `, [employee_id, leave_type_id, start_date, end_date, finalDays, notes || null, body.status || 'pending'])
 
     return NextResponse.json(rows[0])
   } catch (err: any) {

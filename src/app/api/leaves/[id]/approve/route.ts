@@ -62,6 +62,32 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   await logAudit('leave_status_change', admin.username, 'admin', `Leave #${id} changed to ${status} for emp ${currentLeave.employee_id}`)
 
+  // Notify employee via in-app notification
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS employee_notifications (
+        id SERIAL PRIMARY KEY,
+        employee_id INT NOT NULL,
+        message TEXT NOT NULL,
+        message_ar TEXT,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(() => {})
+
+    const statusEn = status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : 'updated'
+    const statusAr = status === 'approved' ? 'تمت الموافقة' : status === 'rejected' ? 'تم الرفض' : 'تم التحديث'
+
+    await pool.query(
+      'INSERT INTO employee_notifications (employee_id, message, message_ar) VALUES ($1, $2, $3)',
+      [
+        currentLeave.employee_id,
+        `Your leave request (${currentLeave.start_date} to ${currentLeave.end_date}) has been ${statusEn}`,
+        `طلب إجازتك (${currentLeave.start_date} إلى ${currentLeave.end_date}) ${statusAr}`
+      ]
+    )
+  } catch {}
+
   // Try to send email notification (non-blocking)
   try {
     const leave = rows[0]

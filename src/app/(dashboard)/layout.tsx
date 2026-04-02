@@ -4,6 +4,7 @@ import { Sidebar } from '@/components/sidebar'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { NotificationBell } from '@/components/notifications'
 import { LanguageToggle } from '@/components/language-toggle'
+import { ThemeToggle } from '@/components/theme-toggle'
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -28,6 +29,7 @@ export default function DashboardLayout({
       <main className="flex-1 overflow-auto">
         <div className="sticky top-0 z-40 bg-background/80 backdrop-blur-sm border-b">
           <div className="container mx-auto px-6 py-3 flex items-center justify-end gap-2">
+            <ThemeToggle />
             <LanguageToggle />
             <NotificationBell />
           </div>
