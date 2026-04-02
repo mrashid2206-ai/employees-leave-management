@@ -2,6 +2,17 @@ import { NextResponse } from 'next/server'
 import pool, { omanToday, omanTime } from '@/lib/db'
 import { verifyAnyAuth, unauthorized, forbidden } from '@/lib/api-auth'
 
+function getDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000 // Earth's radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng/2) * Math.sin(dLng/2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+  return R * c
+}
+
 async function isOffDay(dateStr: string): Promise<boolean> {
   // Check holidays
   const { rows: holidays } = await pool.query('SELECT id FROM holidays WHERE date = $1', [dateStr])
@@ -18,7 +29,19 @@ export async function POST(request: Request) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
 
-  const { employee_id, action } = await request.json()
+  // Ensure location columns exist
+  await pool.query(`
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS check_in_lat DECIMAL(10,7),
+    ADD COLUMN IF NOT EXISTS check_in_lng DECIMAL(10,7),
+    ADD COLUMN IF NOT EXISTS check_in_ip VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS is_offsite BOOLEAN DEFAULT FALSE
+  `).catch(() => {})
+
+  const { employee_id, action, latitude, longitude } = await request.json()
+
+  const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+                   request.headers.get('x-real-ip') ||
+                   'unknown'
 
   // For employees, verify they can only check in for themselves
   if (user.role === 'employee' && user.id !== employee_id) return forbidden()
@@ -64,16 +87,48 @@ export async function POST(request: Request) {
       }
     }
 
+    // Location verification
+    let isOffsite = false
+    const { rows: locSettings } = await pool.query('SELECT office_lat, office_lng, office_radius, office_ip FROM settings LIMIT 1')
+    const officeLoc = locSettings[0]
+
+    if (officeLoc && (officeLoc.office_lat || officeLoc.office_ip)) {
+      let locationMatch = false
+      let ipMatch = false
+
+      // Check GPS if coordinates provided
+      if (latitude && longitude && officeLoc.office_lat && officeLoc.office_lng) {
+        const distance = getDistanceMeters(latitude, longitude, parseFloat(officeLoc.office_lat), parseFloat(officeLoc.office_lng))
+        locationMatch = distance <= (officeLoc.office_radius || 200)
+      }
+
+      // Check IP if configured
+      if (officeLoc.office_ip && clientIp !== 'unknown') {
+        ipMatch = clientIp === officeLoc.office_ip
+      }
+
+      // On-site if either matches. If neither configured, assume on-site.
+      isOffsite = !locationMatch && !ipMatch
+      // If only IP is configured and no GPS, check IP only
+      if (!officeLoc.office_lat && officeLoc.office_ip) {
+        isOffsite = !ipMatch
+      }
+      // If only GPS is configured and no IP, check GPS only
+      if (officeLoc.office_lat && !officeLoc.office_ip) {
+        isOffsite = !locationMatch
+      }
+    }
+
     const { rows } = await pool.query(`
-      INSERT INTO attendance (employee_id, date, check_in, status, is_holiday_work)
-      VALUES ($1, $2, $3, 'present', $4)
-      ON CONFLICT (employee_id, date) DO UPDATE SET check_in = $3, status = 'present', is_holiday_work = $4
-      RETURNING id, date::text as date, check_in::text as check_in, check_out::text as check_out, is_holiday_work
-    `, [employee_id, today, currentTime, holidayWork])
+      INSERT INTO attendance (employee_id, date, check_in, status, is_holiday_work, check_in_lat, check_in_lng, check_in_ip, is_offsite)
+      VALUES ($1, $2, $3, 'present', $4, $5, $6, $7, $8)
+      ON CONFLICT (employee_id, date) DO UPDATE SET check_in = $3, status = 'present', is_holiday_work = $4, check_in_lat = $5, check_in_lng = $6, check_in_ip = $7, is_offsite = $8
+      RETURNING id, date::text as date, check_in::text as check_in, check_out::text as check_out, is_holiday_work, is_offsite
+    `, [employee_id, today, currentTime, holidayWork, latitude || null, longitude || null, clientIp, isOffsite])
 
     return NextResponse.json({
       success: true, action: 'check-in', time: currentTime,
-      isHolidayWork: holidayWork, leaveCancelled, record: rows[0]
+      isHolidayWork: holidayWork, leaveCancelled, isOffsite, record: rows[0]
     })
 
   } else if (action === 'check-out') {

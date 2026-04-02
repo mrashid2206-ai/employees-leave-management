@@ -33,6 +33,8 @@ interface AttendanceRecord {
   notes: string | null
   is_holiday_work: boolean
   excused_tardiness: boolean
+  is_offsite?: boolean
+  check_in_ip?: string
   employee?: { id: number; name: string; department_id: number }
 }
 
@@ -581,6 +583,7 @@ export default function AttendancePage() {
                         <p className="text-sm font-medium truncate">{rec.employee?.name}</p>
                         {rec.is_holiday_work && <Badge className="bg-purple-500/10 text-purple-500 border-0 text-[9px] h-4 shrink-0">⭐</Badge>}
                         {rec.excused_tardiness && <Badge className="bg-blue-500/10 text-blue-500 border-0 text-[9px] h-4 shrink-0">{t('excused')}</Badge>}
+                        {rec.is_offsite && <Badge className="bg-amber-500/10 text-amber-500 border-0 text-[9px] h-4 shrink-0">{lang === 'ar' ? 'خارج المكتب' : 'Off-site'}</Badge>}
                       </div>
                       <p className="text-xs text-muted-foreground font-mono">
                         {rec.check_in ? `${rec.check_in?.slice(0, 5)} → ${rec.check_out?.slice(0, 5) || '...'}` : t('absent')}

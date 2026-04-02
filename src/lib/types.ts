@@ -10,6 +10,10 @@ export interface Settings {
   max_absent_same_dept: number
   work_start_time: string
   work_days: string
+  office_lat?: number
+  office_lng?: number
+  office_radius?: number
+  office_ip?: string
 }
 
 export interface Department {

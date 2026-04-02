@@ -201,11 +201,25 @@ export default function EmployeePortalPage() {
   async function handleCheckAction(action: 'check-in' | 'check-out') {
     if (!empUser) return
     setLoading(true)
+
+    // Get GPS location
+    let latitude: number | null = null
+    let longitude: number | null = null
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000, enableHighAccuracy: true })
+      })
+      latitude = pos.coords.latitude
+      longitude = pos.coords.longitude
+    } catch {
+      // GPS denied or unavailable - continue without it
+    }
+
     try {
       const res = await fetch('/api/attendance/check-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ employee_id: empUser.id, action }),
+        body: JSON.stringify({ employee_id: empUser.id, action, latitude, longitude }),
       })
       const data = await res.json()
       if (!res.ok) {

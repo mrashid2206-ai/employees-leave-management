@@ -47,7 +47,7 @@ export default function SettingsPage() {
   const [resetConfirm, setResetConfirm] = useState(false)
   const [activeSection, setActiveSection] = useState('general')
 
-  useEffect(() => { if (settings) setForm(settings) }, [settings])
+  useEffect(() => { if (settings) setForm({ ...settings, office_lat: settings.office_lat || '', office_lng: settings.office_lng || '', office_radius: settings.office_radius || 200, office_ip: settings.office_ip || '' }) }, [settings])
 
   // Mutations
   const settingsMutation = useMutation({ mutationFn: (data: Partial<Settings>) => updateSettings(data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['settings'] }); toast.success(t('savedSuccess')) }, onError: () => toast.error(t('error')) })
@@ -109,6 +109,7 @@ export default function SettingsPage() {
     { id: 'departments', icon: Users, label: t('departments') },
     { id: 'leaveTypes', icon: Palette, label: t('leaveTypes') },
     { id: 'holidays', icon: Calendar, label: t('holidays') },
+    { id: 'location', icon: Building2, label: lang === 'ar' ? 'موقع المكتب' : 'Office Location' },
     { id: 'automation', icon: Zap, label: t('automation') },
     { id: 'admins', icon: Users, label: lang === 'ar' ? 'المدراء' : 'Admin Users' },
   ]
@@ -501,6 +502,49 @@ export default function SettingsPage() {
               </Card>
             )
           })()}
+
+          {/* Office Location */}
+          {activeSection === 'location' && (
+            <Card className="border-0 shadow-lg">
+              <CardHeader>
+                <CardTitle>{lang === 'ar' ? 'إعدادات موقع المكتب' : 'Office Location Settings'}</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {lang === 'ar' ? 'يستخدم للتحقق من أن الموظف في المكتب عند تسجيل الحضور' : 'Used to verify employee is at the office when checking in'}
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>{lang === 'ar' ? 'خط العرض' : 'Latitude'}</Label>
+                    <Input type="number" step="0.0000001" value={form.office_lat || ''} onChange={e => setForm(f => ({ ...f, office_lat: parseFloat(e.target.value) }))} placeholder="23.5880" />
+                  </div>
+                  <div>
+                    <Label>{lang === 'ar' ? 'خط الطول' : 'Longitude'}</Label>
+                    <Input type="number" step="0.0000001" value={form.office_lng || ''} onChange={e => setForm(f => ({ ...f, office_lng: parseFloat(e.target.value) }))} placeholder="58.3829" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>{lang === 'ar' ? 'النطاق (متر)' : 'Radius (meters)'}</Label>
+                    <Input type="number" value={form.office_radius || 200} onChange={e => setForm(f => ({ ...f, office_radius: parseInt(e.target.value) }))} />
+                  </div>
+                  <div>
+                    <Label>{lang === 'ar' ? 'عنوان IP المكتب' : 'Office IP Address'}</Label>
+                    <Input value={form.office_ip || ''} onChange={e => setForm(f => ({ ...f, office_ip: e.target.value }))} placeholder="203.0.113.1" />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {lang === 'ar'
+                    ? 'احصل على إحداثيات المكتب من خرائط Google. النطاق الافتراضي 200 متر. عنوان IP اختياري.'
+                    : 'Get office coordinates from Google Maps. Default radius 200m. IP is optional.'}
+                </p>
+                <Button onClick={() => settingsMutation.mutate(form)}>
+                  <Save className="h-4 w-4 ml-2" />
+                  {t('saveSettings')}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Automation */}
           {activeSection === 'automation' && (
