@@ -4,7 +4,11 @@ import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
 import { checkRateLimit, resetRateLimit } from '@/lib/rate-limit'
 
-const SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'employees-secret-key-2026-do-not-share')
+function getSecret() {
+  const secret = process.env.JWT_SECRET
+  if (!secret) throw new Error('JWT_SECRET environment variable is required')
+  return new TextEncoder().encode(secret)
+}
 
 export async function POST(request: Request) {
   const body = await request.json()
@@ -41,7 +45,7 @@ export async function POST(request: Request) {
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('12h')
     .setIssuedAt()
-    .sign(SECRET)
+    .sign(getSecret())
 
   const response = NextResponse.json({
     user: { id: emp.id, name: emp.name, username: emp.username, role: 'employee' }

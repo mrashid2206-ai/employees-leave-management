@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -33,6 +34,10 @@ export default function DashboardPage() {
   const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
+  const { data: todayAttendance = [] } = useQuery({
+    queryKey: ['today-attendance'],
+    queryFn: () => fetch('/api/attendance?month=' + new Date().toISOString().slice(0, 7)).then(r => r.json()),
+  })
 
   const t = useT()
   const { lang, dir } = useLanguage()
@@ -127,6 +132,19 @@ export default function DashboardPage() {
   // Recent activity (last 5 leaves)
   const recentLeaves = leaves.slice(0, 5)
 
+  // Who's In Today
+  const omanNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Muscat' }))
+  const todayStr = `${omanNow.getFullYear()}-${String(omanNow.getMonth()+1).padStart(2,'0')}-${String(omanNow.getDate()).padStart(2,'0')}`
+
+  const todayData = useMemo(() => {
+    const todayRecords = todayAttendance.filter((r: any) => r.date === todayStr)
+    const checkedIn = todayRecords.filter((r: any) => r.status === 'present' && r.check_in)
+    const checkedOut = checkedIn.filter((r: any) => r.check_out)
+    const active = employees.filter((e: any) => e.is_active)
+    const notCheckedIn = active.filter((e: any) => !todayRecords.some((r: any) => r.employee_id === e.id && r.check_in))
+    return { checkedIn, checkedOut, notCheckedIn, total: active.length }
+  }, [todayAttendance, employees, todayStr])
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -210,6 +228,59 @@ export default function DashboardPage() {
           )
         })}
       </div>
+
+      {/* Who's In Today */}
+      <Card className="border-0 shadow-lg">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg">{lang === 'ar' ? 'من في المكتب اليوم؟' : "Who's In Today?"}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Checked In */}
+            <div>
+              <p className="text-xs font-medium text-emerald-500 mb-2 flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                {lang === 'ar' ? 'حاضرون' : 'Checked In'} ({todayData.checkedIn.length})
+              </p>
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {todayData.checkedIn.filter((r: any) => !r.check_out).map((r: any) => (
+                  <div key={r.id} className="text-sm flex justify-between items-center py-1">
+                    <span>{r.employee?.name}</span>
+                    <span className="text-xs text-muted-foreground font-mono">{r.check_in?.slice(0,5)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Checked Out */}
+            <div>
+              <p className="text-xs font-medium text-blue-500 mb-2 flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
+                {lang === 'ar' ? 'انصرفوا' : 'Checked Out'} ({todayData.checkedOut.length})
+              </p>
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {todayData.checkedOut.map((r: any) => (
+                  <div key={r.id} className="text-sm flex justify-between items-center py-1">
+                    <span>{r.employee?.name}</span>
+                    <span className="text-xs text-muted-foreground font-mono">{r.check_in?.slice(0,5)} → {r.check_out?.slice(0,5)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Not Checked In */}
+            <div>
+              <p className="text-xs font-medium text-rose-500 mb-2 flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
+                {lang === 'ar' ? 'لم يسجلوا حضور' : 'Not Checked In'} ({todayData.notCheckedIn.length})
+              </p>
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {todayData.notCheckedIn.map((e: any) => (
+                  <div key={e.id} className="text-sm py-1 text-muted-foreground">{e.name}</div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Row 2: Charts + On Leave Today */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

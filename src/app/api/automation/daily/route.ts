@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import pool, { omanToday } from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
+import { logAudit } from '@/lib/audit'
 
 export async function POST(request: Request) {
   const admin = await verifyAdmin(request)
@@ -112,6 +113,8 @@ export async function POST(request: Request) {
       }
     }
   }
+
+  await logAudit('daily_process', admin.username, 'admin', `Daily process: ${results.absentMarked} absent, ${results.tardinessCreated} tardiness`)
 
   return NextResponse.json({ success: true, ...results })
 }

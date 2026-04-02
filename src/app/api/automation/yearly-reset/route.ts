@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
+import { logAudit } from '@/lib/audit'
 
 export async function POST(request: Request) {
   const admin = await verifyAdmin(request)
@@ -27,6 +28,8 @@ export async function POST(request: Request) {
     'UPDATE settings SET year_start = $1, year_end = $2 WHERE id = 1',
     [yearStart.toISOString().split('T')[0], yearEnd.toISOString().split('T')[0]]
   )
+
+  await logAudit('yearly_reset', admin.username, 'admin', 'Yearly reset executed')
 
   return NextResponse.json({
     success: true,

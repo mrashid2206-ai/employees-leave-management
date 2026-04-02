@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
+import { logAudit } from '@/lib/audit'
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await verifyAdmin(request)
@@ -20,6 +21,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     'UPDATE employees SET password_hash = $1, updated_at = NOW() WHERE id = $2',
     [newPassword, id]
   )
+
+  await logAudit('password_reset', admin.username, 'admin', `Reset password for emp ${id}`)
 
   return NextResponse.json({ success: true })
 }

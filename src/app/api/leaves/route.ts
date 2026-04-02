@@ -102,6 +102,6 @@ export async function POST(request: Request) {
     if (err.message?.includes('Overlapping')) {
       return NextResponse.json({ error: 'Overlapping leave request exists for this employee' }, { status: 409 })
     }
-    throw err
+    return NextResponse.json({ error: 'Failed to create leave request' }, { status: 500 })
   }
 }

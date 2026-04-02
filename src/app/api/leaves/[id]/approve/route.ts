@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
+import { logAudit } from '@/lib/audit'
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await verifyAdmin(request)
@@ -18,25 +19,48 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const currentLeave = currentRows[0]
   const previousStatus = currentLeave.status
 
-  // Check balance before approving
-  if (status === 'approved' && previousStatus !== 'approved') {
-    const { rows: empRows } = await pool.query('SELECT leave_balance FROM employees WHERE id = $1', [currentLeave.employee_id])
-    if (empRows[0] && empRows[0].leave_balance < currentLeave.days_count) {
-      return NextResponse.json({ error: 'Insufficient leave balance' }, { status: 400 })
+  // Use transaction to prevent race condition
+  const client = await pool.connect()
+  let rows: any[]
+  try {
+    await client.query('BEGIN')
+
+    // Lock the employee row
+    const { rows: empRows } = await client.query(
+      'SELECT leave_balance FROM employees WHERE id = $1 FOR UPDATE',
+      [currentLeave.employee_id]
+    )
+
+    if (status === 'approved' && previousStatus !== 'approved') {
+      if (empRows[0] && empRows[0].leave_balance < currentLeave.days_count) {
+        await client.query('ROLLBACK')
+        return NextResponse.json({ error: 'Insufficient leave balance' }, { status: 400 })
+      }
     }
+
+    // Update leave status
+    const result = await client.query(
+      'UPDATE leave_requests SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+      [status, id]
+    )
+    rows = result.rows
+
+    // Deduct/restore balance
+    if (status === 'approved' && previousStatus !== 'approved') {
+      await client.query('UPDATE employees SET leave_balance = leave_balance - $1 WHERE id = $2', [currentLeave.days_count, currentLeave.employee_id])
+    } else if (previousStatus === 'approved' && status !== 'approved') {
+      await client.query('UPDATE employees SET leave_balance = leave_balance + $1 WHERE id = $2', [currentLeave.days_count, currentLeave.employee_id])
+    }
+
+    await client.query('COMMIT')
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
   }
 
-  const { rows } = await pool.query(
-    'UPDATE leave_requests SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
-    [status, id]
-  )
-
-  // Deduct balance when approving, restore when un-approving
-  if (status === 'approved' && previousStatus !== 'approved') {
-    await pool.query('UPDATE employees SET leave_balance = leave_balance - $1 WHERE id = $2', [currentLeave.days_count, currentLeave.employee_id])
-  } else if (previousStatus === 'approved' && status !== 'approved') {
-    await pool.query('UPDATE employees SET leave_balance = leave_balance + $1 WHERE id = $2', [currentLeave.days_count, currentLeave.employee_id])
-  }
+  await logAudit('leave_status_change', admin.username, 'admin', `Leave #${id} changed to ${status} for emp ${currentLeave.employee_id}`)
 
   // Try to send email notification (non-blocking)
   try {

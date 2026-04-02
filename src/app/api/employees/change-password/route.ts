@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
 import { verifyEmployee, unauthorized } from '@/lib/api-auth'
+import { logAudit } from '@/lib/audit'
 
 export async function POST(request: Request) {
   const user = await verifyEmployee(request)
@@ -28,6 +29,8 @@ export async function POST(request: Request) {
 
   const hash = await bcrypt.hash(new_password, 10)
   await pool.query('UPDATE employees SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hash, user.id])
+
+  await logAudit('password_change', user.username, 'employee', `Employee ${user.id} changed password`)
 
   return NextResponse.json({ success: true })
 }

@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
 
-const SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'employees-secret-key-2026-do-not-share')
+function getSecret() {
+  const secret = process.env.JWT_SECRET
+  if (!secret) throw new Error('JWT_SECRET environment variable is required')
+  return new TextEncoder().encode(secret)
+}
 
 // Fully public
 const PUBLIC_PATHS = ['/login', '/employee-login', '/api/auth']
@@ -57,7 +61,7 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(new URL('/employee-login', request.url))
     }
     try {
-      await jwtVerify(empToken, SECRET)
+      await jwtVerify(empToken, getSecret())
       return NextResponse.next()
     } catch {
       return NextResponse.redirect(new URL('/employee-login', request.url))
@@ -75,7 +79,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
   try {
-    await jwtVerify(adminToken, SECRET)
+    await jwtVerify(adminToken, getSecret())
     return NextResponse.next()
   } catch {
     const empToken = request.cookies.get('emp-auth-token')?.value

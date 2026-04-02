@@ -1,16 +1,10 @@
 import { jwtVerify } from 'jose'
 import { NextResponse } from 'next/server'
 
-const SECRET = new TextEncoder().encode(process.env.JWT_SECRET)
-
-if (!process.env.JWT_SECRET) {
-  console.warn('WARNING: JWT_SECRET environment variable is not set!')
-}
-
 function getSecret() {
-  return process.env.JWT_SECRET
-    ? new TextEncoder().encode(process.env.JWT_SECRET)
-    : new TextEncoder().encode('employees-secret-key-2026-do-not-share')
+  const secret = process.env.JWT_SECRET
+  if (!secret) throw new Error('JWT_SECRET environment variable is required')
+  return new TextEncoder().encode(secret)
 }
 
 export interface AuthUser {

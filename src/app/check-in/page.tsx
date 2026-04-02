@@ -653,6 +653,24 @@ export default function EmployeePortalPage() {
                       {req.notes && (
                         <p className="text-xs text-muted-foreground mt-2 bg-accent/30 p-2 rounded">{req.notes}</p>
                       )}
+                      {req.status === 'pending' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-rose-500 hover:bg-rose-500/10 text-xs h-6 mt-2"
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(`/api/leaves/${req.id}`, { method: 'DELETE' })
+                              if (res.ok) {
+                                toast.success(lang === 'ar' ? 'تم إلغاء الطلب' : 'Request cancelled')
+                                setMyRequests(prev => prev.filter(r => r.id !== req.id))
+                              } else { toast.error(t('error')) }
+                            } catch { toast.error(t('error')) }
+                          }}
+                        >
+                          {lang === 'ar' ? 'إلغاء الطلب' : 'Cancel Request'}
+                        </Button>
+                      )}
                     </CardContent>
                   </Card>
                 )
