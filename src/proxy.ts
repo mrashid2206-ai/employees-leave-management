@@ -45,12 +45,21 @@ export async function proxy(request: NextRequest) {
   // Admin pages — check admin token
   const adminToken = request.cookies.get('auth-token')?.value
   if (!adminToken) {
+    // If user has an employee token, redirect to employee portal instead of admin login
+    const empToken = request.cookies.get('emp-auth-token')?.value
+    if (empToken) {
+      return NextResponse.redirect(new URL('/check-in', request.url))
+    }
     return NextResponse.redirect(new URL('/login', request.url))
   }
   try {
     await jwtVerify(adminToken, SECRET)
     return NextResponse.next()
   } catch {
+    const empToken = request.cookies.get('emp-auth-token')?.value
+    if (empToken) {
+      return NextResponse.redirect(new URL('/check-in', request.url))
+    }
     return NextResponse.redirect(new URL('/login', request.url))
   }
 }

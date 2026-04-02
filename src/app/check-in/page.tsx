@@ -141,7 +141,7 @@ export default function EmployeePortalPage() {
   async function handleLogout() {
     await fetch('/api/auth/employee-logout', { method: 'POST' })
     sessionStorage.removeItem('emp-user')
-    router.push('/employee-login')
+    window.location.href = '/employee-login'
   }
 
   async function handleCheckAction(action: 'check-in' | 'check-out') {
