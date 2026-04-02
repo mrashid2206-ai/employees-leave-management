@@ -5,7 +5,7 @@ import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { getEmployees, getLeaveRequests, getLeaveTypes, getSettings, getDepartments } from '@/lib/api'
+import { getEmployees, getLeaveRequests, getLeaveTypes, getSettings, getDepartments, getHolidays } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
 
 const MONTH_NAMES_AR = ['مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر', 'يناير', 'فبراير']
@@ -22,12 +22,16 @@ export default function LeavePlannerPage() {
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
+  const { data: holidays = [] } = useQuery({ queryKey: ['holidays'], queryFn: getHolidays })
 
   const monthNames = lang === 'ar' ? MONTH_NAMES_AR : MONTH_NAMES_EN
 
   const plannerData = useMemo(() => {
     let emps = employees.filter(e => e.is_active)
     if (deptFilter !== 'all') emps = emps.filter(e => e.department_id === parseInt(deptFilter))
+
+    const workDays = (settings?.work_days || '0,1,2,3,4').split(',').map(Number)
+    const holidaySet = new Set(holidays.map(h => h.date))
 
     return emps.map(emp => {
       const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
@@ -38,19 +42,30 @@ export default function LeavePlannerPage() {
       const months = FISCAL_MONTHS.map((monthIdx, fiscalIdx) => {
         const year = fiscalIdx < 10 ? (settings?.year_start ? new Date(settings.year_start).getFullYear() : 2026) : (settings?.year_end ? new Date(settings.year_end).getFullYear() : 2027)
 
-        // Count leave days in this month for this employee
+        // Count only working leave days in this month
         let daysInMonth = 0
         const leaveColors: string[] = []
 
         empLeaves.forEach(leave => {
-          const start = new Date(leave.start_date)
-          const end = new Date(leave.end_date)
+          const [sy, sm, sd] = leave.start_date.split('-').map(Number)
+          const [ey, em, ed] = leave.end_date.split('-').map(Number)
+          const startMs = Date.UTC(sy, sm - 1, sd)
+          const endMs = Date.UTC(ey, em - 1, ed)
 
-          for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-            if (d.getMonth() === monthIdx && d.getFullYear() === year) {
-              daysInMonth++
-              const lt = leaveTypes.find(t => t.id === leave.leave_type_id)
-              if (lt && !leaveColors.includes(lt.color)) leaveColors.push(lt.color)
+          for (let ms = startMs; ms <= endMs; ms += 86400000) {
+            const d = new Date(ms)
+            const dayMonth = d.getUTCMonth()
+            const dayYear = d.getUTCFullYear()
+            if (dayMonth === monthIdx && dayYear === year) {
+              const dayOfWeek = d.getUTCDay()
+              const mo = String(dayMonth + 1).padStart(2, '0')
+              const dy = String(d.getUTCDate()).padStart(2, '0')
+              const dateStr = `${dayYear}-${mo}-${dy}`
+              if (workDays.includes(dayOfWeek) && !holidaySet.has(dateStr)) {
+                daysInMonth++
+                const lt = leaveTypes.find(t => t.id === leave.leave_type_id)
+                if (lt && !leaveColors.includes(lt.color)) leaveColors.push(lt.color)
+              }
             }
           }
         })
@@ -68,7 +83,7 @@ export default function LeavePlannerPage() {
         months,
       }
     })
-  }, [employees, leaves, leaveTypes, settings, deptFilter])
+  }, [employees, leaves, leaveTypes, settings, deptFilter, holidays])
 
   const maxDaysInMonth = Math.max(...plannerData.flatMap(e => e.months.map(m => m.days)), 1)
 

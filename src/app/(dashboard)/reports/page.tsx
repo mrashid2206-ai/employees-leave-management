@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Download, Printer, FileSpreadsheet } from 'lucide-react'
 import { exportToExcel } from '@/lib/excel'
 import { useLanguage, useT } from '@/lib/language-context'
-import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings, getDepartments, getLeaveTypes } from '@/lib/api'
+import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings, getDepartments, getLeaveTypes, getHolidays } from '@/lib/api'
 
 function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -32,6 +32,7 @@ export default function ReportsPage() {
   const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
+  const { data: holidays = [] } = useQuery({ queryKey: ['holidays'], queryFn: getHolidays })
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
 
   const filteredEmployees = useMemo(() => {
@@ -77,16 +78,26 @@ export default function ReportsPage() {
 
   // Monthly leave calendar
   const monthlyData = useMemo(() => {
+    const workDays = (settings?.work_days || '0,1,2,3,4').split(',').map(Number)
+    const holidaySet = new Set(holidays.map(h => h.date))
+
     return filteredEmployees.map(emp => {
       const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
       const months: number[] = Array(12).fill(0)
 
       empLeaves.forEach(leave => {
-        const start = new Date(leave.start_date)
-        const end = new Date(leave.end_date)
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          const month = d.getMonth()
-          // Map calendar month to fiscal year index (March=0, ..., February=11)
+        const [sy, sm, sd] = leave.start_date.split('-').map(Number)
+        const [ey, em, ed] = leave.end_date.split('-').map(Number)
+        const startMs = Date.UTC(sy, sm - 1, sd)
+        const endMs = Date.UTC(ey, em - 1, ed)
+        for (let ms = startMs; ms <= endMs; ms += 86400000) {
+          const d = new Date(ms)
+          const dayOfWeek = d.getUTCDay()
+          const mo = String(d.getUTCMonth() + 1).padStart(2, '0')
+          const dy = String(d.getUTCDate()).padStart(2, '0')
+          const dateStr = `${d.getUTCFullYear()}-${mo}-${dy}`
+          if (!workDays.includes(dayOfWeek) || holidaySet.has(dateStr)) continue
+          const month = d.getUTCMonth()
           const fiscalIdx = month >= 2 ? month - 2 : month + 10
           months[fiscalIdx]++
         }
@@ -99,7 +110,7 @@ export default function ReportsPage() {
         total: months.reduce((s, m) => s + m, 0),
       }
     })
-  }, [filteredEmployees, leaves])
+  }, [filteredEmployees, leaves, settings, holidays])
 
   function exportCSV() {
     const headers = [t('name'), t('department'), t('balance'), t('used'), ...leaveTypes.map(lt => lang === 'ar' ? lt.name_ar : lt.name_en), t('remaining'), t('tardinessHHMM') + ' (' + t('minutes') + ')', t('deduction')]
