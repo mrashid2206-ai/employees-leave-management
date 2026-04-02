@@ -157,6 +157,7 @@ export async function createLeaveRequest(request: {
   end_date: string
   days_count: number
   notes?: string
+  is_half_day?: boolean
 }): Promise<LeaveRequest> {
   return fetchJSON('/api/leaves', {
     method: 'POST',
