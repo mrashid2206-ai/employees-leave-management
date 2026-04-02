@@ -11,10 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ChevronRight, ChevronLeft, UserCheck, UserX, Clock, Plus, Pencil, Trash2, ShieldCheck } from 'lucide-react'
+import { ChevronRight, ChevronLeft, UserCheck, UserX, Clock, Plus, Pencil, Trash2, ShieldCheck, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { Checkbox } from '@/components/ui/checkbox'
 import { getEmployees, getDepartments, getSettings, getLeaveRequests } from '@/lib/api'
+import { exportToExcel } from '@/lib/excel'
 import { useLanguage, useT } from '@/lib/language-context'
 
 const DAY_NAMES_AR = ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت']
@@ -203,6 +204,18 @@ export default function AttendancePage() {
     setSelectedEmployees(prev => prev.length === allIds.length ? [] : allIds)
   }
 
+  function handleExportAttendance() {
+    const data = monthlyStats.map(emp => ({
+      [lang === 'ar' ? 'الاسم' : 'Name']: emp.name,
+      [lang === 'ar' ? 'حاضر' : 'Present Days']: emp.presentDays,
+      [lang === 'ar' ? 'غائب' : 'Absent Days']: emp.absentDays,
+      [lang === 'ar' ? 'عمل عطلة' : 'Holiday Work']: emp.holidayDays,
+      [lang === 'ar' ? 'ساعات العمل' : 'Work Hours']: emp.totalWorkHours,
+      [lang === 'ar' ? 'ساعات إضافية' : 'Overtime Hours']: emp.totalOvertime,
+    }))
+    exportToExcel(data, `attendance-${selectedMonth}`, lang === 'ar' ? 'الحضور' : 'Attendance')
+  }
+
   // Grid cells
   const gridCells: (number | null)[] = []
   for (let i = 0; i < firstDayOfWeek; i++) gridCells.push(null)
@@ -224,17 +237,23 @@ export default function AttendancePage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <h1 className="text-2xl font-bold">{t('attendance')}</h1>
-        <Select value={deptFilter} onValueChange={(v) => setDeptFilter(v ?? 'all')}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder={t('allDepts')} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t('allDepts')}</SelectItem>
-            {departments.map(d => (
-              <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex gap-3">
+          <Select value={deptFilter} onValueChange={(v) => setDeptFilter(v ?? 'all')}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder={t('allDepts')} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('allDepts')}</SelectItem>
+              {departments.map(d => (
+                <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="sm" onClick={handleExportAttendance}>
+            <Download className="h-4 w-4 mr-1.5" />
+            {t('exportExcel')}
+          </Button>
+        </div>
       </div>
 
       {/* Month KPIs */}

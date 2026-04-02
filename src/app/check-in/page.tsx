@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { LogIn, LogOut, Clock, CheckCircle, CalendarDays, ClipboardList, User, Send, Info, FileText, AlertTriangle } from 'lucide-react'
+import { LogIn, LogOut, Clock, CheckCircle, CalendarDays, ClipboardList, User, Send, Info, FileText, AlertTriangle, Bell } from 'lucide-react'
 import { toast } from 'sonner'
 import { Toaster } from '@/components/ui/sonner'
 import { useLanguage, useT } from '@/lib/language-context'
@@ -41,7 +41,7 @@ export default function EmployeePortalPage() {
   const { lang, dir } = useLanguage()
   const router = useRouter()
 
-  const [activeTab, setActiveTab] = useState<'attendance' | 'leave' | 'requests' | 'info' | 'records'>('attendance')
+  const [activeTab, setActiveTab] = useState<'attendance' | 'leave' | 'requests' | 'info' | 'records' | 'calendar'>('attendance')
   const [empUser, setEmpUser] = useState<{ id: number; name: string; username: string } | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -64,6 +64,13 @@ export default function EmployeePortalPage() {
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([])
   const [tardinessRecords, setTardinessRecords] = useState<any[]>([])
   const [recordsSubTab, setRecordsSubTab] = useState<'attendance' | 'tardiness'>('attendance')
+
+  // Notifications
+  const [notifications, setNotifications] = useState<any[]>([])
+  const [showNotifs, setShowNotifs] = useState(false)
+
+  // Calendar
+  const [calendarLeaves, setCalendarLeaves] = useState<any[]>([])
 
   // Password change
   const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
@@ -139,6 +146,26 @@ export default function EmployeePortalPage() {
         .then(setTardinessRecords)
     }
   }, [activeTab, empUser])
+
+  // Load notifications
+  useEffect(() => {
+    if (empUser) {
+      fetch('/api/employee-notifications')
+        .then(r => r.ok ? r.json() : [])
+        .then(setNotifications)
+        .catch(() => {})
+    }
+  }, [empUser, activeTab]) // refetch when tab changes
+
+  // Load calendar leaves
+  useEffect(() => {
+    if (activeTab === 'calendar') {
+      fetch('/api/leaves')
+        .then(r => r.ok ? r.json() : [])
+        .then(data => setCalendarLeaves(data.filter((l: any) => l.status === 'approved')))
+        .catch(() => {})
+    }
+  }, [activeTab])
 
   async function handleLogout() {
     await fetch('/api/auth/employee-logout', { method: 'POST' })
@@ -235,6 +262,46 @@ export default function EmployeePortalPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <div className="relative">
+            <Button variant="ghost" size="icon" className="h-8 w-8 relative" onClick={() => setShowNotifs(!showNotifs)}>
+              <Bell className="h-4 w-4" />
+              {notifications.filter(n => !n.is_read).length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full text-[9px] text-white flex items-center justify-center">
+                  {notifications.filter(n => !n.is_read).length}
+                </span>
+              )}
+            </Button>
+            {showNotifs && (
+              <div className="absolute top-10 end-0 w-72 bg-card border rounded-xl shadow-xl z-50 max-h-64 overflow-y-auto">
+                <div className="p-3 border-b">
+                  <p className="text-sm font-semibold">{lang === 'ar' ? 'الإشعارات' : 'Notifications'}</p>
+                </div>
+                {notifications.length === 0 ? (
+                  <p className="p-4 text-sm text-muted-foreground text-center">{lang === 'ar' ? 'لا توجد إشعارات' : 'No notifications'}</p>
+                ) : (
+                  notifications.map(n => (
+                    <div
+                      key={n.id}
+                      className={`p-3 border-b text-sm cursor-pointer hover:bg-accent/50 ${!n.is_read ? 'bg-blue-500/5' : ''}`}
+                      onClick={() => {
+                        if (!n.is_read) {
+                          fetch('/api/employee-notifications', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: n.id }),
+                          })
+                          setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: true } : x))
+                        }
+                      }}
+                    >
+                      <p className="text-xs">{lang === 'ar' ? n.message_ar : n.message}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">{new Date(n.created_at).toLocaleDateString()}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
           <ThemeToggle />
           <LanguageToggle />
           <Button variant="ghost" size="sm" className="text-rose-500 text-xs" onClick={handleLogout}>
@@ -636,6 +703,49 @@ export default function EmployeePortalPage() {
           </div>
         )}
 
+        {/* Calendar Tab */}
+        {activeTab === 'calendar' && (
+          <div className="space-y-4 animate-in">
+            <h2 className="font-bold text-lg">{lang === 'ar' ? 'من في إجازة؟' : "Who's on Leave?"}</h2>
+            {(() => {
+              const now = new Date()
+              const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+              const monthEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`
+              const thisMonthLeaves = calendarLeaves.filter(l => l.end_date >= monthStart && l.start_date <= monthEnd)
+
+              if (thisMonthLeaves.length === 0) {
+                return (
+                  <Card className="border-0 shadow-md">
+                    <CardContent className="p-8 text-center text-muted-foreground text-sm">
+                      <CalendarDays className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                      {lang === 'ar' ? 'لا توجد إجازات هذا الشهر' : 'No leaves this month'}
+                    </CardContent>
+                  </Card>
+                )
+              }
+
+              return thisMonthLeaves.map(l => (
+                <Card key={l.id} className="border-0 shadow-md">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold">{l.employee?.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {lang === 'ar' ? l.leave_type?.name_ar : l.leave_type?.name_en}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-mono">{l.start_date} → {l.end_date}</p>
+                        <Badge variant="outline" className="text-[10px] mt-1">{l.days_count} {t('days')}</Badge>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            })()}
+          </div>
+        )}
+
         {/* My Requests Tab */}
         {activeTab === 'requests' && (
           <div className="space-y-3 animate-in">
@@ -703,6 +813,7 @@ export default function EmployeePortalPage() {
             { id: 'attendance' as const, icon: Clock, label: t('checkInBtn') },
             { id: 'leave' as const, icon: CalendarDays, label: t('applyLeave') },
             { id: 'requests' as const, icon: ClipboardList, label: t('myRequests') },
+            { id: 'calendar' as const, icon: CalendarDays, label: lang === 'ar' ? 'التقويم' : 'Calendar' },
             { id: 'info' as const, icon: Info, label: t('myInfo') },
             { id: 'records' as const, icon: FileText, label: t('myRecords') },
           ].map(tab => {

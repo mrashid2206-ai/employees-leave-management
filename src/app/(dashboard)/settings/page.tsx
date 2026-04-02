@@ -110,6 +110,7 @@ export default function SettingsPage() {
     { id: 'leaveTypes', icon: Palette, label: t('leaveTypes') },
     { id: 'holidays', icon: Calendar, label: t('holidays') },
     { id: 'automation', icon: Zap, label: t('automation') },
+    { id: 'admins', icon: Users, label: lang === 'ar' ? 'المدراء' : 'Admin Users' },
   ]
 
   return (
@@ -589,6 +590,11 @@ export default function SettingsPage() {
               </Card>
             </div>
           )}
+
+          {/* Admin Users */}
+          {activeSection === 'admins' && (
+            <AdminUsersSection lang={lang} dir={dir} />
+          )}
         </div>
       </div>
 
@@ -648,6 +654,102 @@ export default function SettingsPage() {
         description={`${t('areYouSure')} "${deleteConfirm.name}"?`}
         onConfirm={handleDeleteConfirm}
       />
+    </div>
+  )
+}
+
+function AdminUsersSection({ lang, dir }: { lang: string; dir: string }) {
+  const [admins, setAdmins] = useState<any[]>([])
+  const [showAdd, setShowAdd] = useState(false)
+  const [form, setForm] = useState({ username: '', password: '', name: '' })
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/admin-users').then(r => r.ok ? r.json() : []).then(setAdmins).catch(() => {})
+  }, [])
+
+  async function handleAdd() {
+    if (!form.username || !form.password || !form.name) {
+      toast.error(lang === 'ar' ? 'جميع الحقول مطلوبة' : 'All fields required')
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await fetch('/api/admin-users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      const data = await res.json()
+      if (!res.ok) { toast.error(data.error); setLoading(false); return }
+      setAdmins(prev => [...prev, data])
+      setForm({ username: '', password: '', name: '' })
+      setShowAdd(false)
+      toast.success(lang === 'ar' ? 'تم إضافة المدير' : 'Admin added')
+    } catch { toast.error('Error') }
+    setLoading(false)
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-0 shadow-lg">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>{lang === 'ar' ? 'إدارة المدراء' : 'Admin User Management'}</CardTitle>
+            <Button size="sm" onClick={() => setShowAdd(!showAdd)}>
+              <Plus className="h-4 w-4 ml-1" />
+              {lang === 'ar' ? 'إضافة مدير' : 'Add Admin'}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {showAdd && (
+            <div className="p-4 rounded-xl bg-accent/30 space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label>{lang === 'ar' ? 'اسم المستخدم' : 'Username'}</Label>
+                  <Input value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} placeholder="admin2" />
+                </div>
+                <div>
+                  <Label>{lang === 'ar' ? 'الاسم' : 'Name'}</Label>
+                  <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Manager Name" />
+                </div>
+                <div>
+                  <Label>{lang === 'ar' ? 'كلمة المرور' : 'Password'}</Label>
+                  <Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleAdd} disabled={loading}>{loading ? '...' : (lang === 'ar' ? 'إضافة' : 'Add')}</Button>
+                <Button size="sm" variant="outline" onClick={() => setShowAdd(false)}>{lang === 'ar' ? 'إلغاء' : 'Cancel'}</Button>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10">
+              <Badge className="bg-amber-500/20 text-amber-500 border-0">{lang === 'ar' ? 'افتراضي' : 'Default'}</Badge>
+              <span className="text-sm font-medium">admin</span>
+              <span className="text-xs text-muted-foreground">({lang === 'ar' ? 'مدمج في النظام' : 'Built-in'})</span>
+            </div>
+            {admins.map(a => (
+              <div key={a.id} className="flex items-center justify-between p-3 rounded-lg bg-accent/20">
+                <div className="flex items-center gap-2">
+                  <Badge className="bg-blue-500/20 text-blue-500 border-0">{lang === 'ar' ? 'مدير' : 'Admin'}</Badge>
+                  <span className="text-sm font-medium">{a.name}</span>
+                  <span className="text-xs text-muted-foreground">@{a.username}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            {lang === 'ar'
+              ? '💡 المدراء المضافون يمكنهم تسجيل الدخول من صفحة المدير بنفس الصلاحيات'
+              : '💡 Added admins can login from the admin page with the same permissions'}
+          </p>
+        </CardContent>
+      </Card>
     </div>
   )
 }
