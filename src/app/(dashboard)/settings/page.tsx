@@ -47,7 +47,7 @@ export default function SettingsPage() {
   const [resetConfirm, setResetConfirm] = useState(false)
   const [activeSection, setActiveSection] = useState('general')
 
-  useEffect(() => { if (settings) setForm({ ...settings, office_lat: settings.office_lat || '', office_lng: settings.office_lng || '', office_radius: settings.office_radius || 200, office_ip: settings.office_ip || '' }) }, [settings])
+  useEffect(() => { if (settings) setForm({ ...settings, office_radius: settings.office_radius || 200, office_ip: settings.office_ip || '' } as any) }, [settings])
 
   // Mutations
   const settingsMutation = useMutation({ mutationFn: (data: Partial<Settings>) => updateSettings(data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['settings'] }); toast.success(t('savedSuccess')) }, onError: () => toast.error(t('error')) })
