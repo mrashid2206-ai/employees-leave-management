@@ -808,7 +808,7 @@ export default function EmployeePortalPage() {
 
       {/* Bottom Navigation */}
       <div className="fixed bottom-0 inset-x-0 bg-card border-t z-50">
-        <div className="max-w-lg mx-auto flex">
+        <div className="max-w-lg mx-auto flex overflow-x-auto">
           {[
             { id: 'attendance' as const, icon: Clock, label: t('checkInBtn') },
             { id: 'leave' as const, icon: CalendarDays, label: t('applyLeave') },

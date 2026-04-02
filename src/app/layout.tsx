@@ -18,6 +18,10 @@ export const metadata: Metadata = {
   description: "Leave & Tardiness Management System",
   manifest: '/manifest.json',
   themeColor: '#1976D2',
+  icons: {
+    icon: '/favicon.svg',
+    apple: '/icon.svg',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
