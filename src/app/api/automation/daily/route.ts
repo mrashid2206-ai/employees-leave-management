@@ -129,17 +129,18 @@ export async function POST(request: Request) {
     }
   }
 
-  // Flag open permissions (don't auto-close — checkout handles that)
-  let openPermissions = 0
+  // Auto-close open permissions for employees who forgot "I'm Back"
+  // This ONLY affects employees who requested permission — no impact on others
+  let permissionsClosed = 0
   try {
-    const { rows: openPerms } = await pool.query(
-      "SELECT id FROM permissions WHERE date = $1 AND return_time IS NULL AND status = 'approved'",
+    const { rowCount } = await pool.query(
+      "UPDATE permissions SET return_time = '15:30:00' WHERE date = $1 AND return_time IS NULL AND status = 'approved'",
       [processDate]
     )
-    openPermissions = openPerms.length
+    permissionsClosed = rowCount || 0
   } catch {} // Table might not exist yet
 
-  await logAudit('daily_process', admin.username, 'admin', `Daily process: ${results.absentMarked} absent, ${results.tardinessCreated} tardiness, ${results.missingCheckout} missing checkout, ${openPermissions} open permissions`)
+  await logAudit('daily_process', admin.username, 'admin', `Daily process: ${results.absentMarked} absent, ${results.tardinessCreated} tardiness, ${results.missingCheckout} missing checkout, ${permissionsClosed} permissions auto-closed`)
 
-  return NextResponse.json({ success: true, ...results, openPermissions })
+  return NextResponse.json({ success: true, ...results, permissionsClosed })
 }
