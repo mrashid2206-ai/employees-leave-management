@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Download, Printer } from 'lucide-react'
-import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings, getDepartments } from '@/lib/api'
+import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings, getDepartments, getLeaveTypes } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
 import { exportToExcel } from '@/lib/excel'
 
@@ -28,6 +28,7 @@ export default function SalaryReportPage() {
   const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
+  const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
 
   const reportData = useMemo(() => {
     let emps = employees.filter(e => e.is_active)
@@ -42,7 +43,8 @@ export default function SalaryReportPage() {
       const tardCount = empTardiness.length
 
       const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
-      const unpaidDays = empLeaves.filter(l => l.leave_type_id === 4).reduce((sum, l) => sum + l.days_count, 0)
+      const unpaidTypeId = leaveTypes.find(lt => lt.name_en === 'Unpaid')?.id
+      const unpaidDays = empLeaves.filter(l => unpaidTypeId && l.leave_type_id === unpaidTypeId).reduce((sum, l) => sum + l.days_count, 0)
 
       return {
         id: emp.id,
@@ -57,7 +59,7 @@ export default function SalaryReportPage() {
         totalImpact: deduction,
       }
     }).sort((a, b) => b.deduction - a.deduction)
-  }, [employees, tardiness, leaves, settings, deptFilter])
+  }, [employees, tardiness, leaves, settings, deptFilter, leaveTypes])
 
   const totalDeductions = reportData.reduce((sum, r) => sum + r.deduction, 0)
 

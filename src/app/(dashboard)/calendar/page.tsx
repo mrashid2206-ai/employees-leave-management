@@ -106,14 +106,14 @@ export default function CalendarPage() {
       <Card className="border-0 shadow-md">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <Button variant="ghost" size="icon" onClick={nextMonth}>
-              <ChevronRight className="h-5 w-5" />
+            <Button variant="ghost" size="icon" onClick={dir === 'rtl' ? nextMonth : prevMonth}>
+              <ChevronLeft className="h-5 w-5" />
             </Button>
             <CardTitle className="text-xl">
               {(lang === 'ar' ? MONTH_NAMES_AR : MONTH_NAMES_EN)[month]} {year}
             </CardTitle>
-            <Button variant="ghost" size="icon" onClick={prevMonth}>
-              <ChevronLeft className="h-5 w-5" />
+            <Button variant="ghost" size="icon" onClick={dir === 'rtl' ? prevMonth : nextMonth}>
+              <ChevronRight className="h-5 w-5" />
             </Button>
           </div>
         </CardHeader>

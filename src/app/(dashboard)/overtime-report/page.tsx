@@ -31,7 +31,9 @@ export default function OvertimeReportPage() {
   const [deptFilter, setDeptFilter] = useState<string>('all')
 
   const now = new Date()
-  const [selectedYear, setSelectedYear] = useState(now.getFullYear())
+  const currentYear = now.getFullYear()
+  const yearOptions = [currentYear - 1, currentYear, currentYear + 1]
+  const [selectedYear, setSelectedYear] = useState(currentYear)
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1)
   const [selectedDay, setSelectedDay] = useState<string>('all')
 
@@ -122,12 +124,12 @@ export default function OvertimeReportPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
-        <Select value={String(selectedYear)} onValueChange={v => setSelectedYear(parseInt(v ?? '2026'))}>
+        <Select value={String(selectedYear)} onValueChange={v => setSelectedYear(parseInt(v ?? String(currentYear)))}>
           <SelectTrigger className="w-32">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {[2025, 2026, 2027].map(y => (
+            {yearOptions.map(y => (
               <SelectItem key={y} value={String(y)}>{y}</SelectItem>
             ))}
           </SelectContent>

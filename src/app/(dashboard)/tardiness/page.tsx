@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
@@ -29,7 +29,6 @@ export default function TardinessPage() {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [selectedEmployees, setSelectedEmployees] = useState<number[]>([])
-  const [form, setForm] = useState({ date: '', time: '08:15', notes: '' })
   const t = useT()
   const { dir, lang } = useLanguage()
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number }>({ open: false, id: 0 })
@@ -51,6 +50,14 @@ export default function TardinessPage() {
   const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
   const { data: allRecords = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
 
+  const defaultArrivalTime = useMemo(() => {
+    const startTime = settings?.work_start_time || '08:00'
+    const [h, m] = startTime.split(':').map(Number)
+    const totalMinutes = h * 60 + m + 15
+    return `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`
+  }, [settings?.work_start_time])
+  const [form, setForm] = useState({ date: '', time: defaultArrivalTime, notes: '' })
+
   const records = allRecords.filter(r => {
     if (!r.date) return true
     const [y, m, d] = r.date.split('-')
@@ -66,7 +73,7 @@ export default function TardinessPage() {
       queryClient.invalidateQueries({ queryKey: ['tardiness'] })
       setOpen(false)
       setSelectedEmployees([])
-      setForm({ date: '', time: '08:15', notes: '' })
+      setForm({ date: '', time: defaultArrivalTime, notes: '' })
       toast.success(t('addedSuccess'))
     },
     onError: () => toast.error(t('error')),
@@ -187,7 +194,7 @@ export default function TardinessPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{lang === 'ar' ? 'كل السنوات' : 'All Years'}</SelectItem>
-            {[2025, 2026, 2027].map(y => (
+            {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(y => (
               <SelectItem key={y} value={String(y)}>{y}</SelectItem>
             ))}
           </SelectContent>

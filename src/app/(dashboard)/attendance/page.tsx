@@ -313,12 +313,12 @@ export default function AttendancePage() {
           <Card className="border-0 shadow-lg">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <Button variant="ghost" size="icon" onClick={() => setCurrentDate(new Date(year, month + 1, 1))}>
-                  <ChevronRight className="h-5 w-5" />
+                <Button variant="ghost" size="icon" onClick={() => setCurrentDate(new Date(year, dir === 'rtl' ? month + 1 : month - 1, 1))}>
+                  <ChevronLeft className="h-5 w-5" />
                 </Button>
                 <CardTitle className="text-xl">{monthLabel}</CardTitle>
-                <Button variant="ghost" size="icon" onClick={() => setCurrentDate(new Date(year, month - 1, 1))}>
-                  <ChevronLeft className="h-5 w-5" />
+                <Button variant="ghost" size="icon" onClick={() => setCurrentDate(new Date(year, dir === 'rtl' ? month - 1 : month + 1, 1))}>
+                  <ChevronRight className="h-5 w-5" />
                 </Button>
               </div>
             </CardHeader>

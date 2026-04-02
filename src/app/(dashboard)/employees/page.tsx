@@ -44,7 +44,7 @@ export default function EmployeesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] })
       setAddOpen(false)
-      setNewEmp({ name: '', department_id: '', leave_balance: '30' })
+      setNewEmp({ name: '', department_id: '', leave_balance: String(settings?.annual_leave_balance || 30) })
       toast.success(t('addedSuccess'))
     },
     onError: () => toast.error(t('error')),
@@ -82,7 +82,7 @@ export default function EmployeesPage() {
       data: {
         name: editEmp.name,
         department_id: parseInt(editEmp.department_id),
-        leave_balance: parseInt(editEmp.leave_balance) || 30,
+        leave_balance: parseInt(editEmp.leave_balance) || (settings?.annual_leave_balance || 30),
       },
     })
   }
@@ -105,7 +105,7 @@ export default function EmployeesPage() {
     createMutation.mutate({
       name: newEmp.name,
       department_id: parseInt(newEmp.department_id),
-      leave_balance: parseInt(newEmp.leave_balance) || 30,
+      leave_balance: parseInt(newEmp.leave_balance) || (settings?.annual_leave_balance || 30),
     })
   }
 
@@ -121,7 +121,7 @@ export default function EmployeesPage() {
       for (const row of data) {
         const name = row['Name'] || row['name'] || row['الاسم']
         const deptName = row['Department'] || row['department'] || row['القسم']
-        const balance = row['Leave Balance'] || row['leave_balance'] || row['الرصيد'] || 30
+        const balance = row['Leave Balance'] || row['leave_balance'] || row['الرصيد'] || (settings?.annual_leave_balance || 30)
 
         if (!name) continue
 
@@ -133,7 +133,7 @@ export default function EmployeesPage() {
           await fetch('/api/employees', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, department_id: deptId, leave_balance: parseInt(balance) || 30 }),
+            body: JSON.stringify({ name, department_id: deptId, leave_balance: parseInt(balance) || (settings?.annual_leave_balance || 30) }),
           })
           imported++
         }

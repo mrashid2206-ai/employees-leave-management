@@ -294,7 +294,7 @@ export default function LeavesPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{lang === 'ar' ? 'كل السنوات' : 'All Years'}</SelectItem>
-            {[2025, 2026, 2027].map(y => (
+            {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map(y => (
               <SelectItem key={y} value={String(y)}>{y}</SelectItem>
             ))}
           </SelectContent>
@@ -318,10 +318,18 @@ export default function LeavesPage() {
           <CardContent className="p-3 flex items-center justify-between">
             <span className="text-sm font-medium">{selectedIds.length} {lang === 'ar' ? 'محدد' : 'selected'}</span>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" className="text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/10" onClick={() => bulkStatusMutation.mutate({ ids: selectedIds, status: 'approved' })}>
+              <Button size="sm" variant="outline" className="text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/10" onClick={() => {
+                if (confirm(lang === 'ar' ? `هل تريد الموافقة على ${selectedIds.length} طلب؟` : `Approve ${selectedIds.length} requests?`)) {
+                  bulkStatusMutation.mutate({ ids: selectedIds, status: 'approved' })
+                }
+              }}>
                 {t('approved')}
               </Button>
-              <Button size="sm" variant="outline" className="text-rose-500 border-rose-500/30 hover:bg-rose-500/10" onClick={() => bulkStatusMutation.mutate({ ids: selectedIds, status: 'rejected' })}>
+              <Button size="sm" variant="outline" className="text-rose-500 border-rose-500/30 hover:bg-rose-500/10" onClick={() => {
+                if (confirm(lang === 'ar' ? `هل تريد رفض ${selectedIds.length} طلب؟` : `Reject ${selectedIds.length} requests?`)) {
+                  bulkStatusMutation.mutate({ ids: selectedIds, status: 'rejected' })
+                }
+              }}>
                 {t('rejected')}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setSelectedIds([])}>
