@@ -10,12 +10,8 @@ export default function NotFound() {
         <h1 className="text-6xl font-bold text-muted-foreground">404</h1>
         <p className="text-lg text-muted-foreground">Page not found</p>
         <div className="flex gap-3 justify-center">
-          <Button asChild>
-            <Link href="/">Dashboard</Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/employee-login">Employee Portal</Link>
-          </Button>
+          <Link href="/"><Button>Dashboard</Button></Link>
+          <Link href="/employee-login"><Button variant="outline">Employee Portal</Button></Link>
         </div>
       </div>
     </div>
