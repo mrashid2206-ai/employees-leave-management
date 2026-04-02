@@ -9,6 +9,15 @@ export async function GET(request: Request) {
   const month = searchParams.get('month') // YYYY-MM format
   const employeeId = searchParams.get('employee_id')
 
+  // Ensure location columns exist
+  await pool.query(`
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS is_offsite BOOLEAN DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS check_in_ip VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS check_in_lat DECIMAL(10,7),
+    ADD COLUMN IF NOT EXISTS check_in_lng DECIMAL(10,7),
+    ADD COLUMN IF NOT EXISTS excused_tardiness BOOLEAN DEFAULT FALSE
+  `).catch(() => {})
+
   let query = `
     SELECT a.id, a.employee_id, a.date::text as date, a.check_in::text as check_in,
       a.check_out::text as check_out, a.work_hours, a.overtime_hours, a.status, a.notes, a.is_holiday_work, a.excused_tardiness, a.is_offsite, a.check_in_ip,
