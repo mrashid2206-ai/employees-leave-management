@@ -68,15 +68,23 @@ export default function EmployeePortalPage() {
   const [pwLoading, setPwLoading] = useState(false)
 
   useEffect(() => {
-    let stored = sessionStorage.getItem('emp-user')
-    if (!stored) {
-      // Fallback: read from cookie if sessionStorage is blocked
-      const match = document.cookie.match(/emp-user=([^;]+)/)
-      if (match) stored = decodeURIComponent(match[1])
-    }
+    // Try sessionStorage first (fast)
+    const stored = sessionStorage.getItem('emp-user')
     if (stored) {
       setEmpUser(JSON.parse(stored))
+      return
     }
+    // Fallback: fetch from JWT cookie via API (works even if sessionStorage was cleared)
+    fetch('/api/auth/employee-me')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.user) {
+          const user = { id: data.user.id, name: data.user.name, username: data.user.username }
+          setEmpUser(user)
+          try { sessionStorage.setItem('emp-user', JSON.stringify(user)) } catch {}
+        }
+      })
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
