@@ -65,6 +65,11 @@ export default function EmployeePortalPage() {
   const [tardinessRecords, setTardinessRecords] = useState<any[]>([])
   const [recordsSubTab, setRecordsSubTab] = useState<'attendance' | 'tardiness'>('attendance')
 
+  // Permission request
+  const [permissionForm, setPermissionForm] = useState({ reason: '' })
+  const [showPermission, setShowPermission] = useState(false)
+  const [permitting, setPermitting] = useState(false)
+
   // Notifications
   const [notifications, setNotifications] = useState<any[]>([])
   const [showNotifs, setShowNotifs] = useState(false)
@@ -374,6 +379,57 @@ export default function EmployeePortalPage() {
                 <span className="text-sm">{t('checkOutBtn')}</span>
               </Button>
             </div>
+
+            {/* Permission Request */}
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setShowPermission(!showPermission)}
+            >
+              {lang === 'ar' ? '\uD83C\uDFAB طلب إذن خروج' : '\uD83C\uDFAB Request Permission to Leave'}
+            </Button>
+
+            {showPermission && (
+              <Card className="border-0 shadow-md">
+                <CardContent className="p-4 space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    {lang === 'ar' ? 'طلب إذن للخروج مؤقتاً والعودة' : 'Request permission to leave temporarily and return'}
+                  </p>
+                  <Textarea
+                    placeholder={lang === 'ar' ? 'سبب الخروج...' : 'Reason for leaving...'}
+                    value={permissionForm.reason}
+                    onChange={e => setPermissionForm({ reason: e.target.value })}
+                    rows={2}
+                  />
+                  <Button
+                    className="w-full"
+                    disabled={permitting}
+                    onClick={async () => {
+                      if (!empUser) return
+                      setPermitting(true)
+                      try {
+                        const now = new Date()
+                        const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`
+                        const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+                        const res = await fetch('/api/permissions', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ employee_id: empUser.id, date, leave_time: time, reason: permissionForm.reason }),
+                        })
+                        if (res.ok) {
+                          toast.success(lang === 'ar' ? 'تم تقديم طلب الإذن' : 'Permission request submitted')
+                          setShowPermission(false)
+                          setPermissionForm({ reason: '' })
+                        } else { toast.error(t('error')) }
+                      } catch { toast.error(t('error')) }
+                      setPermitting(false)
+                    }}
+                  >
+                    {permitting ? '...' : (lang === 'ar' ? 'تقديم الطلب' : 'Submit Request')}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Last Action Feedback */}
             {lastAction && (

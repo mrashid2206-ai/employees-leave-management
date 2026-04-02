@@ -13,6 +13,7 @@ export async function POST(request: Request) {
     absentMarked: 0,
     leaveDeducted: 0,
     tardinessCreated: 0,
+    missingCheckout: 0,
     date: processDate,
   }
 
@@ -31,10 +32,10 @@ export async function POST(request: Request) {
 
   // 3. Get employees who already have attendance for today
   const { rows: attended } = await pool.query(
-    'SELECT employee_id, check_in, excused_tardiness FROM attendance WHERE date = $1',
+    'SELECT employee_id, check_in, check_out, excused_tardiness FROM attendance WHERE date = $1',
     [processDate]
   )
-  const attendedMap = new Map(attended.map(r => [r.employee_id, { check_in: r.check_in, excused: r.excused_tardiness }]))
+  const attendedMap = new Map(attended.map(r => [r.employee_id, { check_in: r.check_in, check_out: r.check_out, excused: r.excused_tardiness }]))
 
   // 4. Get holidays
   const { rows: holidays } = await pool.query(
@@ -111,10 +112,24 @@ export async function POST(request: Request) {
           }
         }
       }
+
+      // Check for missing checkout (checked in but no check out)
+      if (attendedMap.has(emp.id)) {
+        const record = attendedMap.get(emp.id)
+        if (record?.check_in && !record.check_out) {
+          // Flag as missing checkout - set work hours to 0
+          await pool.query(
+            "UPDATE attendance SET notes = COALESCE(notes, '') || ' [Missing checkout]' WHERE employee_id = $1 AND date = $2 AND check_out IS NULL",
+            [emp.id, processDate]
+          )
+          if (!results.missingCheckout) results.missingCheckout = 0
+          results.missingCheckout++
+        }
+      }
     }
   }
 
-  await logAudit('daily_process', admin.username, 'admin', `Daily process: ${results.absentMarked} absent, ${results.tardinessCreated} tardiness`)
+  await logAudit('daily_process', admin.username, 'admin', `Daily process: ${results.absentMarked} absent, ${results.tardinessCreated} tardiness, ${results.missingCheckout} missing checkout`)
 
   return NextResponse.json({ success: true, ...results })
 }

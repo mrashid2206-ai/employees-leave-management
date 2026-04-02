@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import pool from '@/lib/db'
+import pool, { omanToday } from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 
 async function countWorkingDays(startDate: string, endDate: string): Promise<number> {
@@ -63,6 +63,36 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'End date must be after start date' }, { status: 400 })
   }
 
+  // Block leave requests in the past
+  const today = omanToday()
+  if (end_date < today && user.role !== 'admin') {
+    return NextResponse.json({ error: 'Cannot create leave for past dates' }, { status: 400 })
+  }
+
+  // Block leave outside fiscal year
+  const { rows: settingsRows } = await pool.query('SELECT year_start::text as year_start, year_end::text as year_end FROM settings LIMIT 1')
+  if (settingsRows[0]) {
+    const { year_start, year_end } = settingsRows[0]
+    if (start_date < year_start || end_date > year_end) {
+      return NextResponse.json({ error: 'Leave dates must be within the fiscal year (' + year_start + ' to ' + year_end + ')' }, { status: 400 })
+    }
+  }
+
+  // Check department max absent for each day in leave range
+  const { rows: empInfo } = await pool.query('SELECT department_id FROM employees WHERE id = $1', [employee_id])
+  if (empInfo[0]) {
+    const { rows: maxAbsentSettings } = await pool.query('SELECT max_absent_same_dept FROM settings LIMIT 1')
+    const maxAbsent = maxAbsentSettings[0]?.max_absent_same_dept || 2
+
+    const { rows: deptAbsent } = await pool.query(
+      "SELECT COUNT(DISTINCT employee_id) as cnt FROM leave_requests WHERE employee_id != $1 AND status = 'approved' AND start_date <= $2 AND end_date >= $3 AND employee_id IN (SELECT id FROM employees WHERE department_id = $4 AND is_active = true)",
+      [employee_id, end_date, start_date, empInfo[0].department_id]
+    )
+    if (parseInt(deptAbsent[0].cnt) >= maxAbsent) {
+      return NextResponse.json({ error: 'Maximum department absence limit reached for these dates' }, { status: 409 })
+    }
+  }
+
   // Server-side: calculate actual working days (excludes weekends + holidays)
   const actualDays = await countWorkingDays(start_date, end_date)
   if (actualDays <= 0) {
@@ -71,6 +101,27 @@ export async function POST(request: Request) {
 
   // Half-day support: if half-day selected and single day, use 0.5
   const finalDays = is_half_day && start_date === end_date ? 0.5 : actualDays
+
+  // Leave type limits
+  if (settingsRows[0]) {
+    const { year_start, year_end } = settingsRows[0]
+
+    // Emergency leave: max 5 per fiscal year (leave_type_id 3)
+    if (leave_type_id === 3) {
+      const { rows: emergencyCount } = await pool.query(
+        "SELECT COUNT(*) as cnt FROM leave_requests WHERE employee_id = $1 AND leave_type_id = 3 AND status IN ('approved', 'pending') AND start_date >= $2 AND end_date <= $3",
+        [employee_id, year_start, year_end]
+      )
+      if (parseInt(emergencyCount[0].cnt) >= 5) {
+        return NextResponse.json({ error: 'Emergency leave limit reached (maximum 5 per year)' }, { status: 400 })
+      }
+    }
+
+    // Sick leave > 3 days requires notes
+    if (leave_type_id === 2 && actualDays > 3 && !notes) {
+      return NextResponse.json({ error: 'Sick leave over 3 days requires notes (e.g. medical certificate reference)' }, { status: 400 })
+    }
+  }
 
   // Check for attendance conflict
   const { rows: attendanceConflicts } = await pool.query(
