@@ -60,7 +60,7 @@ function NavContent({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
             className={cn(
               'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
               isActive
-                ? 'bg-primary text-primary-foreground'
+                ? 'bg-primary/10 text-primary border-s-2 border-primary font-semibold'
                 : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
             )}
           >
@@ -111,7 +111,7 @@ export function Sidebar() {
       >
         <div className="flex h-16 items-center justify-between border-b px-4">
           {!collapsed && (
-            <h2 className="text-lg font-bold text-primary truncate">{t('appShort')}</h2>
+            <h2 className="text-lg font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent truncate">{t('appShort')}</h2>
           )}
           <Button
             variant="ghost"

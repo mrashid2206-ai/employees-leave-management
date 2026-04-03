@@ -171,7 +171,7 @@ export default function DashboardPage() {
           </p>
         </div>
         {pendingLeaves.length > 0 && (
-          <Button variant="outline" className="gap-2 border-[#FF9800]/30 text-[#FF9800] hover:bg-[#FF9800]/10" onClick={() => router.push('/leaves')}>
+          <Button variant="outline" className="gap-2 border-amber-500/30 text-amber-500 hover:bg-amber-500/10" onClick={() => router.push('/leaves')}>
             <AlertTriangle className="h-4 w-4" />
             {pendingLeaves.length} {lang === 'ar' ? 'طلب معلق' : 'pending'}
           </Button>
@@ -208,7 +208,7 @@ export default function DashboardPage() {
         ].map((kpi) => {
           const Icon = kpi.icon
           return (
-            <Card key={kpi.title} className="border-0 shadow-lg overflow-hidden relative">
+            <Card key={kpi.title} className="border-0 shadow-lg hover:shadow-xl transition-shadow overflow-hidden relative">
               <div className={`absolute inset-0 bg-gradient-to-br ${kpi.gradient} pointer-events-none`} />
               <CardContent className="p-5 relative">
                 <div className="flex items-start justify-between">

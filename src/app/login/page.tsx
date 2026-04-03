@@ -47,14 +47,14 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4" dir={dir}>
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-background to-primary/5" dir={dir}>
       <div className="absolute top-4 left-4">
         <LanguageToggle />
       </div>
-      <Card className="w-full max-w-md border-0 shadow-2xl">
+      <Card className="w-full max-w-md border-0 shadow-2xl backdrop-blur-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
         <CardHeader className="text-center pb-2">
-          <div className="mx-auto w-16 h-16 rounded-full bg-[#1976D2]/10 flex items-center justify-center mb-4">
-            <Lock className="h-8 w-8 text-[#1976D2]" />
+          <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+            <Lock className="h-8 w-8 text-primary" />
           </div>
           <CardTitle className="text-2xl">{t('appTitle')}</CardTitle>
           <p className="text-muted-foreground text-sm mt-1">{t('loginSubtitle')}</p>
@@ -99,7 +99,7 @@ export default function LoginPage() {
               </div>
             </div>
             {error && (
-              <div className="text-sm text-[#F44336] bg-[#F44336]/10 p-3 rounded-lg text-center">
+              <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-lg text-center">
                 {error}
               </div>
             )}
@@ -112,7 +112,7 @@ export default function LoginPage() {
             <p className="text-xs text-muted-foreground mb-2">
               {dir === 'rtl' ? 'هل أنت موظف؟' : 'Are you an employee?'}
             </p>
-            <a href="/employee-login" className="text-sm text-[#1976D2] hover:underline font-medium">
+            <a href="/employee-login" className="text-sm text-primary hover:underline font-medium">
               {dir === 'rtl' ? 'الدخول من بوابة الموظف' : 'Go to Employee Portal'}
             </a>
           </div>

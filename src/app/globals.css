@@ -129,6 +129,33 @@
   }
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background-color: oklch(0.55 0.18 260 / 0.3);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(0.5 0 0 / 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.5 0 0 / 0.4);
+}
+
 /* Mobile improvements */
 @media (max-width: 640px) {
   .container {

@@ -55,15 +55,15 @@ export default function EmployeeLoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4" dir={dir}>
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-background to-primary/5" dir={dir}>
       <div className="absolute top-4 left-4">
         <LanguageToggle />
       </div>
 
-      <Card className="w-full max-w-md border-0 shadow-2xl">
+      <Card className="w-full max-w-md border-0 shadow-2xl backdrop-blur-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
         <CardHeader className="text-center pb-2">
-          <div className="mx-auto w-16 h-16 rounded-full bg-[#1976D2]/10 flex items-center justify-center mb-4">
-            <User className="h-8 w-8 text-[#1976D2]" />
+          <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+            <User className="h-8 w-8 text-primary" />
           </div>
           <CardTitle className="text-xl">
             {lang === 'ar' ? 'بوابة الموظف' : 'Employee Portal'}
@@ -128,7 +128,7 @@ export default function EmployeeLoginPage() {
                 <span>{t('checkInBtn')}</span>
               </div>
               <div className="flex items-center gap-2 p-2 rounded-lg bg-accent/30 text-sm">
-                <CalendarDays className="h-4 w-4 text-[#1976D2]" />
+                <CalendarDays className="h-4 w-4 text-primary" />
                 <span>{t('applyLeave')}</span>
               </div>
             </div>

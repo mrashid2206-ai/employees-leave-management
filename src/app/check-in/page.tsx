@@ -286,11 +286,11 @@ export default function EmployeePortalPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col" dir={dir}>
       {/* Top Header */}
-      <div className="bg-card border-b px-4 py-3 flex items-center justify-between sticky top-0 z-40">
+      <div className="bg-card/80 backdrop-blur-md border-b px-4 py-3 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-3">
           {empUser && (
             <>
-              <div className="w-9 h-9 rounded-full bg-[#1976D2]/15 flex items-center justify-center text-[#1976D2] font-bold text-sm">
+              <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center text-primary font-bold text-sm">
                 {empUser.name.charAt(0)}
               </div>
               <div>
@@ -396,7 +396,7 @@ export default function EmployeePortalPage() {
             <div className="grid grid-cols-2 gap-3">
               <Button
                 size="lg"
-                className="h-20 text-lg bg-emerald-600 hover:bg-emerald-700 flex-col gap-1"
+                className="h-20 text-lg bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 flex-col gap-1 shadow-lg shadow-emerald-500/20"
                 onClick={() => handleCheckAction('check-in')}
                 disabled={loading || !!todayStatus?.check_in}
               >
@@ -405,7 +405,7 @@ export default function EmployeePortalPage() {
               </Button>
               <Button
                 size="lg"
-                className="h-20 text-lg bg-amber-600 hover:bg-amber-700 flex-col gap-1"
+                className="h-20 text-lg bg-gradient-to-br from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800 flex-col gap-1 shadow-lg shadow-amber-500/20"
                 onClick={() => handleCheckAction('check-out')}
                 disabled={loading || !todayStatus?.check_in || !!todayStatus?.check_out}
               >
@@ -589,7 +589,7 @@ export default function EmployeePortalPage() {
                     )}
                     {leaveDays > 0 && (
                       <div className="flex items-center gap-2">
-                        <CalendarDays className="h-4 w-4 text-[#1976D2]" />
+                        <CalendarDays className="h-4 w-4 text-primary" />
                         <span className="text-sm font-medium">
                           {leaveForm.is_half_day && leaveForm.start_date === leaveForm.end_date ? 0.5 : (workingDaysInfo ? workingDaysInfo.workingDays : leaveDays)} {t('days')}
                           {workingDaysInfo && workingDaysInfo.workingDays < leaveDays && (
@@ -1012,7 +1012,7 @@ export default function EmployeePortalPage() {
       </div>
 
       {/* Bottom Navigation */}
-      <div className="fixed bottom-0 inset-x-0 bg-card border-t z-50">
+      <div className="fixed bottom-0 inset-x-0 bg-card/80 backdrop-blur-md border-t z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
         <div className="max-w-lg mx-auto flex overflow-x-auto">
           {[
             { id: 'attendance' as const, icon: Clock, label: t('checkInBtn') },
@@ -1028,13 +1028,13 @@ export default function EmployeePortalPage() {
               <button
                 key={tab.id}
                 className={`flex-1 flex flex-col items-center gap-1 py-3 transition-colors ${
-                  isActive ? 'text-[#1976D2]' : 'text-muted-foreground'
+                  isActive ? 'text-primary' : 'text-muted-foreground'
                 }`}
                 onClick={() => setActiveTab(tab.id)}
               >
-                <Icon className={`h-5 w-5 ${isActive ? 'text-[#1976D2]' : ''}`} />
+                <Icon className={`h-5 w-5 ${isActive ? 'text-primary' : ''}`} />
                 <span className="text-[10px] font-medium">{tab.label}</span>
-                {isActive && <div className="w-6 h-0.5 rounded-full bg-[#1976D2]" />}
+                {isActive && <div className="w-6 h-0.5 rounded-full bg-primary" />}
               </button>
             )
           })}
