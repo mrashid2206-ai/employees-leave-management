@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
-import { Plus, Trash2, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
+import { Plus, Trash2, Pencil, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   getEmployees, getLeaveRequests, getLeaveTypes, createLeaveRequest, deleteLeaveRequest, checkLeaveConflict, updateLeaveStatus
@@ -40,6 +40,7 @@ export default function LeavesPage() {
     is_half_day: false,
   })
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number }>({ open: false, id: 0 })
+  const [editLeave, setEditLeave] = useState<{ id: number; start_date: string; end_date: string } | null>(null)
   const t = useT()
   const { dir, lang } = useLanguage()
   const [selectedIds, setSelectedIds] = useState<number[]>([])
@@ -145,6 +146,25 @@ export default function LeavesPage() {
       setSelectedIds([])
       toast.success(t('updatedSuccess'))
     },
+  })
+
+  const editMutation = useMutation({
+    mutationFn: ({ id, start_date, end_date }: { id: number; start_date: string; end_date: string }) =>
+      fetch(`/api/leaves/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ start_date, end_date }),
+      }).then(r => {
+        if (!r.ok) return r.json().then(d => { throw new Error(d.error) })
+        return r.json()
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leaves'] })
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      setEditLeave(null)
+      toast.success(t('updatedSuccess'))
+    },
+    onError: (err: any) => toast.error(err.message || t('error')),
   })
 
   function handleSubmit() {
@@ -363,7 +383,7 @@ export default function LeavesPage() {
                   <TableHead className="text-center">{t('daysCount')}</TableHead>
                   <TableHead className="text-start">{t('notes')}</TableHead>
                   <TableHead className="text-center">{t('status')}</TableHead>
-                  <TableHead className="text-center w-16">{t('delete')}</TableHead>
+                  <TableHead className="text-center w-20">{t('actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -429,14 +449,24 @@ export default function LeavesPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-center">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-[#F44336] hover:text-[#F44336] hover:bg-[#F44336]/10"
-                            onClick={() => setDeleteConfirm({ open: true, id: leave.id })}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center justify-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-primary hover:bg-primary/10"
+                              onClick={() => setEditLeave({ id: leave.id, start_date: leave.start_date, end_date: leave.end_date })}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                              onClick={() => setDeleteConfirm({ open: true, id: leave.id })}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     )
@@ -456,6 +486,36 @@ export default function LeavesPage() {
         onConfirm={() => deleteMutation.mutate(deleteConfirm.id)}
         loading={deleteMutation.isPending}
       />
+
+      {/* Edit Leave Dialog */}
+      {editLeave && (
+        <Dialog open={!!editLeave} onOpenChange={() => setEditLeave(null)}>
+          <DialogContent className="max-w-sm" dir={dir}>
+            <DialogHeader>
+              <DialogTitle>{lang === 'ar' ? 'تعديل الإجازة' : 'Edit Leave'}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>{t('fromDate')}</Label>
+                <Input type="date" value={editLeave.start_date} onChange={e => setEditLeave(prev => prev ? { ...prev, start_date: e.target.value } : null)} />
+              </div>
+              <div>
+                <Label>{t('toDate')}</Label>
+                <Input type="date" value={editLeave.end_date} onChange={e => setEditLeave(prev => prev ? { ...prev, end_date: e.target.value } : null)} />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {lang === 'ar' ? '💡 سيتم إعادة حساب أيام العمل والرصيد تلقائياً' : '💡 Working days and balance will be recalculated automatically'}
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditLeave(null)}>{t('cancel')}</Button>
+              <Button onClick={() => editLeave && editMutation.mutate(editLeave)} disabled={editMutation.isPending}>
+                {editMutation.isPending ? '...' : t('save')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }
