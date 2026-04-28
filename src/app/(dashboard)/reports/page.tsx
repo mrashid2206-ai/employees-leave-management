@@ -92,11 +92,7 @@ export default function ReportsPage() {
         const endMs = Date.UTC(ey, em - 1, ed)
         for (let ms = startMs; ms <= endMs; ms += 86400000) {
           const d = new Date(ms)
-          const dayOfWeek = d.getUTCDay()
-          const mo = String(d.getUTCMonth() + 1).padStart(2, '0')
-          const dy = String(d.getUTCDate()).padStart(2, '0')
-          const dateStr = `${d.getUTCFullYear()}-${mo}-${dy}`
-          if (!workDays.includes(dayOfWeek) || holidaySet.has(dateStr)) continue
+          // Count all calendar days (weekends included — company policy)
           const month = d.getUTCMonth()
           const fiscalIdx = month >= 2 ? month - 2 : month + 10
           months[fiscalIdx]++

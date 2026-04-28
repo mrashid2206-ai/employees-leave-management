@@ -2,29 +2,13 @@ import { NextResponse } from 'next/server'
 import pool, { omanToday } from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 
-async function countWorkingDays(startDate: string, endDate: string): Promise<number> {
-  // Get work days from settings
-  const { rows: settingsRows } = await pool.query('SELECT work_days FROM settings LIMIT 1')
-  const workDays = settingsRows[0]?.work_days?.split(',').map(Number) || [0,1,2,3,4]
-
-  // Get holidays in range
-  const { rows: holidays } = await pool.query(
-    'SELECT date::text as date FROM holidays WHERE date >= $1 AND date <= $2',
-    [startDate, endDate]
-  )
-  const holidaySet = new Set(holidays.map(h => h.date))
-
-  let count = 0
-  const start = new Date(startDate)
-  const end = new Date(endDate)
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const dayOfWeek = d.getDay()
-    const dateStr = d.toISOString().split('T')[0]
-    if (workDays.includes(dayOfWeek) && !holidaySet.has(dateStr)) {
-      count++
-    }
-  }
-  return count
+// Count all calendar days (weekends included — company policy)
+async function countLeaveDays(startDate: string, endDate: string): Promise<number> {
+  const [sy, sm, sd] = startDate.split('-').map(Number)
+  const [ey, em, ed] = endDate.split('-').map(Number)
+  const start = Date.UTC(sy, sm - 1, sd)
+  const end = Date.UTC(ey, em - 1, ed)
+  return Math.round((end - start) / 86400000) + 1
 }
 
 export async function GET(request: Request) {
@@ -94,7 +78,7 @@ export async function POST(request: Request) {
   }
 
   // Server-side: calculate actual working days (excludes weekends + holidays)
-  const actualDays = await countWorkingDays(start_date, end_date)
+  const actualDays = await countLeaveDays(start_date, end_date)
   if (actualDays <= 0) {
     return NextResponse.json({ error: 'No working days in selected range' }, { status: 400 })
   }

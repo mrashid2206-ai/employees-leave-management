@@ -23,30 +23,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const oldLeave = current[0]
   const oldDays = oldLeave.days_count
 
-  // Calculate new working days
-  const { rows: settingsRows } = await pool.query('SELECT work_days FROM settings LIMIT 1')
-  const workDays = settingsRows[0]?.work_days?.split(',').map(Number) || [0,1,2,3,4]
-  const { rows: holidays } = await pool.query('SELECT date::text as date FROM holidays WHERE date >= $1 AND date <= $2', [start_date, end_date])
-  const holidaySet = new Set(holidays.map((h: any) => h.date))
-
+  // Calculate calendar days (weekends included — company policy)
   const [sy, sm, sd] = start_date.split('-').map(Number)
   const [ey, em, ed] = end_date.split('-').map(Number)
-  const startMs = Date.UTC(sy, sm - 1, sd)
-  const endMs = Date.UTC(ey, em - 1, ed)
-  let newDays = 0
-  for (let ms = startMs; ms <= endMs; ms += 86400000) {
-    const d = new Date(ms)
-    const dayOfWeek = d.getUTCDay()
-    const mo = String(d.getUTCMonth() + 1).padStart(2, '0')
-    const dy = String(d.getUTCDate()).padStart(2, '0')
-    const dateStr = `${d.getUTCFullYear()}-${mo}-${dy}`
-    if (workDays.includes(dayOfWeek) && !holidaySet.has(dateStr)) {
-      newDays++
-    }
-  }
+  const newDays = Math.round((Date.UTC(ey, em - 1, ed) - Date.UTC(sy, sm - 1, sd)) / 86400000) + 1
 
   if (newDays <= 0) {
-    return NextResponse.json({ error: 'No working days in selected range' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid date range' }, { status: 400 })
   }
 
   // Update leave

@@ -54,18 +54,10 @@ export default function LeavePlannerPage() {
 
           for (let ms = startMs; ms <= endMs; ms += 86400000) {
             const d = new Date(ms)
-            const dayMonth = d.getUTCMonth()
-            const dayYear = d.getUTCFullYear()
-            if (dayMonth === monthIdx && dayYear === year) {
-              const dayOfWeek = d.getUTCDay()
-              const mo = String(dayMonth + 1).padStart(2, '0')
-              const dy = String(d.getUTCDate()).padStart(2, '0')
-              const dateStr = `${dayYear}-${mo}-${dy}`
-              if (workDays.includes(dayOfWeek) && !holidaySet.has(dateStr)) {
-                daysInMonth++
-                const lt = leaveTypes.find(t => t.id === leave.leave_type_id)
-                if (lt && !leaveColors.includes(lt.color)) leaveColors.push(lt.color)
-              }
+            if (d.getUTCMonth() === monthIdx && d.getUTCFullYear() === year) {
+              daysInMonth++
+              const lt = leaveTypes.find(t => t.id === leave.leave_type_id)
+              if (lt && !leaveColors.includes(lt.color)) leaveColors.push(lt.color)
             }
           }
         })
