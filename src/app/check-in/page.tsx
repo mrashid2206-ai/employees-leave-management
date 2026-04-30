@@ -228,7 +228,8 @@ export default function EmployeePortalPage() {
         if (data.error === 'already_checked_in') toast.error(`${t('alreadyCheckedIn')} (${data.time})`)
         else if (data.error === 'already_checked_out') toast.error(`${t('alreadyCheckedOut')} (${data.time})`)
         else if (data.error === 'not_checked_in') toast.error(t('notCheckedIn'))
-        else toast.error(t('error'))
+        else if (data.error === 'on_leave') toast.error(lang === 'ar' ? `لديك إجازة معتمدة (${data.leave_start} إلى ${data.leave_end}). تواصل مع المدير لتعديل الإجازة.` : data.message)
+        else toast.error(data.message || t('error'))
       } else {
         setLastAction({ action: data.action, time: data.time, workHours: data.workHours })
         const statusRes = await fetch(`/api/attendance/status?employee_id=${empUser.id}`)

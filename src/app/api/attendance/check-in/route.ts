@@ -72,18 +72,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'already_checked_in', time: existing[0].check_in }, { status: 409 })
     }
 
-    // Auto-cancel any approved leave for today (employee showed up)
+    // Check for approved leave today
     let leaveCancelled = false
     const { rows: todayLeaves } = await pool.query(
-      "SELECT id, days_count FROM leave_requests WHERE employee_id = $1 AND status = 'approved' AND start_date <= $2 AND end_date >= $2",
+      "SELECT id, days_count, start_date::text as start_date, end_date::text as end_date, leave_type_id FROM leave_requests WHERE employee_id = $1 AND status = 'approved' AND start_date <= $2 AND end_date >= $2",
       [employee_id, today]
     )
     for (const leave of todayLeaves) {
-      // Only auto-cancel single-day leaves. Multi-day leaves need admin action.
-      if (leave.days_count === 1) {
+      if (parseFloat(leave.days_count) <= 1) {
+        // Single-day leave: auto-cancel (employee showed up)
         await pool.query("UPDATE leave_requests SET status = 'cancelled', updated_at = NOW() WHERE id = $1", [leave.id])
         await pool.query('UPDATE employees SET leave_balance = leave_balance + $1 WHERE id = $2', [leave.days_count, employee_id])
         leaveCancelled = true
+      } else {
+        // Multi-day leave: block check-in, employee must ask admin to modify leave first
+        return NextResponse.json({
+          error: 'on_leave',
+          message: `You have an approved leave (${leave.start_date} to ${leave.end_date}). Contact admin to modify your leave before checking in.`,
+          leave_start: leave.start_date,
+          leave_end: leave.end_date,
+        }, { status: 409 })
       }
     }
 
