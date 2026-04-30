@@ -9,13 +9,28 @@ export async function POST(request: Request) {
   const results: string[] = []
 
   try {
-    // 1. Remove duplicate leave types (keep lowest ID for each name_en)
+    // 1. Fix leave_requests referencing duplicate type IDs, then remove duplicates
+    // Map duplicate IDs to original IDs
+    const { rows: allTypes } = await pool.query('SELECT id, name_en FROM leave_types ORDER BY id')
+    const typeNameToMinId: Record<string, number> = {}
+    allTypes.forEach(t => {
+      if (!typeNameToMinId[t.name_en]) typeNameToMinId[t.name_en] = t.id
+    })
+    // Update leave_requests to use original type IDs
+    for (const lt of allTypes) {
+      const minId = typeNameToMinId[lt.name_en]
+      if (lt.id !== minId) {
+        const { rowCount } = await pool.query('UPDATE leave_requests SET leave_type_id = $1 WHERE leave_type_id = $2', [minId, lt.id])
+        if (rowCount && rowCount > 0) results.push(`Remapped ${rowCount} leave requests from type #${lt.id} to #${minId}`)
+      }
+    }
+    // Now safe to delete duplicates
     const { rows: ltDups } = await pool.query(`
       DELETE FROM leave_types WHERE id NOT IN (
         SELECT MIN(id) FROM leave_types GROUP BY name_en
       ) RETURNING id, name_en
     `)
-    results.push(`Deleted ${ltDups.length} duplicate leave types: ${ltDups.map(r => `#${r.id} ${r.name_en}`).join(', ')}`)
+    results.push(`Deleted ${ltDups.length} duplicate leave types`)
 
     // 2. Remove duplicate holidays (keep lowest ID for each date)
     const { rows: holDups } = await pool.query(`

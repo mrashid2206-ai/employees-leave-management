@@ -388,7 +388,7 @@ export default function EmployeePortalPage() {
                     </div>
                     <div className={`p-2 rounded-lg ${todayStatus.is_holiday_work ? 'bg-purple-500/10' : 'bg-blue-500/10'}`}>
                       <p className="text-[10px] text-muted-foreground">{todayStatus.is_holiday_work ? (lang === 'ar' ? 'إضافي' : 'OT') : t('workHours')}</p>
-                      <p className={`text-sm font-bold font-mono ${todayStatus.is_holiday_work ? 'text-purple-500' : 'text-blue-500'}`}>{todayStatus.work_hours || 0}h</p>
+                      <p className={`text-sm font-bold font-mono ${todayStatus.is_holiday_work ? 'text-purple-500' : 'text-blue-500'}`}>{(() => { const h = parseFloat(todayStatus.work_hours) || 0; return `${Math.floor(h)}h ${Math.round((h % 1) * 60)}m` })()}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -555,9 +555,21 @@ export default function EmployeePortalPage() {
                     <div>
                       <Label className="text-xs">{t('leaveType')} *</Label>
                       <Select value={leaveForm.leave_type_id} onValueChange={v => setLeaveForm(f => ({ ...f, leave_type_id: v ?? '' }))}>
-                        <SelectTrigger><SelectValue placeholder={t('selectType')} /></SelectTrigger>
+                        <SelectTrigger>
+                          <SelectValue placeholder={t('selectType')}>
+                            {leaveForm.leave_type_id && (() => {
+                              const lt = leaveTypes.find(t => String(t.id) === leaveForm.leave_type_id)
+                              return lt ? (
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: lt.color }} />
+                                  {lang === 'ar' ? lt.name_ar : lt.name_en}
+                                </div>
+                              ) : leaveForm.leave_type_id
+                            })()}
+                          </SelectValue>
+                        </SelectTrigger>
                         <SelectContent>
-                          {leaveTypes.map(lt => (
+                          {leaveTypes.filter((lt, i, arr) => arr.findIndex(t => t.name_en === lt.name_en) === i).map(lt => (
                             <SelectItem key={lt.id} value={String(lt.id)}>
                               <div className="flex items-center gap-2">
                                 <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: lt.color }} />
@@ -806,7 +818,7 @@ export default function EmployeePortalPage() {
                           </div>
                           <div className="p-1.5 rounded bg-blue-500/10">
                             <p className="text-[10px] text-muted-foreground">{t('workHours')}</p>
-                            <p className="text-xs font-bold text-blue-500 font-mono">{rec.work_hours || 0}h</p>
+                            <p className="text-xs font-bold text-blue-500 font-mono">{(() => { const h = parseFloat(String(rec.work_hours)) || 0; return `${Math.floor(h)}h ${Math.round((h % 1) * 60)}m` })()}</p>
                           </div>
                         </div>
                       </CardContent>
