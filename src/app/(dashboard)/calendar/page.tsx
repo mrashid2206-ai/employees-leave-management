@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ChevronRight, ChevronLeft } from 'lucide-react'
-import { getEmployees, getLeaveRequests, getLeaveTypes, getDepartments } from '@/lib/api'
+import { getEmployees, getLeaveRequests, getLeaveTypes, getDepartments, getHolidays, getSettings } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
 
 const DAY_NAMES_AR = ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت']
@@ -26,6 +26,11 @@ export default function CalendarPage() {
   const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
+  const { data: holidays = [] } = useQuery({ queryKey: ['holidays'], queryFn: getHolidays })
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
+
+  const workDays = (settings?.work_days || '0,1,2,3,4').split(',').map(Number)
+  const holidayMap = new Map(holidays.map(h => [h.date, h.name]))
 
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
@@ -131,6 +136,9 @@ export default function CalendarPage() {
           <div className="grid grid-cols-7 gap-1">
             {gridCells.map((cell, idx) => {
               const hasMany = cell && cell.employees.length > 4
+              const dateStr = cell ? `${year}-${String(month + 1).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}` : ''
+              const isWeekend = cell ? !workDays.includes(new Date(year, month, cell.day).getDay()) : false
+              const holidayName = cell ? holidayMap.get(dateStr) : null
 
               const cellContent = (
                 <div
@@ -139,7 +147,11 @@ export default function CalendarPage() {
                     cell === null
                       ? 'bg-transparent border-transparent'
                       : isToday(cell.day)
-                      ? 'border-[#1976D2] bg-[#1976D2]/5'
+                      ? 'border-primary bg-primary/5'
+                      : holidayName
+                      ? 'bg-purple-500/5 border-purple-500/20'
+                      : isWeekend
+                      ? 'bg-rose-500/5 border-rose-500/20'
                       : cell && cell.employees.length > 0
                       ? 'border-border hover:bg-accent/50 cursor-pointer'
                       : 'border-border'
@@ -147,8 +159,11 @@ export default function CalendarPage() {
                 >
                   {cell && (
                     <>
+                      {holidayName && (
+                        <div className="text-[9px] text-purple-500 font-medium truncate mb-0.5">{holidayName}</div>
+                      )}
                       <div className="flex items-center justify-between mb-1">
-                        <span className={`text-sm font-medium ${isToday(cell.day) ? 'text-[#1976D2]' : ''}`}>
+                        <span className={`text-sm font-medium ${isToday(cell.day) ? 'text-primary' : ''}`}>
                           {cell.day}
                         </span>
                         {cell.employees.length > 0 && (
@@ -208,12 +223,20 @@ export default function CalendarPage() {
 
           {/* Legend */}
           <div className="flex gap-4 mt-4 flex-wrap">
-            {leaveTypes.map(lt => (
+            {leaveTypes.filter((lt, i, arr) => arr.findIndex(t => t.name_en === lt.name_en) === i).map(lt => (
               <div key={lt.id} className="flex items-center gap-1.5 text-sm">
                 <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: lt.color }} />
                 <span>{lang === 'ar' ? lt.name_ar : lt.name_en}</span>
               </div>
             ))}
+            <div className="flex items-center gap-1.5 text-sm">
+              <div className="w-3 h-3 rounded-sm bg-rose-500/30" />
+              <span>{lang === 'ar' ? 'عطلة نهاية الأسبوع' : 'Weekend'}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-sm">
+              <div className="w-3 h-3 rounded-sm bg-purple-500/30" />
+              <span>{lang === 'ar' ? 'عطلة رسمية' : 'Holiday'}</span>
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -78,6 +78,7 @@ export default function EmployeePortalPage() {
 
   // Calendar
   const [calendarLeaves, setCalendarLeaves] = useState<any[]>([])
+  const [calendarHolidays, setCalendarHolidays] = useState<any[]>([])
 
   // Password change
   const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
@@ -189,6 +190,7 @@ export default function EmployeePortalPage() {
         .then(r => r.ok ? r.json() : [])
         .then(data => setCalendarLeaves(data.filter((l: any) => l.status === 'approved')))
         .catch(() => {})
+      fetch('/api/holidays').then(r => r.ok ? r.json() : []).then(setCalendarHolidays).catch(() => {})
     }
   }, [activeTab])
 
@@ -912,6 +914,28 @@ export default function EmployeePortalPage() {
         {activeTab === 'calendar' && (
           <div className="space-y-4 animate-in">
             <h2 className="font-bold text-lg">{lang === 'ar' ? 'من في إجازة؟' : "Who's on Leave?"}</h2>
+            {/* Holidays this month */}
+            {(() => {
+              const now = new Date()
+              const monthHolidays = calendarHolidays.filter(h => {
+                const [hy, hm] = h.date.split('-').map(Number)
+                return hy === now.getFullYear() && hm === now.getMonth() + 1
+              })
+              if (monthHolidays.length === 0) return null
+              return (
+                <>
+                  <h3 className="text-sm font-semibold text-purple-500 mt-2">{lang === 'ar' ? 'العطلات الرسمية' : 'Public Holidays'}</h3>
+                  {monthHolidays.map(h => (
+                    <Card key={h.id} className="border-0 shadow-md border-l-4 border-l-purple-500">
+                      <CardContent className="p-3 flex items-center justify-between">
+                        <span className="text-sm font-medium">{h.name}</span>
+                        <span className="text-xs font-mono text-muted-foreground">{h.date}</span>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </>
+              )
+            })()}
             {(() => {
               const now = new Date()
               const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`

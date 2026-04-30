@@ -16,6 +16,13 @@ export async function POST(request: Request) {
   if (!name_ar || !name_en || !color) {
     return NextResponse.json({ error: 'All fields required' }, { status: 400 })
   }
+  const { rows: existing } = await pool.query(
+    'SELECT id FROM leave_types WHERE name_en = $1 OR name_ar = $2',
+    [name_en, name_ar]
+  )
+  if (existing.length > 0) {
+    return NextResponse.json({ error: 'Leave type already exists' }, { status: 409 })
+  }
   const { rows } = await pool.query(
     'INSERT INTO leave_types (name_ar, name_en, color) VALUES ($1, $2, $3) RETURNING *',
     [name_ar, name_en, color]

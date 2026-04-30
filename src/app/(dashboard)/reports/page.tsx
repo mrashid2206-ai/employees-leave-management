@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Download, Printer, FileSpreadsheet } from 'lucide-react'
 import { exportToExcel } from '@/lib/excel'
 import { useLanguage, useT } from '@/lib/language-context'
-import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings, getDepartments, getLeaveTypes, getHolidays } from '@/lib/api'
+import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings, getDepartments, getLeaveTypes } from '@/lib/api'
 
 function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -32,7 +32,6 @@ export default function ReportsPage() {
   const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
-  const { data: holidays = [] } = useQuery({ queryKey: ['holidays'], queryFn: getHolidays })
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
 
   const filteredEmployees = useMemo(() => {
@@ -78,9 +77,6 @@ export default function ReportsPage() {
 
   // Monthly leave calendar
   const monthlyData = useMemo(() => {
-    const workDays = (settings?.work_days || '0,1,2,3,4').split(',').map(Number)
-    const holidaySet = new Set(holidays.map(h => h.date))
-
     return filteredEmployees.map(emp => {
       const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
       const months: number[] = Array(12).fill(0)
@@ -106,16 +102,17 @@ export default function ReportsPage() {
         total: months.reduce((s, m) => s + m, 0),
       }
     })
-  }, [filteredEmployees, leaves, settings, holidays])
+  }, [filteredEmployees, leaves, settings])
 
   function exportCSV() {
-    const headers = [t('name'), t('department'), t('balance'), t('used'), ...leaveTypes.map(lt => lang === 'ar' ? lt.name_ar : lt.name_en), t('remaining'), t('tardinessHHMM') + ' (' + t('minutes') + ')', t('deduction')]
+    const dedupedTypes = leaveTypes.filter((lt, i, arr) => arr.findIndex(t => t.name_en === lt.name_en) === i)
+    const headers = [t('name'), t('department'), t('balance'), t('used'), ...dedupedTypes.map(lt => lang === 'ar' ? lt.name_ar : lt.name_en), t('remaining'), t('tardinessHHMM') + ' (' + t('minutes') + ')', t('deduction')]
     const rows = summaryData.map(emp => [
       emp.name,
       emp.department,
       emp.balance,
       emp.usedDays,
-      ...leaveTypes.map(lt => emp.byType[lt.name_en] || 0),
+      ...dedupedTypes.map(lt => emp.byType[lt.name_en] || 0),
       emp.remaining,
       emp.tardMinutes,
       emp.deduction,
@@ -191,7 +188,7 @@ export default function ReportsPage() {
                       <TableHead className="text-center">{t('department')}</TableHead>
                       <TableHead className="text-center">{t('balance')}</TableHead>
                       <TableHead className="text-center">{t('used')}</TableHead>
-                      {leaveTypes.map(lt => (
+                      {leaveTypes.filter((lt, i, arr) => arr.findIndex(t => t.name_en === lt.name_en) === i).map(lt => (
                         <TableHead key={lt.id} className="text-center">
                           <div className="flex items-center justify-center gap-1">
                             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: lt.color }} />
@@ -211,7 +208,7 @@ export default function ReportsPage() {
                         <TableCell className="text-center">{emp.department}</TableCell>
                         <TableCell className="text-center">{emp.balance}</TableCell>
                         <TableCell className="text-center">{emp.usedDays}</TableCell>
-                        {leaveTypes.map(lt => (
+                        {leaveTypes.filter((lt, i, arr) => arr.findIndex(t => t.name_en === lt.name_en) === i).map(lt => (
                           <TableCell key={lt.id} className="text-center">
                             {emp.byType[lt.name_en] || 0}
                           </TableCell>

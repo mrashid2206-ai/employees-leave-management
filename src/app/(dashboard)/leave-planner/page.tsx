@@ -5,7 +5,7 @@ import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { getEmployees, getLeaveRequests, getLeaveTypes, getSettings, getDepartments, getHolidays } from '@/lib/api'
+import { getEmployees, getLeaveRequests, getLeaveTypes, getSettings, getDepartments } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
 
 const MONTH_NAMES_AR = ['مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر', 'يناير', 'فبراير']
@@ -22,16 +22,12 @@ export default function LeavePlannerPage() {
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
-  const { data: holidays = [] } = useQuery({ queryKey: ['holidays'], queryFn: getHolidays })
 
   const monthNames = lang === 'ar' ? MONTH_NAMES_AR : MONTH_NAMES_EN
 
   const plannerData = useMemo(() => {
     let emps = employees.filter(e => e.is_active)
     if (deptFilter !== 'all') emps = emps.filter(e => e.department_id === parseInt(deptFilter))
-
-    const workDays = (settings?.work_days || '0,1,2,3,4').split(',').map(Number)
-    const holidaySet = new Set(holidays.map(h => h.date))
 
     return emps.map(emp => {
       const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
@@ -75,7 +71,7 @@ export default function LeavePlannerPage() {
         months,
       }
     })
-  }, [employees, leaves, leaveTypes, settings, deptFilter, holidays])
+  }, [employees, leaves, leaveTypes, settings, deptFilter])
 
   const maxDaysInMonth = Math.max(...plannerData.flatMap(e => e.months.map(m => m.days)), 1)
 
@@ -103,7 +99,7 @@ export default function LeavePlannerPage() {
 
       {/* Legend */}
       <div className="flex gap-4 flex-wrap">
-        {leaveTypes.map(lt => (
+        {leaveTypes.filter((lt, i, arr) => arr.findIndex(t => t.name_en === lt.name_en) === i).map(lt => (
           <div key={lt.id} className="flex items-center gap-1.5 text-sm">
             <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: lt.color }} />
             <span>{lang === 'ar' ? lt.name_ar : lt.name_en}</span>
