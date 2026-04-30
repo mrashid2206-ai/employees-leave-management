@@ -8,7 +8,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   if (user.role === 'employee' && String(user.id) !== id) return forbidden()
   const { rows } = await pool.query(`
-    SELECT e.id, e.name, e.department_id, e.leave_balance, e.is_active, e.username, e.created_at, e.updated_at, json_build_object('id', d.id, 'name', d.name) as department
+    SELECT e.id, e.name, e.department_id, e.leave_balance, e.is_active, e.username, e.join_date::text as join_date, e.email, e.phone, e.position, e.created_at, e.updated_at, json_build_object('id', d.id, 'name', d.name) as department
     FROM employees e
     LEFT JOIN departments d ON e.department_id = d.id
     WHERE e.id = $1
@@ -22,7 +22,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!admin) return unauthorized()
   const { id } = await params
   const body = await request.json()
-  const allowedFields = ['name', 'department_id', 'leave_balance', 'is_active', 'username', 'password_hash']
+  const allowedFields = ['name', 'department_id', 'leave_balance', 'is_active', 'username', 'password_hash', 'email', 'phone', 'position', 'join_date']
   const fields = Object.keys(body).filter(k => allowedFields.includes(k))
   if (fields.length === 0) return NextResponse.json({ error: 'No fields' }, { status: 400 })
 

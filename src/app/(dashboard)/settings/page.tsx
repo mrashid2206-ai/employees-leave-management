@@ -789,6 +789,25 @@ function AdminUsersSection({ lang, dir }: { lang: string; dir: string }) {
                   <span className="text-sm font-medium">{a.name}</span>
                   <span className="text-xs text-muted-foreground">@{a.username}</span>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-rose-500 hover:bg-rose-500/10"
+                  onClick={async () => {
+                    if (!confirm(lang === 'ar' ? `هل أنت متأكد من حذف "${a.name}"؟` : `Are you sure you want to delete "${a.name}"?`)) return
+                    try {
+                      const res = await fetch(`/api/admin-users/${a.id}`, { method: 'DELETE' })
+                      if (res.ok) {
+                        setAdmins(prev => prev.filter(x => x.id !== a.id))
+                        toast.success(lang === 'ar' ? 'تم الحذف' : 'Deleted')
+                      } else {
+                        toast.error('Error')
+                      }
+                    } catch { toast.error('Error') }
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
               </div>
             ))}
           </div>

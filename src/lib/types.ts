@@ -28,6 +28,11 @@ export interface Employee {
   department_id: number
   leave_balance: number
   is_active: boolean
+  username?: string
+  join_date?: string
+  email?: string
+  phone?: string
+  position?: string
   created_at: string
   updated_at: string
   department?: Department

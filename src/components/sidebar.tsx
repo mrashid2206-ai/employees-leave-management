@@ -14,6 +14,7 @@ import {
   Trophy,
   FileText,
   Settings,
+  Shield,
   DollarSign,
   CalendarRange,
   ChevronRight,
@@ -40,6 +41,7 @@ const navItems: { href: string; labelKey: TranslationKey; icon: typeof LayoutDas
   { href: '/ranking', labelKey: 'ranking', icon: Trophy },
   { href: '/reports', labelKey: 'reports', icon: FileText },
   { href: '/settings', labelKey: 'settings', icon: Settings },
+  { href: '/audit', labelKey: 'auditLog' as TranslationKey, icon: Shield },
 ]
 
 function NavContent({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {

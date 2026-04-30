@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Search, ArrowUpDown, Plus, Trash2, Pencil, Upload } from 'lucide-react'
+import { Search, ArrowUpDown, Plus, Trash2, Pencil, Upload, Power } from 'lucide-react'
 import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings, getDepartments, getLeaveTypes, createEmployee, deleteEmployee, updateEmployee } from '@/lib/api'
 import { parseExcelFile } from '@/lib/excel'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
@@ -31,27 +31,27 @@ export default function EmployeesPage() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const t = useT()
-  const { dir } = useLanguage()
+  const { dir, lang } = useLanguage()
   const [search, setSearch] = useState('')
   const [deptFilter, setDeptFilter] = useState<string>('all')
   const [sortField, setSortField] = useState<SortField>('name')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [addOpen, setAddOpen] = useState(false)
-  const [newEmp, setNewEmp] = useState({ name: '', department_id: '', leave_balance: '30' })
+  const [newEmp, setNewEmp] = useState({ name: '', department_id: '', leave_balance: '30', email: '', phone: '', position: '', join_date: '' })
 
   const createMutation = useMutation({
     mutationFn: createEmployee,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] })
       setAddOpen(false)
-      setNewEmp({ name: '', department_id: '', leave_balance: String(settings?.annual_leave_balance || 30) })
+      setNewEmp({ name: '', department_id: '', leave_balance: String(settings?.annual_leave_balance || 30), email: '', phone: '', position: '', join_date: '' })
       toast.success(t('addedSuccess'))
     },
     onError: () => toast.error(t('error')),
   })
 
   const [editOpen, setEditOpen] = useState(false)
-  const [editEmp, setEditEmp] = useState({ id: 0, name: '', department_id: '', leave_balance: '' })
+  const [editEmp, setEditEmp] = useState({ id: 0, name: '', department_id: '', leave_balance: '', email: '', phone: '', position: '', join_date: '' })
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number; name: string }>({ open: false, id: 0, name: '' })
 
   const updateMutation = useMutation({
@@ -72,6 +72,15 @@ export default function EmployeesPage() {
     },
   })
 
+  const toggleActiveMutation = useMutation({
+    mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) => updateEmployee(id, { is_active }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      toast.success(t('updatedSuccess'))
+    },
+    onError: () => toast.error(t('error')),
+  })
+
   function handleEditEmployee() {
     if (!editEmp.name || !editEmp.department_id) {
       toast.error(t('fillRequired'))
@@ -83,6 +92,10 @@ export default function EmployeesPage() {
         name: editEmp.name,
         department_id: parseInt(editEmp.department_id),
         leave_balance: parseInt(editEmp.leave_balance) || (settings?.annual_leave_balance || 30),
+        email: editEmp.email || null,
+        phone: editEmp.phone || null,
+        position: editEmp.position || null,
+        join_date: editEmp.join_date || null,
       },
     })
   }
@@ -93,6 +106,10 @@ export default function EmployeesPage() {
       name: emp.name,
       department_id: String(emp.department_id),
       leave_balance: String(emp.leave_balance),
+      email: emp.email || '',
+      phone: emp.phone || '',
+      position: emp.position || '',
+      join_date: emp.join_date || '',
     })
     setEditOpen(true)
   }
@@ -106,6 +123,10 @@ export default function EmployeesPage() {
       name: newEmp.name,
       department_id: parseInt(newEmp.department_id),
       leave_balance: parseInt(newEmp.leave_balance) || (settings?.annual_leave_balance || 30),
+      email: newEmp.email || undefined,
+      phone: newEmp.phone || undefined,
+      position: newEmp.position || undefined,
+      join_date: newEmp.join_date || undefined,
     })
   }
 
@@ -158,7 +179,7 @@ export default function EmployeesPage() {
   const today = new Date().toISOString().split('T')[0]
 
   const employeeRows = useMemo(() => {
-    return employees.filter(e => e.is_active).map((emp, idx) => {
+    return employees.map((emp, idx) => {
       const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
       const usedDays = empLeaves.reduce((sum, l) => sum + l.days_count, 0)
 
@@ -291,6 +312,36 @@ export default function EmployeesPage() {
                   onChange={e => setNewEmp(f => ({ ...f, leave_balance: e.target.value }))}
                 />
               </div>
+              <div>
+                <Label>{lang === 'ar' ? 'البريد الإلكتروني' : 'Email'}</Label>
+                <Input
+                  type="email"
+                  value={newEmp.email}
+                  onChange={e => setNewEmp(f => ({ ...f, email: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>{lang === 'ar' ? 'الهاتف' : 'Phone'}</Label>
+                <Input
+                  value={newEmp.phone}
+                  onChange={e => setNewEmp(f => ({ ...f, phone: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>{lang === 'ar' ? 'المنصب' : 'Position'}</Label>
+                <Input
+                  value={newEmp.position}
+                  onChange={e => setNewEmp(f => ({ ...f, position: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>{lang === 'ar' ? 'تاريخ الالتحاق' : 'Join Date'}</Label>
+                <Input
+                  type="date"
+                  value={newEmp.join_date}
+                  onChange={e => setNewEmp(f => ({ ...f, join_date: e.target.value }))}
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button onClick={handleAddEmployee} disabled={createMutation.isPending}>
@@ -356,11 +407,18 @@ export default function EmployeesPage() {
                 {filtered.map((emp) => (
                   <TableRow
                     key={emp.id}
-                    className="cursor-pointer hover:bg-accent/50"
+                    className={`cursor-pointer hover:bg-accent/50 ${!emp.is_active ? 'opacity-50' : ''}`}
                     onClick={() => router.push(`/employees/${emp.id}`)}
                   >
                     <TableCell className="text-center">{emp.index}</TableCell>
-                    <TableCell className="font-medium">{emp.name}</TableCell>
+                    <TableCell className="font-medium">
+                      {emp.name}
+                      {!emp.is_active && (
+                        <Badge variant="outline" className="ms-2 text-[10px] bg-muted text-muted-foreground border-muted-foreground/30">
+                          {lang === 'ar' ? 'غير نشط' : 'Inactive'}
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-center">{emp.departmentName}</TableCell>
                     <TableCell className="text-center">{emp.leave_balance}</TableCell>
                     <TableCell className="text-center">{emp.usedDays}</TableCell>
@@ -376,7 +434,11 @@ export default function EmployeesPage() {
                     </TableCell>
                     <TableCell className="text-center">{formatMinutesToHHMM(emp.tardMinutes)}</TableCell>
                     <TableCell className="text-center">
-                      {emp.isOnLeave ? (
+                      {!emp.is_active ? (
+                        <Badge variant="outline" className="bg-muted text-muted-foreground border-muted-foreground/30">
+                          {lang === 'ar' ? 'غير نشط' : 'Inactive'}
+                        </Badge>
+                      ) : emp.isOnLeave ? (
                         <Badge variant="outline" className="bg-[#FF9800]/10 text-[#FF9800] border-[#FF9800]/30">
                           {t('onLeave')} 🏖️
                         </Badge>
@@ -389,6 +451,15 @@ export default function EmployeesPage() {
                     <TableCell className="text-center">{emp.deduction.toFixed(3)}</TableCell>
                     <TableCell className="text-center" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={`h-7 w-7 ${emp.is_active ? 'text-emerald-500 hover:bg-emerald-500/10' : 'text-muted-foreground hover:bg-muted'}`}
+                          title={emp.is_active ? (lang === 'ar' ? 'تعطيل' : 'Deactivate') : (lang === 'ar' ? 'تفعيل' : 'Activate')}
+                          onClick={() => toggleActiveMutation.mutate({ id: emp.id, is_active: !emp.is_active })}
+                        >
+                          <Power className="h-3.5 w-3.5" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -446,6 +517,36 @@ export default function EmployeesPage() {
                 type="number"
                 value={editEmp.leave_balance}
                 onChange={e => setEditEmp(f => ({ ...f, leave_balance: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>{lang === 'ar' ? 'البريد الإلكتروني' : 'Email'}</Label>
+              <Input
+                type="email"
+                value={editEmp.email}
+                onChange={e => setEditEmp(f => ({ ...f, email: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>{lang === 'ar' ? 'الهاتف' : 'Phone'}</Label>
+              <Input
+                value={editEmp.phone}
+                onChange={e => setEditEmp(f => ({ ...f, phone: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>{lang === 'ar' ? 'المنصب' : 'Position'}</Label>
+              <Input
+                value={editEmp.position}
+                onChange={e => setEditEmp(f => ({ ...f, position: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>{lang === 'ar' ? 'تاريخ الالتحاق' : 'Join Date'}</Label>
+              <Input
+                type="date"
+                value={editEmp.join_date}
+                onChange={e => setEditEmp(f => ({ ...f, join_date: e.target.value }))}
               />
             </div>
           </div>

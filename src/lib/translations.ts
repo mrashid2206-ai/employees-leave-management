@@ -14,6 +14,7 @@ export const translations = {
   ranking: { ar: 'ترتيب الالتزام', en: 'Commitment Ranking' },
   reports: { ar: 'تقرير الإجازات', en: 'Leave Reports' },
   settings: { ar: 'الإعدادات', en: 'Settings' },
+  auditLog: { ar: 'سجل المراجعة', en: 'Audit Log' },
   logout: { ar: 'تسجيل الخروج', en: 'Logout' },
 
   // Dashboard KPIs

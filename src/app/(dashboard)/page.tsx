@@ -34,6 +34,10 @@ export default function DashboardPage() {
   const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
+  const { data: permissions = [] } = useQuery({
+    queryKey: ['permissions'],
+    queryFn: () => fetch('/api/permissions').then(r => r.ok ? r.json() : []),
+  })
   const { data: todayAttendance = [] } = useQuery({
     queryKey: ['today-attendance'],
     queryFn: () => fetch('/api/attendance?month=' + new Date().toISOString().slice(0, 7)).then(r => r.json()),
@@ -44,6 +48,7 @@ export default function DashboardPage() {
 
   const today = new Date().toISOString().split('T')[0]
   const activeEmployees = employees.filter(e => e.is_active)
+  const pendingPermissions = permissions.filter((p: any) => p.status === 'pending').length
 
   const onLeaveToday = leaves.filter(l =>
     l.status === 'approved' && l.start_date <= today && l.end_date >= today
@@ -228,6 +233,24 @@ export default function DashboardPage() {
           )
         })}
       </div>
+
+      {/* Pending Permissions Alert */}
+      {pendingPermissions > 0 && (
+        <Card className="border-0 shadow-md border-l-4 border-l-amber-500">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-amber-500/10">
+                <Clock className="h-5 w-5 text-amber-500" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold">{pendingPermissions} {lang === 'ar' ? 'طلب إذن معلق' : 'Pending Permission Requests'}</p>
+                <p className="text-xs text-muted-foreground">{lang === 'ar' ? 'بحاجة لموافقتك' : 'Needs your approval'}</p>
+              </div>
+            </div>
+            <a href="/permissions" className="text-sm text-primary hover:underline">{lang === 'ar' ? 'عرض' : 'View'}</a>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Who's In Today */}
       <Card className="border-0 shadow-lg">

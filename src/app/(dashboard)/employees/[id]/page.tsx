@@ -1,18 +1,22 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
-import { ArrowRight, Printer } from 'lucide-react'
+import { ArrowRight, Printer, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
-import { getEmployee, getLeaveRequestsByEmployee, getTardinessByEmployee, getSettings, getLeaveTypes } from '@/lib/api'
+import { getEmployee, getLeaveRequestsByEmployee, getTardinessByEmployee, getSettings, getLeaveTypes, getDepartments, updateEmployee } from '@/lib/api'
 import { format } from 'date-fns'
 import { useLanguage, useT } from '@/lib/language-context'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useState, useEffect } from 'react'
 
 function formatMinutesToHHMM(minutes: number): string {
@@ -42,6 +46,50 @@ export default function EmployeeCardPage() {
   })
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
+
+  const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
+  const queryClient = useQueryClient()
+
+  const [editProfileOpen, setEditProfileOpen] = useState(false)
+  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', position: '', department_id: '', join_date: '' })
+
+  const editMutation = useMutation({
+    mutationFn: (data: Record<string, any>) => updateEmployee(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employee', id] })
+      setEditProfileOpen(false)
+      toast.success(lang === 'ar' ? 'تم تحديث الملف الشخصي' : 'Profile updated')
+    },
+    onError: () => toast.error(lang === 'ar' ? 'خطأ' : 'Error'),
+  })
+
+  function openEditProfile() {
+    if (!employee) return
+    setEditForm({
+      name: employee.name || '',
+      email: employee.email || '',
+      phone: employee.phone || '',
+      position: employee.position || '',
+      department_id: String(employee.department_id),
+      join_date: employee.join_date || '',
+    })
+    setEditProfileOpen(true)
+  }
+
+  function handleSaveProfile() {
+    if (!editForm.name || !editForm.department_id) {
+      toast.error(lang === 'ar' ? 'الاسم والقسم مطلوبان' : 'Name and department are required')
+      return
+    }
+    editMutation.mutate({
+      name: editForm.name,
+      email: editForm.email || null,
+      phone: editForm.phone || null,
+      position: editForm.position || null,
+      department_id: parseInt(editForm.department_id),
+      join_date: editForm.join_date || null,
+    })
+  }
 
   const [activity, setActivity] = useState<any[]>([])
 
@@ -108,6 +156,16 @@ export default function EmployeeCardPage() {
                 )}
               </div>
               <p className="text-muted-foreground">{t('department')}: {employee.department?.name}</p>
+              {employee.position && <p className="text-sm text-muted-foreground">{lang === 'ar' ? 'المنصب' : 'Position'}: {employee.position}</p>}
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                {employee.email && <span>{lang === 'ar' ? 'البريد' : 'Email'}: {employee.email}</span>}
+                {employee.phone && <span>{lang === 'ar' ? 'الهاتف' : 'Phone'}: {employee.phone}</span>}
+                {employee.join_date && <span>{lang === 'ar' ? 'تاريخ الالتحاق' : 'Joined'}: {employee.join_date}</span>}
+              </div>
+              <Button variant="outline" size="sm" onClick={openEditProfile} className="no-print mt-1">
+                <Pencil className="h-3.5 w-3.5 ml-1" />
+                {lang === 'ar' ? 'تعديل الملف الشخصي' : 'Edit Profile'}
+              </Button>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -147,7 +205,7 @@ export default function EmployeeCardPage() {
             <div className="flex items-center justify-between">
               <div className="text-sm">
                 <span className="text-muted-foreground">{t('username')}: </span>
-                <code className="font-mono bg-muted px-1.5 py-0.5 rounded">{(employee as any).username || '-'}</code>
+                <code className="font-mono bg-muted px-1.5 py-0.5 rounded">{employee.username || '-'}</code>
               </div>
               <Button
                 variant="outline"
@@ -359,6 +417,53 @@ export default function EmployeeCardPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Profile Dialog */}
+      <Dialog open={editProfileOpen} onOpenChange={setEditProfileOpen}>
+        <DialogContent className="max-w-md" dir={dir}>
+          <DialogHeader>
+            <DialogTitle>{lang === 'ar' ? 'تعديل الملف الشخصي' : 'Edit Profile'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>{t('name')} *</Label>
+              <Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} />
+            </div>
+            <div>
+              <Label>{lang === 'ar' ? 'البريد الإلكتروني' : 'Email'}</Label>
+              <Input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} />
+            </div>
+            <div>
+              <Label>{lang === 'ar' ? 'الهاتف' : 'Phone'}</Label>
+              <Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} />
+            </div>
+            <div>
+              <Label>{lang === 'ar' ? 'المنصب' : 'Position'}</Label>
+              <Input value={editForm.position} onChange={e => setEditForm(f => ({ ...f, position: e.target.value }))} />
+            </div>
+            <div>
+              <Label>{t('department')} *</Label>
+              <Select value={editForm.department_id} onValueChange={v => setEditForm(f => ({ ...f, department_id: v ?? '' }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {departments.map(d => (
+                    <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>{lang === 'ar' ? 'تاريخ الالتحاق' : 'Join Date'}</Label>
+              <Input type="date" value={editForm.join_date} onChange={e => setEditForm(f => ({ ...f, join_date: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleSaveProfile} disabled={editMutation.isPending}>
+              {editMutation.isPending ? '...' : t('save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Activity Log */}
       {activity.length > 0 && (

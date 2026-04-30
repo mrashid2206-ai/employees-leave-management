@@ -129,6 +129,10 @@ export async function createEmployee(employee: {
   name: string
   department_id: number
   leave_balance?: number
+  join_date?: string
+  email?: string
+  phone?: string
+  position?: string
 }): Promise<Employee> {
   return fetchJSON('/api/employees', {
     method: 'POST',

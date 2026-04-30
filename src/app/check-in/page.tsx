@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { LogIn, LogOut, Clock, CheckCircle, CalendarDays, ClipboardList, User, Send, Info, FileText, AlertTriangle, Bell } from 'lucide-react'
+import { LogIn, LogOut, Clock, CheckCircle, CalendarDays, Calendar, ClipboardList, User, Send, Info, FileText, AlertTriangle, Bell } from 'lucide-react'
 import { toast } from 'sonner'
 import { Toaster } from '@/components/ui/sonner'
 import { useLanguage, useT } from '@/lib/language-context'
@@ -1018,7 +1018,7 @@ export default function EmployeePortalPage() {
             { id: 'attendance' as const, icon: Clock, label: t('checkInBtn') },
             { id: 'leave' as const, icon: CalendarDays, label: t('applyLeave') },
             { id: 'requests' as const, icon: ClipboardList, label: t('myRequests') },
-            { id: 'calendar' as const, icon: CalendarDays, label: lang === 'ar' ? 'التقويم' : 'Calendar' },
+            { id: 'calendar' as const, icon: Calendar, label: lang === 'ar' ? 'التقويم' : 'Calendar' },
             { id: 'info' as const, icon: Info, label: t('myInfo') },
             { id: 'records' as const, icon: FileText, label: t('myRecords') },
           ].map(tab => {
