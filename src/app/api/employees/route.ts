@@ -6,6 +6,15 @@ import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
+
+  // Ensure new columns exist
+  await pool.query(`
+    ALTER TABLE employees ADD COLUMN IF NOT EXISTS join_date DATE,
+    ADD COLUMN IF NOT EXISTS email VARCHAR(200),
+    ADD COLUMN IF NOT EXISTS phone VARCHAR(50),
+    ADD COLUMN IF NOT EXISTS position VARCHAR(200)
+  `).catch(() => {})
+
   const { rows } = await pool.query(`
     SELECT e.id, e.name, e.department_id, e.leave_balance, e.is_active, e.username, e.join_date::text as join_date, e.email, e.phone, e.position, e.created_at, e.updated_at, json_build_object('id', d.id, 'name', d.name) as department
     FROM employees e
