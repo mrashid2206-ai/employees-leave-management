@@ -149,6 +149,24 @@ export async function POST(request: Request) {
     })
 
   } else if (action === 'check-out') {
+    // Location verification for checkout
+    const { rows: coLocSettings } = await pool.query('SELECT office_lat, office_lng, office_radius, office_ip, block_offsite_checkin FROM settings LIMIT 1')
+    const coOfficeLoc = coLocSettings[0]
+    if (coOfficeLoc && coOfficeLoc.block_offsite_checkin && (coOfficeLoc.office_lat || coOfficeLoc.office_ip)) {
+      let coLocationMatch = false
+      let coIpMatch = false
+      if (latitude && longitude && coOfficeLoc.office_lat && coOfficeLoc.office_lng) {
+        coLocationMatch = getDistanceMeters(latitude, longitude, parseFloat(coOfficeLoc.office_lat), parseFloat(coOfficeLoc.office_lng)) <= (coOfficeLoc.office_radius || 200)
+      }
+      if (coOfficeLoc.office_ip && clientIp !== 'unknown') {
+        coIpMatch = clientIp === coOfficeLoc.office_ip
+      }
+      const coOffsite = !coLocationMatch && !coIpMatch
+      if (!coOfficeLoc.office_lat && coOfficeLoc.office_ip) { if (!coIpMatch) { return NextResponse.json({ error: 'offsite_blocked', message: 'Check-out is only allowed from the office location.' }, { status: 403 }) } }
+      else if (coOfficeLoc.office_lat && !coOfficeLoc.office_ip) { if (!coLocationMatch) { return NextResponse.json({ error: 'offsite_blocked', message: 'Check-out is only allowed from the office location. Please enable GPS.' }, { status: 403 }) } }
+      else if (coOffsite) { return NextResponse.json({ error: 'offsite_blocked', message: 'Check-out is only allowed from the office location.' }, { status: 403 }) }
+    }
+
     const { rows: existing } = await pool.query(
       'SELECT id, check_in, check_out FROM attendance WHERE employee_id = $1 AND date = $2',
       [employee_id, today]
