@@ -15,6 +15,13 @@ export async function GET(request: Request) {
     ADD COLUMN IF NOT EXISTS position VARCHAR(200)
   `).catch(() => {})
 
+  // Ensure indexes exist (safe to run multiple times)
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_leave_status ON leave_requests(status);
+    CREATE INDEX IF NOT EXISTS idx_leave_emp_status ON leave_requests(employee_id, status);
+    CREATE INDEX IF NOT EXISTS idx_attendance_emp_date ON attendance(employee_id, date);
+  `).catch(() => {})
+
   const { rows } = await pool.query(`
     SELECT e.id, e.name, e.department_id, e.leave_balance, e.is_active, e.username, e.join_date::text as join_date, e.email, e.phone, e.position, e.created_at, e.updated_at, json_build_object('id', d.id, 'name', d.name) as department
     FROM employees e

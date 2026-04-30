@@ -38,8 +38,15 @@ export async function proxy(request: NextRequest) {
     const host = request.headers.get('host') || ''
 
     // Allow same-origin requests and requests with no origin (server-side, curl for testing)
-    if (origin && !origin.includes(host)) {
-      return addSecurityHeaders(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+    if (origin) {
+      try {
+        const originHost = new URL(origin).host
+        if (originHost !== host) {
+          return addSecurityHeaders(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+        }
+      } catch {
+        return addSecurityHeaders(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+      }
     }
   }
 

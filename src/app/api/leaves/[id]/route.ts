@@ -40,6 +40,24 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'Invalid date range' }, { status: 400 })
   }
 
+  // Check emergency leave limit on edit (if leave type is emergency)
+  const { rows: leaveTypeRows } = await pool.query('SELECT leave_type_id FROM leave_requests WHERE id = $1', [id])
+  if (leaveTypeRows[0]) {
+    const { rows: typeInfo } = await pool.query('SELECT name_en FROM leave_types WHERE id = $1', [leaveTypeRows[0].leave_type_id])
+    if (typeInfo[0]?.name_en === 'Emergency') {
+      const { rows: settingsForFiscal } = await pool.query('SELECT year_start::text as year_start, year_end::text as year_end FROM settings LIMIT 1')
+      if (settingsForFiscal[0]) {
+        const { rows: emergencyCount } = await pool.query(
+          "SELECT COALESCE(SUM(days_count), 0)::numeric as total FROM leave_requests WHERE employee_id = $1 AND leave_type_id = $2 AND id != $3 AND status IN ('approved', 'pending') AND start_date >= $4 AND end_date <= $5",
+          [oldLeave.employee_id, leaveTypeRows[0].leave_type_id, id, settingsForFiscal[0].year_start, settingsForFiscal[0].year_end]
+        )
+        if (parseFloat(emergencyCount[0].total) + newDays > 5) {
+          return NextResponse.json({ error: 'Emergency leave limit would be exceeded (max 5 days/year)' }, { status: 400 })
+        }
+      }
+    }
+  }
+
   // Update leave
   const { rows } = await pool.query(
     'UPDATE leave_requests SET start_date = $1, end_date = $2, days_count = $3, updated_at = NOW() WHERE id = $4 RETURNING *',

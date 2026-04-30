@@ -109,8 +109,11 @@ export async function POST(request: Request) {
   if (settingsRows[0]) {
     const { year_start, year_end } = settingsRows[0]
 
-    // Emergency leave: max 5 per fiscal year (leave_type_id 3)
-    if (leave_type_id === 3) {
+    const { rows: ltCheck } = await pool.query('SELECT name_en FROM leave_types WHERE id = $1', [leave_type_id])
+    const leaveTypeName = ltCheck[0]?.name_en || ''
+
+    // Emergency leave: max 5 per fiscal year
+    if (leaveTypeName === 'Emergency') {
       const { rows: emergencyCount } = await pool.query(
         "SELECT COUNT(*) as cnt FROM leave_requests WHERE employee_id = $1 AND leave_type_id = 3 AND status IN ('approved', 'pending') AND start_date >= $2 AND end_date <= $3",
         [employee_id, year_start, year_end]
@@ -121,7 +124,7 @@ export async function POST(request: Request) {
     }
 
     // Sick leave > 3 days requires notes
-    if (leave_type_id === 2 && actualDays > 3 && !notes) {
+    if (leaveTypeName === 'Sick' && actualDays > 3 && !notes) {
       return NextResponse.json({ error: 'Sick leave over 3 days requires notes (e.g. medical certificate reference)' }, { status: 400 })
     }
   }

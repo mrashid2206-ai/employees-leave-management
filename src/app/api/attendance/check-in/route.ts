@@ -182,7 +182,10 @@ export async function POST(request: Request) {
 
     const [inH, inM] = existing[0].check_in.split(':').map(Number)
     const [outH, outM] = currentTime.split(':').map(Number)
-    const workMinutes = (outH * 60 + outM) - (inH * 60 + inM)
+    let workMinutes = (outH * 60 + outM) - (inH * 60 + inM)
+    if (workMinutes < 0) {
+      workMinutes += 24 * 60 // Overnight shift: add 24 hours
+    }
     if (workMinutes <= 0) {
       return NextResponse.json({ error: 'check_out_before_check_in' }, { status: 400 })
     }

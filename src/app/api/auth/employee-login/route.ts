@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   )
 
   if (rows.length === 0 || !(await bcrypt.compare(password, rows[0].password_hash))) {
-    return NextResponse.json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' }, { status: 401 })
+    return NextResponse.json({ error: 'Invalid username or password / اسم المستخدم أو كلمة المرور غير صحيحة' }, { status: 401 })
   }
 
   // Reset rate limit on successful login

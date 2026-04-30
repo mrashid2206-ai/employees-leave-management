@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAnyAuth, verifyAdmin, unauthorized, forbidden } from '@/lib/api-auth'
+import { logAudit } from '@/lib/audit'
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await verifyAnyAuth(request)
@@ -54,5 +55,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     [id]
   )
   if (rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // Cancel pending leave requests
+  await pool.query("UPDATE leave_requests SET status = 'cancelled', updated_at = NOW() WHERE employee_id = $1 AND status = 'pending'", [id])
+
+  await logAudit('employee_deactivated', admin.username, 'admin', `Deactivated employee ${id}`)
+
   return NextResponse.json({ success: true })
 }
