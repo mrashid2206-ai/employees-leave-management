@@ -97,7 +97,8 @@ export async function POST(request: Request) {
 
     // Location verification
     let isOffsite = false
-    const { rows: locSettings } = await pool.query('SELECT office_lat, office_lng, office_radius, office_ip FROM settings LIMIT 1')
+    await pool.query('ALTER TABLE settings ADD COLUMN IF NOT EXISTS block_offsite_checkin BOOLEAN DEFAULT FALSE').catch(() => {})
+    const { rows: locSettings } = await pool.query('SELECT office_lat, office_lng, office_radius, office_ip, block_offsite_checkin FROM settings LIMIT 1')
     const officeLoc = locSettings[0]
 
     if (officeLoc && (officeLoc.office_lat || officeLoc.office_ip)) {
@@ -124,6 +125,14 @@ export async function POST(request: Request) {
       // If only GPS is configured and no IP, check GPS only
       if (officeLoc.office_lat && !officeLoc.office_ip) {
         isOffsite = !locationMatch
+      }
+
+      // Block off-site check-in if enabled
+      if (isOffsite && officeLoc.block_offsite_checkin) {
+        return NextResponse.json({
+          error: 'offsite_blocked',
+          message: 'Check-in is only allowed from the office location. Please make sure you are at the office and GPS is enabled.',
+        }, { status: 403 })
       }
     }
 

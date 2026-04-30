@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
@@ -533,10 +534,25 @@ export default function SettingsPage() {
                     <Input value={form.office_ip || ''} onChange={e => setForm(f => ({ ...f, office_ip: e.target.value }))} placeholder="203.0.113.1" />
                   </div>
                 </div>
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-accent/30">
+                  <Checkbox
+                    id="block-offsite"
+                    checked={!!(form as any).block_offsite_checkin}
+                    onCheckedChange={(checked) => setForm(f => ({ ...f, block_offsite_checkin: !!checked } as any))}
+                  />
+                  <div>
+                    <Label htmlFor="block-offsite" className="text-sm font-medium cursor-pointer">
+                      {lang === 'ar' ? 'منع تسجيل الحضور من خارج المكتب' : 'Block check-in from outside office'}
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      {lang === 'ar' ? 'إذا مفعّل، لن يتمكن الموظف من تسجيل الحضور إلا من موقع المكتب' : 'If enabled, employees can only check in from the office location'}
+                    </p>
+                  </div>
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {lang === 'ar'
-                    ? 'احصل على إحداثيات المكتب من خرائط Google. النطاق الافتراضي 200 متر. عنوان IP اختياري.'
-                    : 'Get office coordinates from Google Maps. Default radius 200m. IP is optional.'}
+                    ? '💡 احصل على إحداثيات المكتب من خرائط Google. النطاق الافتراضي 200 متر. عنوان IP اختياري.'
+                    : '💡 Get office coordinates from Google Maps. Default radius 200m. IP is optional.'}
                 </p>
                 <Button onClick={() => settingsMutation.mutate(form)}>
                   <Save className="h-4 w-4 ml-2" />
