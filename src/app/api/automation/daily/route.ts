@@ -9,6 +9,8 @@ export async function POST(request: Request) {
   const { date } = await request.json()
   const processDate = date || omanToday()
 
+  await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_tardiness_unique ON tardiness_log (employee_id, date)').catch(() => {})
+
   const results = {
     absentMarked: 0,
     leaveDeducted: 0,
@@ -45,11 +47,14 @@ export async function POST(request: Request) {
   const isHoliday = holidays.length > 0
 
   // Get settings for work days and start time
-  const { rows: settingsRows } = await pool.query('SELECT work_days, work_start_time::text as work_start_time FROM settings LIMIT 1')
+  const { rows: settingsRows } = await pool.query('SELECT work_days, work_start_time::text as work_start_time, work_hours_per_day FROM settings LIMIT 1')
   const workDays = settingsRows[0]?.work_days?.split(',').map(Number) || [0,1,2,3,4]
   const workStartTime = settingsRows[0]?.work_start_time || '08:00'
   const [startH, startM] = workStartTime.split(':').map(Number)
   const workStartMinutes = startH * 60 + startM
+  const workHoursDay = settingsRows[0]?.work_hours_per_day || 8
+  const endH = startH + workHoursDay
+  const workEndTime = `${String(endH).padStart(2, '0')}:30:00`
 
   // Skip weekends
   const dayOfWeek = new Date(processDate).getDay()
@@ -134,8 +139,8 @@ export async function POST(request: Request) {
   let permissionsClosed = 0
   try {
     const { rowCount } = await pool.query(
-      "UPDATE permissions SET return_time = '15:30:00' WHERE date = $1 AND return_time IS NULL AND status = 'approved'",
-      [processDate]
+      `UPDATE permissions SET return_time = $2 WHERE date = $1 AND return_time IS NULL AND status = 'approved'`,
+      [processDate, workEndTime]
     )
     permissionsClosed = rowCount || 0
   } catch {} // Table might not exist yet

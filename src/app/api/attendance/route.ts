@@ -53,10 +53,13 @@ export async function POST(request: Request) {
   const body = await request.json()
   const records = Array.isArray(body) ? body : [body]
 
+  const { rows: settingsRows } = await pool.query('SELECT work_hours_per_day FROM settings LIMIT 1')
+  const normalHours = settingsRows[0]?.work_hours_per_day || 8
+
   const results = []
   for (const r of records) {
     const workHours = r.check_in && r.check_out ? calculateWorkHours(r.check_in, r.check_out) : 0
-    const overtime = Math.max(0, workHours - 8)
+    const overtime = Math.max(0, workHours - normalHours)
 
     const { rows } = await pool.query(`
       INSERT INTO attendance (employee_id, date, check_in, check_out, work_hours, overtime_hours, status, notes)

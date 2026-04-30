@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import pool from '@/lib/db'
 import { verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 
 export async function GET(request: Request) {
@@ -17,6 +18,13 @@ export async function GET(request: Request) {
   const [ey, em, ed] = endDate.split('-').map(Number)
   const totalDays = Math.round((Date.UTC(ey, em - 1, ed) - Date.UTC(sy, sm - 1, sd)) / 86400000) + 1
 
-  // Calendar days = leave days (company policy: weekends count as leave)
-  return NextResponse.json({ workingDays: totalDays, totalDays, holidays: 0 })
+  // Subtract public holidays from leave days
+  const { rows: holidays } = await pool.query(
+    'SELECT COUNT(*) as cnt FROM holidays WHERE date >= $1 AND date <= $2',
+    [startDate, endDate]
+  )
+  const holidayCount = parseInt(holidays[0]?.cnt || '0')
+  const leaveDays = Math.max(0, totalDays - holidayCount)
+
+  return NextResponse.json({ workingDays: leaveDays, totalDays, holidays: holidayCount })
 }

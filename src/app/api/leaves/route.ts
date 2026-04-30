@@ -2,13 +2,20 @@ import { NextResponse } from 'next/server'
 import pool, { omanToday } from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 
-// Count all calendar days (weekends included — company policy)
+// Count all calendar days (weekends included — company policy), minus public holidays
 async function countLeaveDays(startDate: string, endDate: string): Promise<number> {
   const [sy, sm, sd] = startDate.split('-').map(Number)
   const [ey, em, ed] = endDate.split('-').map(Number)
-  const start = Date.UTC(sy, sm - 1, sd)
-  const end = Date.UTC(ey, em - 1, ed)
-  return Math.round((end - start) / 86400000) + 1
+  const totalCalendarDays = Math.round((Date.UTC(ey, em - 1, ed) - Date.UTC(sy, sm - 1, sd)) / 86400000) + 1
+
+  // Subtract holidays in range
+  const { rows: holidays } = await pool.query(
+    'SELECT COUNT(*) as cnt FROM holidays WHERE date >= $1 AND date <= $2',
+    [startDate, endDate]
+  )
+  const holidayCount = parseInt(holidays[0]?.cnt || '0')
+
+  return Math.max(1, totalCalendarDays - holidayCount)
 }
 
 export async function GET(request: Request) {

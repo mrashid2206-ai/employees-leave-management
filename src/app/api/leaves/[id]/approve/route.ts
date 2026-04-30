@@ -13,17 +13,40 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
   }
 
-  // Get current leave request to check previous status
-  const { rows: currentRows } = await pool.query('SELECT * FROM leave_requests WHERE id = $1', [id])
-  if (currentRows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  const currentLeave = currentRows[0]
-  const previousStatus = currentLeave.status
-
   // Use transaction to prevent race condition
   const client = await pool.connect()
   let rows: any[]
+  let currentLeave: any
+  let previousStatus: string
   try {
     await client.query('BEGIN')
+
+    // Lock the leave request to prevent double approval
+    const { rows: lockedLeave } = await client.query('SELECT * FROM leave_requests WHERE id = $1 FOR UPDATE', [id])
+    if (lockedLeave.length === 0) {
+      await client.query('ROLLBACK')
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+    currentLeave = lockedLeave[0]
+    previousStatus = currentLeave.status
+
+    // Prevent re-applying same status
+    if (currentLeave.status === status) {
+      await client.query('ROLLBACK')
+      return NextResponse.json({ error: 'Already in this status' }, { status: 400 })
+    }
+
+    // Valid transitions: pending→approved, pending→rejected, approved→rejected, approved→pending, rejected→pending
+    const validTransitions: Record<string, string[]> = {
+      'pending': ['approved', 'rejected'],
+      'approved': ['rejected', 'pending'],
+      'rejected': ['pending'],
+      'cancelled': [], // Can't change cancelled
+    }
+    if (!validTransitions[previousStatus]?.includes(status)) {
+      await client.query('ROLLBACK')
+      return NextResponse.json({ error: `Cannot change from ${previousStatus} to ${status}` }, { status: 400 })
+    }
 
     // Lock the employee row
     const { rows: empRows } = await client.query(

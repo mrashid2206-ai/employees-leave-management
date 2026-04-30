@@ -23,10 +23,18 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const oldLeave = current[0]
   const oldDays = oldLeave.days_count
 
-  // Calculate calendar days (weekends included — company policy)
+  // Calculate calendar days (weekends included — company policy), minus public holidays
   const [sy, sm, sd] = start_date.split('-').map(Number)
   const [ey, em, ed] = end_date.split('-').map(Number)
-  const newDays = Math.round((Date.UTC(ey, em - 1, ed) - Date.UTC(sy, sm - 1, sd)) / 86400000) + 1
+  const calendarDays = Math.round((Date.UTC(ey, em - 1, ed) - Date.UTC(sy, sm - 1, sd)) / 86400000) + 1
+
+  // Subtract holidays in range
+  const { rows: editHolidays } = await pool.query(
+    'SELECT COUNT(*) as cnt FROM holidays WHERE date >= $1 AND date <= $2',
+    [start_date, end_date]
+  )
+  const editHolidayCount = parseInt(editHolidays[0]?.cnt || '0')
+  const newDays = Math.max(1, calendarDays - editHolidayCount)
 
   if (newDays <= 0) {
     return NextResponse.json({ error: 'Invalid date range' }, { status: 400 })
