@@ -110,7 +110,34 @@ export default function LeavesPage() {
   }, [form.employee_id, form.start_date, form.end_date])
 
   const createMutation = useMutation({
-    mutationFn: createLeaveRequest,
+    mutationFn: (data: any) => fetch('/api/leaves', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then(async r => {
+      const json = await r.json()
+      if (!r.ok) {
+        // If it's a dept limit warning, ask admin to confirm override
+        if (json.warning && json.absentCount) {
+          const msg = lang === 'ar'
+            ? `تحذير: ${json.absentCount}/${json.maxAbsent} موظف من نفس القسم في إجازة. هل تريد المتابعة؟`
+            : `Warning: ${json.absentCount}/${json.maxAbsent} employees from this department already on leave. Continue anyway?`
+          if (confirm(msg)) {
+            // Retry with force flag
+            const retryRes = await fetch('/api/leaves', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...data, force: true }),
+            })
+            if (!retryRes.ok) throw new Error((await retryRes.json()).error)
+            return retryRes.json()
+          }
+          throw new Error('Cancelled by admin')
+        }
+        throw new Error(json.error || 'Failed')
+      }
+      return json
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leaves'] })
       queryClient.invalidateQueries({ queryKey: ['employees'] })

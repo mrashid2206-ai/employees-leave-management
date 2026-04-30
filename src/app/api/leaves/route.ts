@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     }
   }
 
-  // Check department max absent for each day in leave range
+  // Check department max absent — block employees, warn admin (admin can override with force flag)
   const { rows: empInfo } = await pool.query('SELECT department_id FROM employees WHERE id = $1', [employee_id])
   if (empInfo[0]) {
     const { rows: maxAbsentSettings } = await pool.query('SELECT max_absent_same_dept FROM settings LIMIT 1')
@@ -73,7 +73,19 @@ export async function POST(request: Request) {
       [employee_id, end_date, start_date, empInfo[0].department_id]
     )
     if (parseInt(deptAbsent[0].cnt) >= maxAbsent) {
-      return NextResponse.json({ error: 'Maximum department absence limit reached for these dates' }, { status: 409 })
+      // Employees are blocked, admins can override with force flag
+      if (user.role === 'employee') {
+        return NextResponse.json({ error: 'Maximum department absence limit reached for these dates' }, { status: 409 })
+      }
+      // Admin gets warning unless they explicitly force
+      if (!body.force) {
+        return NextResponse.json({
+          error: `Warning: ${deptAbsent[0].cnt}/${maxAbsent} employees from this department already on leave. Submit again to override.`,
+          warning: true,
+          absentCount: parseInt(deptAbsent[0].cnt),
+          maxAbsent,
+        }, { status: 409 })
+      }
     }
   }
 
