@@ -28,18 +28,21 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import type { TranslationKey } from '@/lib/translations'
 
 const navItems: { href: string; labelKey: TranslationKey; icon: typeof LayoutDashboard }[] = [
+  // Main
   { href: '/', labelKey: 'dashboard', icon: LayoutDashboard },
   { href: '/employees', labelKey: 'employees', icon: Users },
+  { href: '/attendance', labelKey: 'attendance', icon: ClipboardCheck },
   { href: '/leaves', labelKey: 'leaves', icon: CalendarDays },
   { href: '/tardiness', labelKey: 'tardiness', icon: Clock },
-  { href: '/calendar', labelKey: 'calendar', icon: Calendar },
-  { href: '/attendance', labelKey: 'attendance', icon: ClipboardCheck },
   { href: '/permissions', labelKey: 'permissions', icon: Clock },
-  { href: '/salary-report', labelKey: 'salaryReport', icon: DollarSign },
-  { href: '/overtime-report', labelKey: 'overtimeReport', icon: Clock },
+  { href: '/calendar', labelKey: 'calendar', icon: Calendar },
   { href: '/leave-planner', labelKey: 'leavePlanner', icon: CalendarRange },
-  { href: '/ranking', labelKey: 'ranking', icon: Trophy },
+  // Reports
   { href: '/reports', labelKey: 'reports', icon: FileText },
+  { href: '/overtime-report', labelKey: 'overtimeReport', icon: Clock },
+  { href: '/salary-report', labelKey: 'salaryReport', icon: DollarSign },
+  { href: '/ranking', labelKey: 'ranking', icon: Trophy },
+  // System
   { href: '/settings', labelKey: 'settings', icon: Settings },
   { href: '/audit', labelKey: 'auditLog' as TranslationKey, icon: Shield },
 ]
@@ -50,25 +53,27 @@ function NavContent({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
 
   return (
     <nav className="flex flex-col gap-1 p-3">
-      {navItems.map((item) => {
+      {navItems.map((item, index) => {
         const isActive = pathname === item.href ||
           (item.href !== '/' && pathname.startsWith(item.href))
         const Icon = item.icon
         return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-primary/10 text-primary border-s-2 border-primary font-semibold'
-                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-            )}
-          >
-            <Icon className="h-5 w-5 shrink-0" />
-            {!collapsed && <span>{t(item.labelKey)}</span>}
-          </Link>
+          <div key={item.href}>
+            {(index === 8 || index === 12) && <div className="my-2 border-t" />}
+            <Link
+              href={item.href}
+              onClick={onNavigate}
+              className={cn(
+                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                isActive
+                  ? 'bg-primary/10 text-primary border-s-2 border-primary font-semibold'
+                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+              )}
+            >
+              <Icon className="h-5 w-5 shrink-0" />
+              {!collapsed && <span>{t(item.labelKey)}</span>}
+            </Link>
+          </div>
         )
       })}
     </nav>

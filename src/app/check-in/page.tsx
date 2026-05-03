@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { LogIn, LogOut, Clock, CheckCircle, CalendarDays, Calendar, ClipboardList, User, Send, Info, FileText, AlertTriangle, Bell } from 'lucide-react'
+import { LogIn, LogOut, Clock, CheckCircle, CalendarDays, Calendar, ClipboardList, User, Send, AlertTriangle, Bell } from 'lucide-react'
 import { toast } from 'sonner'
 import { Toaster } from '@/components/ui/sonner'
 import { useLanguage, useT } from '@/lib/language-context'
@@ -41,7 +41,8 @@ export default function EmployeePortalPage() {
   const { lang, dir } = useLanguage()
   const router = useRouter()
 
-  const [activeTab, setActiveTab] = useState<'attendance' | 'leave' | 'requests' | 'info' | 'records' | 'calendar'>('attendance')
+  const [activeTab, setActiveTab] = useState<'attendance' | 'leave' | 'requests' | 'profile'>('attendance')
+  const [showCalendar, setShowCalendar] = useState(false)
   const [empUser, setEmpUser] = useState<{ id: number; name: string; username: string } | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -142,7 +143,7 @@ export default function EmployeePortalPage() {
 
   // Load employee info + settings + approved leaves
   useEffect(() => {
-    if (activeTab === 'info' && empUser) {
+    if ((activeTab === 'profile' || activeTab === 'leave') && empUser) {
       Promise.all([
         fetch(`/api/employees/${empUser.id}`).then(r => r.json()),
         fetch('/api/settings').then(r => r.json()),
@@ -159,7 +160,7 @@ export default function EmployeePortalPage() {
 
   // Load records
   useEffect(() => {
-    if (activeTab === 'records' && empUser) {
+    if (activeTab === 'profile' && empUser) {
       fetch(`/api/attendance?employee_id=${empUser.id}`)
         .then(r => r.json())
         .then(setAttendanceRecords)
@@ -185,14 +186,14 @@ export default function EmployeePortalPage() {
 
   // Load calendar leaves
   useEffect(() => {
-    if (activeTab === 'calendar') {
+    if (activeTab === 'requests' && showCalendar) {
       fetch('/api/leaves')
         .then(r => r.ok ? r.json() : [])
         .then(data => setCalendarLeaves(data.filter((l: any) => l.status === 'approved')))
         .catch(() => {})
       fetch('/api/holidays').then(r => r.ok ? r.json() : []).then(setCalendarHolidays).catch(() => {})
     }
-  }, [activeTab])
+  }, [activeTab, showCalendar])
 
   async function handleLogout() {
     await fetch('/api/auth/employee-logout', { method: 'POST' })
@@ -202,6 +203,12 @@ export default function EmployeePortalPage() {
 
   async function handleCheckAction(action: 'check-in' | 'check-out') {
     if (!empUser) return
+    const now = new Date()
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    const confirmMsg = action === 'check-in'
+      ? (lang === 'ar' ? `تسجيل حضورك الآن ${timeStr}؟` : `Check in now at ${timeStr}?`)
+      : (lang === 'ar' ? `تسجيل انصرافك الآن ${timeStr}؟` : `Check out now at ${timeStr}?`)
+    if (!confirm(confirmMsg)) return
     setLoading(true)
 
     // Get GPS location
@@ -400,7 +407,7 @@ export default function EmployeePortalPage() {
             <div className="grid grid-cols-2 gap-3">
               <Button
                 size="lg"
-                className="h-20 text-lg bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 flex-col gap-1 shadow-lg shadow-emerald-500/20"
+                className="h-16 sm:h-20 text-base sm:text-lg bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 flex-col gap-1 shadow-lg shadow-emerald-500/20"
                 onClick={() => handleCheckAction('check-in')}
                 disabled={loading || !!todayStatus?.check_in}
               >
@@ -409,7 +416,7 @@ export default function EmployeePortalPage() {
               </Button>
               <Button
                 size="lg"
-                className="h-20 text-lg bg-gradient-to-br from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800 flex-col gap-1 shadow-lg shadow-amber-500/20"
+                className="h-16 sm:h-20 text-base sm:text-lg bg-gradient-to-br from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800 flex-col gap-1 shadow-lg shadow-amber-500/20"
                 onClick={() => handleCheckAction('check-out')}
                 disabled={loading || !todayStatus?.check_in || !!todayStatus?.check_out}
               >
@@ -549,6 +556,18 @@ export default function EmployeePortalPage() {
                 </CardContent>
               </Card>
             ) : (
+              <>
+              {/* Leave Balance Indicator */}
+              {empUser && (
+                <Card className="border-0 shadow-md bg-primary/5">
+                  <CardContent className="p-3 flex items-center justify-between">
+                    <span className="text-sm">{lang === 'ar' ? 'رصيدك المتبقي' : 'Your Balance'}</span>
+                    <Badge className="bg-primary/10 text-primary border-0 text-sm font-bold">
+                      {empInfo?.remaining ?? '...'} {t('days')}
+                    </Badge>
+                  </CardContent>
+                </Card>
+              )}
               <Card className="border-0 shadow-md">
                 <CardContent className="p-5">
                   <h2 className="font-bold text-lg mb-4">{t('applyLeave')}</h2>
@@ -632,12 +651,142 @@ export default function EmployeePortalPage() {
                   </form>
                 </CardContent>
               </Card>
+              </>
             )}
           </div>
         )}
 
-        {/* My Info Tab */}
-        {activeTab === 'info' && (
+        {/* My Requests Tab (with Calendar toggle) */}
+        {activeTab === 'requests' && (
+          <div className="space-y-3 animate-in">
+            {/* Calendar toggle */}
+            <Button variant="outline" size="sm" className="w-full" onClick={() => setShowCalendar(!showCalendar)}>
+              <Calendar className="h-3.5 w-3.5 mr-1.5" />
+              {lang === 'ar' ? 'من في إجازة هذا الشهر؟' : "Who's on Leave?"}
+            </Button>
+
+            {showCalendar && (
+              <div className="space-y-3">
+                {/* Holidays this month */}
+                {(() => {
+                  const now = new Date()
+                  const monthHolidays = calendarHolidays.filter(h => {
+                    const [hy, hm] = h.date.split('-').map(Number)
+                    return hy === now.getFullYear() && hm === now.getMonth() + 1
+                  })
+                  if (monthHolidays.length === 0) return null
+                  return (
+                    <>
+                      <h3 className="text-sm font-semibold text-purple-500 mt-2">{lang === 'ar' ? 'العطلات الرسمية' : 'Public Holidays'}</h3>
+                      {monthHolidays.map(h => (
+                        <Card key={h.id} className="border-0 shadow-md border-l-4 border-l-purple-500">
+                          <CardContent className="p-3 flex items-center justify-between">
+                            <span className="text-sm font-medium">{h.name}</span>
+                            <span className="text-xs font-mono text-muted-foreground">{h.date}</span>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </>
+                  )
+                })()}
+                {(() => {
+                  const now = new Date()
+                  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+                  const monthEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`
+                  const thisMonthLeaves = calendarLeaves.filter(l => l.end_date >= monthStart && l.start_date <= monthEnd)
+
+                  if (thisMonthLeaves.length === 0) {
+                    return (
+                      <Card className="border-0 shadow-md">
+                        <CardContent className="p-8 text-center text-muted-foreground text-sm">
+                          <CalendarDays className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                          {lang === 'ar' ? 'لا توجد إجازات هذا الشهر' : 'No leaves this month'}
+                        </CardContent>
+                      </Card>
+                    )
+                  }
+
+                  return thisMonthLeaves.map(l => (
+                    <Card key={l.id} className="border-0 shadow-md">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-semibold">{l.employee?.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {lang === 'ar' ? l.leave_type?.name_ar : l.leave_type?.name_en}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs font-mono">{l.start_date} → {l.end_date}</p>
+                            <Badge variant="outline" className="text-[10px] mt-1">{l.days_count} {t('days')}</Badge>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                })()}
+              </div>
+            )}
+
+            {/* My Requests List */}
+            <h2 className="font-bold text-lg">{t('myRequests')} ({myRequests.length})</h2>
+            {myRequests.length === 0 ? (
+              <Card className="border-0 shadow-md">
+                <CardContent className="p-8 text-center text-muted-foreground text-sm">
+                  <ClipboardList className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                  {t('noRequests')}
+                </CardContent>
+              </Card>
+            ) : (
+              myRequests.map(req => {
+                const lt = req.leave_type
+                return (
+                  <Card key={req.id} className="border-0 shadow-md">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: lt?.color }} />
+                          <span className="text-sm font-semibold">{lang === 'ar' ? lt?.name_ar : lt?.name_en}</span>
+                        </div>
+                        {getStatusBadge(req.status)}
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span className="font-mono">{req.start_date}</span>
+                        <span>→</span>
+                        <span className="font-mono">{req.end_date}</span>
+                        <Badge variant="outline" className="text-[10px] h-5">{req.days_count} {t('days')}</Badge>
+                      </div>
+                      {req.notes && (
+                        <p className="text-xs text-muted-foreground mt-2 bg-accent/30 p-2 rounded">{req.notes}</p>
+                      )}
+                      {req.status === 'pending' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-rose-500 hover:bg-rose-500/10 text-xs h-6 mt-2"
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(`/api/leaves/${req.id}`, { method: 'DELETE' })
+                              if (res.ok) {
+                                toast.success(lang === 'ar' ? 'تم إلغاء الطلب' : 'Request cancelled')
+                                setMyRequests(prev => prev.filter(r => r.id !== req.id))
+                              } else { toast.error(t('error')) }
+                            } catch { toast.error(t('error')) }
+                          }}
+                        >
+                          {lang === 'ar' ? 'إلغاء الطلب' : 'Cancel Request'}
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })
+            )}
+          </div>
+        )}
+
+        {/* Profile Tab (Info + Records + Password) */}
+        {activeTab === 'profile' && (
           <div className="space-y-4 animate-in">
             {empInfo ? (
               <>
@@ -685,6 +834,173 @@ export default function EmployeePortalPage() {
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* Records Sub-tabs */}
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant={recordsSubTab === 'attendance' ? 'default' : 'outline'}
+                    onClick={() => setRecordsSubTab('attendance')}
+                    className="flex-1"
+                  >
+                    <Clock className="h-3.5 w-3.5 mr-1.5" />
+                    {t('attendanceHistory')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={recordsSubTab === 'tardiness' ? 'default' : 'outline'}
+                    onClick={() => setRecordsSubTab('tardiness')}
+                    className="flex-1"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
+                    {t('tardinessHistory')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={recordsSubTab === 'permissions' ? 'default' : 'outline'}
+                    onClick={() => setRecordsSubTab('permissions')}
+                    className="flex-1"
+                  >
+                    {lang === 'ar' ? 'الأذونات' : 'Permissions'}
+                  </Button>
+                </div>
+
+                {/* Attendance Records */}
+                {recordsSubTab === 'attendance' && (
+                  <div className="space-y-3">
+                    <h2 className="font-bold text-lg">{t('attendanceHistory')} ({attendanceRecords.length})</h2>
+                    {attendanceRecords.length === 0 ? (
+                      <Card className="border-0 shadow-md">
+                        <CardContent className="p-8 text-center text-muted-foreground text-sm">
+                          <Clock className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                          {t('noAttendance')}
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      attendanceRecords.slice(0, 30).map(rec => (
+                        <Card key={rec.id} className="border-0 shadow-md">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-semibold font-mono">{rec.date}</span>
+                              {rec.is_holiday_work && (
+                                <Badge className="bg-purple-500/10 text-purple-500 border-0 text-[10px]">
+                                  {lang === 'ar' ? 'عمل في عطلة' : 'Holiday'}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                              <div className="p-1.5 rounded bg-emerald-500/10">
+                                <p className="text-[10px] text-muted-foreground">{t('checkIn')}</p>
+                                <p className="text-xs font-bold text-emerald-500 font-mono">{rec.check_in?.slice(0, 5) || '--:--'}</p>
+                              </div>
+                              <div className="p-1.5 rounded bg-amber-500/10">
+                                <p className="text-[10px] text-muted-foreground">{t('checkOut')}</p>
+                                <p className="text-xs font-bold text-amber-500 font-mono">{rec.check_out?.slice(0, 5) || '--:--'}</p>
+                              </div>
+                              <div className="p-1.5 rounded bg-blue-500/10">
+                                <p className="text-[10px] text-muted-foreground">{t('workHours')}</p>
+                                <p className="text-xs font-bold text-blue-500 font-mono">{(() => { const h = parseFloat(String(rec.work_hours)) || 0; return `${Math.floor(h)}h ${Math.round((h % 1) * 60)}m` })()}</p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {/* Tardiness Records */}
+                {recordsSubTab === 'tardiness' && (
+                  <div className="space-y-3">
+                    <h2 className="font-bold text-lg">{t('tardinessHistory')} ({tardinessRecords.length})</h2>
+                    {tardinessRecords.length === 0 ? (
+                      <Card className="border-0 shadow-md">
+                        <CardContent className="p-8 text-center text-muted-foreground text-sm">
+                          <AlertTriangle className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                          {t('noTardiness')}
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      tardinessRecords.slice(0, 30).map(rec => (
+                        <Card key={rec.id} className="border-0 shadow-md">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-semibold font-mono">{rec.date}</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {t('arrivalTime')}: <span className="font-mono">{rec.time?.slice(0, 5)}</span>
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <Badge className="bg-rose-500/10 text-rose-500 border-0">
+                                  {rec.minutes_late} {t('minutes')} {t('late')}
+                                </Badge>
+                              </div>
+                            </div>
+                            {rec.notes && (
+                              <p className="text-xs text-muted-foreground mt-2 bg-accent/30 p-2 rounded">{rec.notes}</p>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {/* Permissions Records */}
+                {recordsSubTab === 'permissions' && (
+                  <div className="space-y-3">
+                    <h2 className="font-bold text-lg">{lang === 'ar' ? 'أذونات الخروج' : 'My Permissions'} ({myPermissions.length})</h2>
+                    {myPermissions.length === 0 ? (
+                      <Card className="border-0 shadow-md">
+                        <CardContent className="p-8 text-center text-muted-foreground text-sm">
+                          {lang === 'ar' ? 'لا توجد أذونات' : 'No permissions'}
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      myPermissions.map((p: any) => (
+                        <Card key={p.id} className="border-0 shadow-md">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-semibold font-mono">{p.date}</span>
+                              <Badge className={
+                                p.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500 border-0' :
+                                p.status === 'rejected' ? 'bg-rose-500/10 text-rose-500 border-0' :
+                                'bg-amber-500/10 text-amber-500 border-0'
+                              }>
+                                {p.status === 'approved' ? t('approved') : p.status === 'rejected' ? t('rejected') : t('pending')}
+                              </Badge>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                              <div className="p-1.5 rounded bg-amber-500/10">
+                                <p className="text-[10px] text-muted-foreground">{lang === 'ar' ? 'خروج' : 'Left'}</p>
+                                <p className="text-xs font-bold text-amber-500 font-mono">{p.leave_time?.slice(0, 5)}</p>
+                              </div>
+                              <div className="p-1.5 rounded bg-emerald-500/10">
+                                <p className="text-[10px] text-muted-foreground">{lang === 'ar' ? 'عودة' : 'Return'}</p>
+                                <p className="text-xs font-bold text-emerald-500 font-mono">{p.return_time?.slice(0, 5) || '--:--'}</p>
+                              </div>
+                              <div className="p-1.5 rounded bg-blue-500/10">
+                                <p className="text-[10px] text-muted-foreground">{lang === 'ar' ? 'المدة' : 'Duration'}</p>
+                                <p className="text-xs font-bold text-blue-500 font-mono">
+                                  {p.return_time ? (() => {
+                                    const [lh, lm] = p.leave_time.split(':').map(Number)
+                                    const [rh, rm] = p.return_time.split(':').map(Number)
+                                    const mins = (rh * 60 + rm) - (lh * 60 + lm)
+                                    return mins > 0 ? `${Math.floor(mins/60)}h ${mins%60}m` : '-'
+                                  })() : '-'}
+                                </p>
+                              </div>
+                            </div>
+                            {p.reason && (
+                              <p className="text-xs text-muted-foreground mt-2 bg-accent/30 p-2 rounded">{p.reason}</p>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </div>
+                )}
 
                 {/* Change Password Card */}
                 <Card className="border-0 shadow-md">
@@ -751,302 +1067,6 @@ export default function EmployeePortalPage() {
             )}
           </div>
         )}
-
-        {/* My Records Tab */}
-        {activeTab === 'records' && (
-          <div className="space-y-4 animate-in">
-            {/* Sub-tab toggle */}
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant={recordsSubTab === 'attendance' ? 'default' : 'outline'}
-                onClick={() => setRecordsSubTab('attendance')}
-                className="flex-1"
-              >
-                <Clock className="h-3.5 w-3.5 mr-1.5" />
-                {t('attendanceHistory')}
-              </Button>
-              <Button
-                size="sm"
-                variant={recordsSubTab === 'tardiness' ? 'default' : 'outline'}
-                onClick={() => setRecordsSubTab('tardiness')}
-                className="flex-1"
-              >
-                <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
-                {t('tardinessHistory')}
-              </Button>
-              <Button
-                size="sm"
-                variant={recordsSubTab === 'permissions' ? 'default' : 'outline'}
-                onClick={() => setRecordsSubTab('permissions')}
-                className="flex-1"
-              >
-                {lang === 'ar' ? 'الأذونات' : 'Permissions'}
-              </Button>
-            </div>
-
-            {/* Attendance Records */}
-            {recordsSubTab === 'attendance' && (
-              <div className="space-y-3">
-                <h2 className="font-bold text-lg">{t('attendanceHistory')} ({attendanceRecords.length})</h2>
-                {attendanceRecords.length === 0 ? (
-                  <Card className="border-0 shadow-md">
-                    <CardContent className="p-8 text-center text-muted-foreground text-sm">
-                      <Clock className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                      {t('noAttendance')}
-                    </CardContent>
-                  </Card>
-                ) : (
-                  attendanceRecords.slice(0, 30).map(rec => (
-                    <Card key={rec.id} className="border-0 shadow-md">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-semibold font-mono">{rec.date}</span>
-                          {rec.is_holiday_work && (
-                            <Badge className="bg-purple-500/10 text-purple-500 border-0 text-[10px]">
-                              {lang === 'ar' ? 'عمل في عطلة' : 'Holiday'}
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-3 gap-2 text-center">
-                          <div className="p-1.5 rounded bg-emerald-500/10">
-                            <p className="text-[10px] text-muted-foreground">{t('checkIn')}</p>
-                            <p className="text-xs font-bold text-emerald-500 font-mono">{rec.check_in?.slice(0, 5) || '--:--'}</p>
-                          </div>
-                          <div className="p-1.5 rounded bg-amber-500/10">
-                            <p className="text-[10px] text-muted-foreground">{t('checkOut')}</p>
-                            <p className="text-xs font-bold text-amber-500 font-mono">{rec.check_out?.slice(0, 5) || '--:--'}</p>
-                          </div>
-                          <div className="p-1.5 rounded bg-blue-500/10">
-                            <p className="text-[10px] text-muted-foreground">{t('workHours')}</p>
-                            <p className="text-xs font-bold text-blue-500 font-mono">{(() => { const h = parseFloat(String(rec.work_hours)) || 0; return `${Math.floor(h)}h ${Math.round((h % 1) * 60)}m` })()}</p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </div>
-            )}
-
-            {/* Tardiness Records */}
-            {recordsSubTab === 'tardiness' && (
-              <div className="space-y-3">
-                <h2 className="font-bold text-lg">{t('tardinessHistory')} ({tardinessRecords.length})</h2>
-                {tardinessRecords.length === 0 ? (
-                  <Card className="border-0 shadow-md">
-                    <CardContent className="p-8 text-center text-muted-foreground text-sm">
-                      <AlertTriangle className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                      {t('noTardiness')}
-                    </CardContent>
-                  </Card>
-                ) : (
-                  tardinessRecords.slice(0, 30).map(rec => (
-                    <Card key={rec.id} className="border-0 shadow-md">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-semibold font-mono">{rec.date}</p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {t('arrivalTime')}: <span className="font-mono">{rec.time?.slice(0, 5)}</span>
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <Badge className="bg-rose-500/10 text-rose-500 border-0">
-                              {rec.minutes_late} {t('minutes')} {t('late')}
-                            </Badge>
-                          </div>
-                        </div>
-                        {rec.notes && (
-                          <p className="text-xs text-muted-foreground mt-2 bg-accent/30 p-2 rounded">{rec.notes}</p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </div>
-            )}
-
-            {/* Permissions Records */}
-            {recordsSubTab === 'permissions' && (
-              <div className="space-y-3">
-                <h2 className="font-bold text-lg">{lang === 'ar' ? 'أذونات الخروج' : 'My Permissions'} ({myPermissions.length})</h2>
-                {myPermissions.length === 0 ? (
-                  <Card className="border-0 shadow-md">
-                    <CardContent className="p-8 text-center text-muted-foreground text-sm">
-                      {lang === 'ar' ? 'لا توجد أذونات' : 'No permissions'}
-                    </CardContent>
-                  </Card>
-                ) : (
-                  myPermissions.map((p: any) => (
-                    <Card key={p.id} className="border-0 shadow-md">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-semibold font-mono">{p.date}</span>
-                          <Badge className={
-                            p.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500 border-0' :
-                            p.status === 'rejected' ? 'bg-rose-500/10 text-rose-500 border-0' :
-                            'bg-amber-500/10 text-amber-500 border-0'
-                          }>
-                            {p.status === 'approved' ? t('approved') : p.status === 'rejected' ? t('rejected') : t('pending')}
-                          </Badge>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2 text-center">
-                          <div className="p-1.5 rounded bg-amber-500/10">
-                            <p className="text-[10px] text-muted-foreground">{lang === 'ar' ? 'خروج' : 'Left'}</p>
-                            <p className="text-xs font-bold text-amber-500 font-mono">{p.leave_time?.slice(0, 5)}</p>
-                          </div>
-                          <div className="p-1.5 rounded bg-emerald-500/10">
-                            <p className="text-[10px] text-muted-foreground">{lang === 'ar' ? 'عودة' : 'Return'}</p>
-                            <p className="text-xs font-bold text-emerald-500 font-mono">{p.return_time?.slice(0, 5) || '--:--'}</p>
-                          </div>
-                          <div className="p-1.5 rounded bg-blue-500/10">
-                            <p className="text-[10px] text-muted-foreground">{lang === 'ar' ? 'المدة' : 'Duration'}</p>
-                            <p className="text-xs font-bold text-blue-500 font-mono">
-                              {p.return_time ? (() => {
-                                const [lh, lm] = p.leave_time.split(':').map(Number)
-                                const [rh, rm] = p.return_time.split(':').map(Number)
-                                const mins = (rh * 60 + rm) - (lh * 60 + lm)
-                                return mins > 0 ? `${Math.floor(mins/60)}h ${mins%60}m` : '-'
-                              })() : '-'}
-                            </p>
-                          </div>
-                        </div>
-                        {p.reason && (
-                          <p className="text-xs text-muted-foreground mt-2 bg-accent/30 p-2 rounded">{p.reason}</p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Calendar Tab */}
-        {activeTab === 'calendar' && (
-          <div className="space-y-4 animate-in">
-            <h2 className="font-bold text-lg">{lang === 'ar' ? 'من في إجازة؟' : "Who's on Leave?"}</h2>
-            {/* Holidays this month */}
-            {(() => {
-              const now = new Date()
-              const monthHolidays = calendarHolidays.filter(h => {
-                const [hy, hm] = h.date.split('-').map(Number)
-                return hy === now.getFullYear() && hm === now.getMonth() + 1
-              })
-              if (monthHolidays.length === 0) return null
-              return (
-                <>
-                  <h3 className="text-sm font-semibold text-purple-500 mt-2">{lang === 'ar' ? 'العطلات الرسمية' : 'Public Holidays'}</h3>
-                  {monthHolidays.map(h => (
-                    <Card key={h.id} className="border-0 shadow-md border-l-4 border-l-purple-500">
-                      <CardContent className="p-3 flex items-center justify-between">
-                        <span className="text-sm font-medium">{h.name}</span>
-                        <span className="text-xs font-mono text-muted-foreground">{h.date}</span>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </>
-              )
-            })()}
-            {(() => {
-              const now = new Date()
-              const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-              const monthEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`
-              const thisMonthLeaves = calendarLeaves.filter(l => l.end_date >= monthStart && l.start_date <= monthEnd)
-
-              if (thisMonthLeaves.length === 0) {
-                return (
-                  <Card className="border-0 shadow-md">
-                    <CardContent className="p-8 text-center text-muted-foreground text-sm">
-                      <CalendarDays className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                      {lang === 'ar' ? 'لا توجد إجازات هذا الشهر' : 'No leaves this month'}
-                    </CardContent>
-                  </Card>
-                )
-              }
-
-              return thisMonthLeaves.map(l => (
-                <Card key={l.id} className="border-0 shadow-md">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-semibold">{l.employee?.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {lang === 'ar' ? l.leave_type?.name_ar : l.leave_type?.name_en}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs font-mono">{l.start_date} → {l.end_date}</p>
-                        <Badge variant="outline" className="text-[10px] mt-1">{l.days_count} {t('days')}</Badge>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            })()}
-          </div>
-        )}
-
-        {/* My Requests Tab */}
-        {activeTab === 'requests' && (
-          <div className="space-y-3 animate-in">
-            <h2 className="font-bold text-lg">{t('myRequests')} ({myRequests.length})</h2>
-            {myRequests.length === 0 ? (
-              <Card className="border-0 shadow-md">
-                <CardContent className="p-8 text-center text-muted-foreground text-sm">
-                  <ClipboardList className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                  {t('noRequests')}
-                </CardContent>
-              </Card>
-            ) : (
-              myRequests.map(req => {
-                const lt = req.leave_type
-                return (
-                  <Card key={req.id} className="border-0 shadow-md">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: lt?.color }} />
-                          <span className="text-sm font-semibold">{lang === 'ar' ? lt?.name_ar : lt?.name_en}</span>
-                        </div>
-                        {getStatusBadge(req.status)}
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span className="font-mono">{req.start_date}</span>
-                        <span>→</span>
-                        <span className="font-mono">{req.end_date}</span>
-                        <Badge variant="outline" className="text-[10px] h-5">{req.days_count} {t('days')}</Badge>
-                      </div>
-                      {req.notes && (
-                        <p className="text-xs text-muted-foreground mt-2 bg-accent/30 p-2 rounded">{req.notes}</p>
-                      )}
-                      {req.status === 'pending' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-rose-500 hover:bg-rose-500/10 text-xs h-6 mt-2"
-                          onClick={async () => {
-                            try {
-                              const res = await fetch(`/api/leaves/${req.id}`, { method: 'DELETE' })
-                              if (res.ok) {
-                                toast.success(lang === 'ar' ? 'تم إلغاء الطلب' : 'Request cancelled')
-                                setMyRequests(prev => prev.filter(r => r.id !== req.id))
-                              } else { toast.error(t('error')) }
-                            } catch { toast.error(t('error')) }
-                          }}
-                        >
-                          {lang === 'ar' ? 'إلغاء الطلب' : 'Cancel Request'}
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                )
-              })
-            )}
-          </div>
-        )}
       </div>
 
       {/* Bottom Navigation */}
@@ -1056,9 +1076,7 @@ export default function EmployeePortalPage() {
             { id: 'attendance' as const, icon: Clock, label: t('checkInBtn') },
             { id: 'leave' as const, icon: CalendarDays, label: t('applyLeave') },
             { id: 'requests' as const, icon: ClipboardList, label: t('myRequests') },
-            { id: 'calendar' as const, icon: Calendar, label: lang === 'ar' ? 'التقويم' : 'Calendar' },
-            { id: 'info' as const, icon: Info, label: t('myInfo') },
-            { id: 'records' as const, icon: FileText, label: t('myRecords') },
+            { id: 'profile' as const, icon: User, label: t('myInfo') },
           ].map(tab => {
             const Icon = tab.icon
             const isActive = activeTab === tab.id
@@ -1071,7 +1089,7 @@ export default function EmployeePortalPage() {
                 onClick={() => setActiveTab(tab.id)}
               >
                 <Icon className={`h-5 w-5 ${isActive ? 'text-primary' : ''}`} />
-                <span className="text-[10px] font-medium">{tab.label}</span>
+                <span className="text-[11px] sm:text-xs font-medium">{tab.label}</span>
                 {isActive && <div className="w-6 h-0.5 rounded-full bg-primary" />}
               </button>
             )
