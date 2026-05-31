@@ -3,6 +3,7 @@ import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 import { ensureAttendanceLocationColumns } from '@/lib/ensure-schema'
 import { isOffDay, computeWorkHours, computeOvertime } from '@/lib/attendance-calc'
+import { reverseAutoAbsenceLeave } from '@/lib/auto-absence'
 
 export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
@@ -68,20 +69,41 @@ export async function POST(request: Request) {
     }
     const overtime = computeOvertime(workHours, normalHours, holidayWork)
 
-    const { rows } = await pool.query(`
-      INSERT INTO attendance (employee_id, date, check_in, check_out, work_hours, overtime_hours, status, notes, is_holiday_work)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      ON CONFLICT (employee_id, date) DO UPDATE SET
-        check_in = COALESCE($3, attendance.check_in),
-        check_out = COALESCE($4, attendance.check_out),
-        work_hours = $5,
-        overtime_hours = $6,
-        status = $7,
-        notes = $8,
-        is_holiday_work = $9
-      RETURNING *
-    `, [r.employee_id, r.date, r.check_in || null, r.check_out || null, workHours, overtime, status, r.notes || null, holidayWork])
-    results.push(rows[0])
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      // If this record currently exists as 'absent' and is being changed to a non-absent
+      // status, refund the auto-deducted absence leave so the day isn't lost.
+      const { rows: prev } = await client.query('SELECT status FROM attendance WHERE employee_id = $1 AND date = $2', [r.employee_id, r.date])
+      const wasAbsent = prev[0]?.status === 'absent'
+
+      const { rows } = await client.query(`
+        INSERT INTO attendance (employee_id, date, check_in, check_out, work_hours, overtime_hours, status, notes, is_holiday_work)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (employee_id, date) DO UPDATE SET
+          check_in = COALESCE($3, attendance.check_in),
+          check_out = COALESCE($4, attendance.check_out),
+          work_hours = $5,
+          overtime_hours = $6,
+          status = $7,
+          notes = $8,
+          is_holiday_work = $9
+        RETURNING *
+      `, [r.employee_id, r.date, r.check_in || null, r.check_out || null, workHours, overtime, status, r.notes || null, holidayWork])
+
+      if (wasAbsent && status !== 'absent') {
+        await reverseAutoAbsenceLeave(client, r.employee_id, r.date)
+      }
+
+      await client.query('COMMIT')
+      results.push(rows[0])
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
   }
 
   return NextResponse.json(results)
