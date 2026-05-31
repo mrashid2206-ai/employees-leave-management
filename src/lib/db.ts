@@ -34,6 +34,14 @@ export function omanToday(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+// The previous calendar day in Oman time. The daily automation processes this (the
+// last COMPLETED day) so it never marks an in-progress day's employees absent.
+export function omanYesterday(): string {
+  const d = omanNow()
+  d.setDate(d.getDate() - 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export function omanTime(): string {
   const d = omanNow()
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:00`
