@@ -12,7 +12,9 @@ import { toast } from 'sonner'
 import { getEmployee, getLeaveRequestsByEmployee, getTardinessByEmployee, getSettings, getLeaveTypes, getDepartments, updateEmployee } from '@/lib/api'
 import type { Employee } from '@/lib/types'
 import { useLanguage, useT } from '@/lib/language-context'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import dynamic from 'next/dynamic'
+
+const TardinessBarChart = dynamic(() => import('./_components/tardiness-bar-chart'), { ssr: false })
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -266,18 +268,7 @@ export default function EmployeeCardPage() {
                 .map(([month, minutes]) => ({ month: month.slice(5), minutes }))
 
               return chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                    <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} width={30} />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
-                      formatter={(value) => [`${value} ${lang === 'ar' ? 'دقيقة' : 'min'}`, '']}
-                    />
-                    <Bar dataKey="minutes" fill="#F44336" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <TardinessBarChart data={chartData} minLabel={lang === 'ar' ? 'دقيقة' : 'min'} />
               ) : (
                 <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">{t('noTardiness')}</div>
               )
