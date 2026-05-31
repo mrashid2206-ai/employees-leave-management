@@ -1,4 +1,4 @@
-import pool, { omanToday } from '@/lib/db'
+import pool, { omanToday, omanYesterday } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { logger } from '@/lib/log'
 import { ensureFractionalLeaveColumns, ensureSettingsColumns } from '@/lib/ensure-schema'
@@ -22,7 +22,11 @@ export interface DailyResult {
 // Mark absentees, auto-deduct leave, log tardiness, close stale permissions for a day.
 // Idempotent: safe to run repeatedly for the same date (ON CONFLICT + NOT EXISTS guards).
 export async function runDailyAutomation(date: string | undefined, actor: Actor): Promise<DailyResult> {
-  const processDate = date || omanToday()
+  // Default to the previous COMPLETED day. Absence-marking only runs for days strictly
+  // before today, so an in-progress day (where people haven't checked in yet) can never
+  // flag everyone absent.
+  const processDate = date || omanYesterday()
+  const dayIsComplete = processDate < omanToday()
 
   await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_tardiness_unique ON tardiness_log (employee_id, date)').catch(() => {})
   await ensureFractionalLeaveColumns().catch(() => {})
@@ -79,7 +83,7 @@ export async function runDailyAutomation(date: string | undefined, actor: Actor)
         continue
       }
 
-      if (!attendedMap.has(emp.id)) {
+      if (!attendedMap.has(emp.id) && dayIsComplete) {
         await pool.query(`
           INSERT INTO attendance (employee_id, date, status)
           VALUES ($1, $2, 'absent')
