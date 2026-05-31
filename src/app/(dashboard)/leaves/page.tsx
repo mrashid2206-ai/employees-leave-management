@@ -19,6 +19,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { useLanguage, useT } from '@/lib/language-context'
+import { QueryError } from '@/components/query-error'
 
 interface CreateLeavePayload {
   employee_id: number
@@ -72,7 +73,7 @@ export default function LeavesPage() {
     : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
   const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: allLeaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
+  const { data: allLeaves = [], isError: leavesError, refetch: refetchLeaves } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
 
   const leaves = allLeaves.filter(l => {
@@ -246,6 +247,7 @@ export default function LeavesPage() {
 
   return (
     <div className="space-y-6">
+      {leavesError && <QueryError onRetry={() => refetchLeaves()} />}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t('leaves')}</h1>
         <Dialog open={open} onOpenChange={setOpen}>

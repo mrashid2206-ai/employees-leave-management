@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { useLanguage, useT } from '@/lib/language-context'
+import { QueryError } from '@/components/query-error'
 
 function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -192,7 +193,7 @@ export default function EmployeesPage() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
+  const { data: employees = [], isError: employeesError, refetch: refetchEmployees } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
   const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
   const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
@@ -268,6 +269,7 @@ export default function EmployeesPage() {
 
   return (
     <div className="space-y-6">
+      {employeesError && <QueryError onRetry={() => refetchEmployees()} />}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t('employees')}</h1>
         <div className="flex gap-3">
