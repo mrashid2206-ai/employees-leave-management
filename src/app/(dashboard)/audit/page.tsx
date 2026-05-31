@@ -2,24 +2,33 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useLanguage, useT } from '@/lib/language-context'
+
+interface AuditEntry {
+  id: number
+  action: string
+  user_id: string
+  user_role: string
+  details: string
+  created_at: string
+}
 
 export default function AuditPage() {
   const t = useT()
   const { lang, dir } = useLanguage()
   const [actionFilter, setActionFilter] = useState<string>('all')
 
-  const { data: logs = [] } = useQuery({
+  const { data: logs = [] } = useQuery<AuditEntry[]>({
     queryKey: ['audit'],
     queryFn: () => fetch('/api/audit').then(r => r.ok ? r.json() : []),
   })
 
-  const filtered = actionFilter === 'all' ? logs : logs.filter((l: any) => l.action === actionFilter)
-  const actions = [...new Set(logs.map((l: any) => l.action))] as string[]
+  const filtered = actionFilter === 'all' ? logs : logs.filter((l) => l.action === actionFilter)
+  const actions = [...new Set(logs.map((l) => l.action))]
 
   function getActionBadge(action: string) {
     if (action.includes('approved') || action.includes('change')) return 'bg-emerald-500/10 text-emerald-500'
@@ -65,7 +74,7 @@ export default function AuditPage() {
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{t('noData')}</TableCell>
                   </TableRow>
                 ) : (
-                  filtered.map((log: any, idx: number) => (
+                  filtered.map((log, idx) => (
                     <TableRow key={log.id}>
                       <TableCell className="text-center text-muted-foreground">{idx + 1}</TableCell>
                       <TableCell>

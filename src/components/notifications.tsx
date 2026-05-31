@@ -3,8 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Bell, AlertTriangle, Clock, CalendarOff, X } from 'lucide-react'
+import { Bell, AlertTriangle, Clock, CalendarOff } from 'lucide-react'
 import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
 import {
@@ -35,11 +34,6 @@ export function NotificationBell() {
   if (settings) {
     // Low balance warnings
     employees.filter(e => e.is_active).forEach(emp => {
-      const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
-      const usedDays = empLeaves.reduce((sum, l) => sum + l.days_count, 0)
-      const empTard = tardiness.filter(t => t.employee_id === emp.id)
-      const tardMinutes = empTard.reduce((sum, t) => sum + t.minutes_late, 0)
-      const tardDays = tardMinutes / 60 / settings.work_hours_per_day
       const remaining = emp.leave_balance
 
       if (remaining <= 3) {

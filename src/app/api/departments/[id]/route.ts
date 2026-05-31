@@ -19,11 +19,17 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
   const { id } = await params
-  // Check if department has employees
-  const { rows: emps } = await pool.query('SELECT COUNT(*) as cnt FROM employees WHERE department_id = $1 AND is_active = true', [id])
+  // Count ALL employees (including soft-deleted/inactive) — they keep their FK to the
+  // department, so an inactive-only department would otherwise hit a raw FK 500.
+  const { rows: emps } = await pool.query('SELECT COUNT(*) as cnt FROM employees WHERE department_id = $1', [id])
   if (parseInt(emps[0].cnt) > 0) {
     return NextResponse.json({ error: 'لا يمكن حذف قسم يحتوي على موظفين' }, { status: 400 })
   }
-  await pool.query('DELETE FROM departments WHERE id = $1', [id])
+  try {
+    await pool.query('DELETE FROM departments WHERE id = $1', [id])
+  } catch {
+    // Foreign-key violation (referenced elsewhere) — surface a friendly 409, not a 500.
+    return NextResponse.json({ error: 'لا يمكن حذف قسم يحتوي على موظفين' }, { status: 409 })
+  }
   return NextResponse.json({ success: true })
 }

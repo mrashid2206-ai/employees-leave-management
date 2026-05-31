@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
-import type { Lang } from './translations'
+import { translations, type Lang, type TranslationKey } from './translations'
 
 interface LanguageContextType {
   lang: Lang
@@ -18,14 +18,11 @@ const LanguageContext = createContext<LanguageContextType>({
 })
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>('ar')
-
-  useEffect(() => {
+  const [lang, setLangState] = useState<Lang>(() => {
+    if (typeof window === 'undefined') return 'ar'
     const saved = localStorage.getItem('app-lang') as Lang | null
-    if (saved && (saved === 'ar' || saved === 'en')) {
-      setLangState(saved)
-    }
-  }, [])
+    return saved === 'ar' || saved === 'en' ? saved : 'ar'
+  })
 
   useEffect(() => {
     const dir = lang === 'ar' ? 'rtl' : 'ltr'
@@ -57,8 +54,7 @@ export function useLanguage() {
 
 export function useT() {
   const { lang } = useLanguage()
-  return (key: import('./translations').TranslationKey) => {
-    const { translations } = require('./translations')
+  return (key: TranslationKey) => {
     return translations[key]?.[lang] || key
   }
 }

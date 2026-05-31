@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
 import { verifyEmployee, unauthorized } from '@/lib/api-auth'
 import { logAudit } from '@/lib/audit'
+import { MIN_PASSWORD_LENGTH } from '@/lib/constants'
+import { ensureEmployeeAuthColumns } from '@/lib/ensure-schema'
 
 export async function POST(request: Request) {
   const user = await verifyEmployee(request)
@@ -14,8 +16,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Current and new password are required' }, { status: 400 })
   }
 
-  if (new_password.length < 6) {
-    return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 })
+  if (new_password.length < MIN_PASSWORD_LENGTH) {
+    return NextResponse.json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }, { status: 400 })
   }
 
   // Verify current password
@@ -28,7 +30,8 @@ export async function POST(request: Request) {
   }
 
   const hash = await bcrypt.hash(new_password, 10)
-  await pool.query('UPDATE employees SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hash, user.id])
+  await ensureEmployeeAuthColumns().catch(() => {})
+  await pool.query('UPDATE employees SET password_hash = $1, must_change_password = FALSE, updated_at = NOW() WHERE id = $2', [hash, user.id])
 
   await logAudit('password_change', user.username, 'employee', `Employee ${user.id} changed password`)
 

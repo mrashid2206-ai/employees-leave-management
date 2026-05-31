@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,7 +15,86 @@ import { Toaster } from '@/components/ui/sonner'
 import { useLanguage, useT } from '@/lib/language-context'
 import { LanguageToggle } from '@/components/language-toggle'
 import { ThemeToggle } from '@/components/theme-toggle'
-import type { Employee, LeaveType } from '@/lib/types'
+import type { LeaveType, Employee, Settings } from '@/lib/types'
+import type { Holiday } from '@/lib/api'
+
+interface WorkingDaysInfo {
+  workingDays: number
+  totalDays: number
+}
+
+interface AttendanceStatus {
+  check_in?: string | null
+  check_out?: string | null
+  work_hours?: number | string | null
+  is_holiday_work?: boolean
+}
+
+interface AttendanceRecord {
+  id: number
+  date: string
+  check_in?: string | null
+  check_out?: string | null
+  work_hours?: number | string | null
+  is_holiday_work?: boolean
+}
+
+interface TardinessRow {
+  id: number
+  date: string
+  time?: string | null
+  minutes_late: number
+  notes?: string | null
+}
+
+interface MyLeaveRequest {
+  id: number
+  start_date: string
+  end_date: string
+  days_count: number
+  notes?: string | null
+  status: string
+  leave_type?: LeaveType
+}
+
+interface EmpInfo {
+  id: number
+  name: string
+  username?: string
+  leave_balance: number
+  department_name?: string
+  department?: { name: string }
+  annual_leave_balance: number
+  used_days: number
+  remaining: number
+}
+
+interface PermissionRecord {
+  id: number
+  date: string
+  leave_time?: string | null
+  return_time?: string | null
+  reason?: string | null
+  status: string
+}
+
+interface NotificationItem {
+  id: number
+  message: string
+  message_ar: string
+  is_read: boolean
+  created_at: string
+}
+
+interface CalendarLeave {
+  id: number
+  start_date: string
+  end_date: string
+  status: string
+  days_count: number
+  employee?: { name: string }
+  leave_type?: { name_ar: string; name_en: string }
+}
 
 function calculateDaysCount(start: string, end: string): number {
   if (!start || !end) return 0
@@ -25,13 +103,18 @@ function calculateDaysCount(start: string, end: string): number {
 }
 
 function useWorkingDays(start: string, end: string) {
-  const [days, setDays] = useState<{ workingDays: number; totalDays: number } | null>(null)
+  const [days, setDays] = useState<WorkingDaysInfo | null>(null)
   useEffect(() => {
-    if (!start || !end || new Date(end) < new Date(start)) { setDays(null); return }
+    let active = true
+    if (!start || !end || new Date(end) < new Date(start)) {
+      Promise.resolve().then(() => { if (active) setDays(null) })
+      return () => { active = false }
+    }
     fetch(`/api/working-days?start=${start}&end=${end}`)
       .then(r => r.json())
-      .then(setDays)
-      .catch(() => setDays(null))
+      .then(data => { if (active) setDays(data) })
+      .catch(() => { if (active) setDays(null) })
+    return () => { active = false }
   }, [start, end])
   return days
 }
@@ -39,15 +122,15 @@ function useWorkingDays(start: string, end: string) {
 export default function EmployeePortalPage() {
   const t = useT()
   const { lang, dir } = useLanguage()
-  const router = useRouter()
 
   const [activeTab, setActiveTab] = useState<'attendance' | 'leave' | 'requests' | 'profile'>('attendance')
   const [showCalendar, setShowCalendar] = useState(false)
-  const [empUser, setEmpUser] = useState<{ id: number; name: string; username: string } | null>(null)
+  const [empUser, setEmpUser] = useState<{ id: number; name: string; username: string; must_change_password?: boolean } | null>(null)
   const [loading, setLoading] = useState(false)
+  const [mustChangePw, setMustChangePw] = useState(false)
 
   // Attendance state
-  const [todayStatus, setTodayStatus] = useState<any>(null)
+  const [todayStatus, setTodayStatus] = useState<AttendanceStatus | null>(null)
   const [lastAction, setLastAction] = useState<{ action: string; time: string; workHours?: number } | null>(null)
 
   // Leave form state
@@ -56,40 +139,79 @@ export default function EmployeePortalPage() {
   const [leaveForm, setLeaveForm] = useState({ leave_type_id: '', start_date: '', end_date: '', notes: '', is_half_day: false })
 
   // My requests
-  const [myRequests, setMyRequests] = useState<any[]>([])
+  const [myRequests, setMyRequests] = useState<MyLeaveRequest[]>([])
 
   // My info
-  const [empInfo, setEmpInfo] = useState<any>(null)
+  const [empInfo, setEmpInfo] = useState<EmpInfo | null>(null)
 
   // My records
-  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([])
-  const [tardinessRecords, setTardinessRecords] = useState<any[]>([])
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
+  const [tardinessRecords, setTardinessRecords] = useState<TardinessRow[]>([])
   const [recordsSubTab, setRecordsSubTab] = useState<'attendance' | 'tardiness' | 'permissions'>('attendance')
 
   // Permission request
   const [permissionForm, setPermissionForm] = useState({ reason: '' })
   const [showPermission, setShowPermission] = useState(false)
   const [permitting, setPermitting] = useState(false)
-  const [activePermission, setActivePermission] = useState<any>(null)
-  const [myPermissions, setMyPermissions] = useState<any[]>([])
+  const [activePermission, setActivePermission] = useState<PermissionRecord | null>(null)
+  const [myPermissions, setMyPermissions] = useState<PermissionRecord[]>([])
 
   // Notifications
-  const [notifications, setNotifications] = useState<any[]>([])
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [showNotifs, setShowNotifs] = useState(false)
 
   // Calendar
-  const [calendarLeaves, setCalendarLeaves] = useState<any[]>([])
-  const [calendarHolidays, setCalendarHolidays] = useState<any[]>([])
+  const [calendarLeaves, setCalendarLeaves] = useState<CalendarLeave[]>([])
+  const [calendarHolidays, setCalendarHolidays] = useState<Holiday[]>([])
 
   // Password change
   const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
   const [pwLoading, setPwLoading] = useState(false)
 
+  // Forced first-login password change
+  const [forcedPw, setForcedPw] = useState({ current_password: '', new_password: '', confirm_password: '' })
+  const [forcedLoading, setForcedLoading] = useState(false)
+
+  async function handleForcedChange() {
+    if (!forcedPw.current_password || !forcedPw.new_password) { toast.error(t('fillRequired')); return }
+    if (forcedPw.new_password !== forcedPw.confirm_password) {
+      toast.error(lang === 'ar' ? 'كلمة المرور غير متطابقة' : 'Passwords do not match'); return
+    }
+    if (forcedPw.new_password.length < 6) {
+      toast.error(lang === 'ar' ? 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' : 'Password must be at least 6 characters'); return
+    }
+    setForcedLoading(true)
+    try {
+      const res = await fetch('/api/employees/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_password: forcedPw.current_password, new_password: forcedPw.new_password }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        toast.error(data.error || t('error'))
+      } else {
+        toast.success(lang === 'ar' ? 'تم تغيير كلمة المرور بنجاح' : 'Password changed successfully')
+        setMustChangePw(false)
+        setForcedPw({ current_password: '', new_password: '', confirm_password: '' })
+        // Clear the stale flag so it isn't re-triggered from cache.
+        if (empUser) {
+          const updated = { ...empUser, must_change_password: false }
+          setEmpUser(updated)
+          try { sessionStorage.setItem('emp-user', JSON.stringify(updated)) } catch {}
+        }
+      }
+    } catch { toast.error(t('error')) }
+    setForcedLoading(false)
+  }
+
   useEffect(() => {
     // Try sessionStorage first (fast)
     const stored = sessionStorage.getItem('emp-user')
     if (stored) {
-      setEmpUser(JSON.parse(stored))
+      const user = JSON.parse(stored)
+      setEmpUser(user)
+      if (user.must_change_password) setMustChangePw(true)
       return
     }
     // Fallback: fetch from JWT cookie via API (works even if sessionStorage was cleared)
@@ -97,8 +219,9 @@ export default function EmployeePortalPage() {
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data?.user) {
-          const user = { id: data.user.id, name: data.user.name, username: data.user.username }
+          const user = { id: data.user.id, name: data.user.name, username: data.user.username, must_change_password: !!data.user.must_change_password }
           setEmpUser(user)
+          if (user.must_change_password) setMustChangePw(true)
           try { sessionStorage.setItem('emp-user', JSON.stringify(user)) } catch {}
         }
       })
@@ -125,7 +248,7 @@ export default function EmployeePortalPage() {
         .then(r => r.ok ? r.json() : [])
         .then(data => {
           const today = new Date().toISOString().split('T')[0]
-          const active = data.find((p: any) => p.date === today && !p.return_time && p.status !== 'rejected')
+          const active = (data as PermissionRecord[]).find(p => p.date === today && !p.return_time && p.status !== 'rejected')
           setActivePermission(active || null)
         })
         .catch(() => {})
@@ -148,11 +271,11 @@ export default function EmployeePortalPage() {
         fetch(`/api/employees/${empUser.id}`).then(r => r.json()),
         fetch('/api/settings').then(r => r.json()),
         fetch(`/api/leaves/my-requests?employee_id=${empUser.id}`).then(r => r.json()),
-      ]).then(([emp, settings, leaves]) => {
+      ]).then(([emp, settings, leaves]: [Employee, Settings, MyLeaveRequest[]]) => {
         const totalBalance = settings.annual_leave_balance ?? 30
-        const usedDays = (leaves as any[])
-          .filter((l: any) => l.status === 'approved')
-          .reduce((sum: number, l: any) => sum + (l.days_count || 0), 0)
+        const usedDays = leaves
+          .filter(l => l.status === 'approved')
+          .reduce((sum, l) => sum + (l.days_count || 0), 0)
         setEmpInfo({ ...emp, annual_leave_balance: totalBalance, used_days: usedDays, remaining: emp.leave_balance })
       })
     }
@@ -189,7 +312,7 @@ export default function EmployeePortalPage() {
     if (activeTab === 'requests' && showCalendar) {
       fetch('/api/leaves')
         .then(r => r.ok ? r.json() : [])
-        .then(data => setCalendarLeaves(data.filter((l: any) => l.status === 'approved')))
+        .then((data: CalendarLeave[]) => setCalendarLeaves(data.filter(l => l.status === 'approved')))
         .catch(() => {})
       fetch('/api/holidays').then(r => r.ok ? r.json() : []).then(setCalendarHolidays).catch(() => {})
     }
@@ -294,6 +417,56 @@ export default function EmployeePortalPage() {
   const leaveDays = calculateDaysCount(leaveForm.start_date, leaveForm.end_date)
   const workingDaysInfo = useWorkingDays(leaveForm.start_date, leaveForm.end_date)
 
+  if (mustChangePw) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4" dir={dir}>
+        <div className="absolute top-4 end-4 flex items-center gap-2">
+          <ThemeToggle />
+          <LanguageToggle />
+          <Button variant="ghost" size="sm" className="text-rose-500 text-xs" onClick={handleLogout}>
+            <LogOut className="h-3.5 w-3.5 ml-1" />
+            {t('logout')}
+          </Button>
+        </div>
+        <Card className="w-full max-w-md border-0 shadow-2xl">
+          <CardContent className="p-6 space-y-4">
+            <div className="text-center">
+              <div className="mx-auto w-14 h-14 rounded-full bg-amber-500/10 flex items-center justify-center mb-3">
+                <AlertTriangle className="h-7 w-7 text-amber-500" />
+              </div>
+              <h2 className="text-lg font-bold">{lang === 'ar' ? 'يجب تغيير كلمة المرور' : 'Password Change Required'}</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                {lang === 'ar' ? 'لحماية حسابك، يرجى تعيين كلمة مرور جديدة قبل المتابعة.' : 'For your security, set a new password before continuing.'}
+              </p>
+            </div>
+            <Input
+              type="password"
+              placeholder={lang === 'ar' ? 'كلمة المرور الحالية' : 'Current password'}
+              value={forcedPw.current_password}
+              onChange={e => setForcedPw(f => ({ ...f, current_password: e.target.value }))}
+            />
+            <Input
+              type="password"
+              placeholder={lang === 'ar' ? 'كلمة المرور الجديدة' : 'New password'}
+              value={forcedPw.new_password}
+              onChange={e => setForcedPw(f => ({ ...f, new_password: e.target.value }))}
+            />
+            <Input
+              type="password"
+              placeholder={lang === 'ar' ? 'تأكيد كلمة المرور' : 'Confirm password'}
+              value={forcedPw.confirm_password}
+              onChange={e => setForcedPw(f => ({ ...f, confirm_password: e.target.value }))}
+            />
+            <Button className="w-full" disabled={forcedLoading} onClick={handleForcedChange}>
+              {forcedLoading ? '...' : (lang === 'ar' ? 'تغيير كلمة المرور' : 'Change Password')}
+            </Button>
+          </CardContent>
+        </Card>
+        <Toaster position="top-center" dir={dir} />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col" dir={dir}>
       {/* Top Header */}
@@ -396,7 +569,7 @@ export default function EmployeePortalPage() {
                     </div>
                     <div className={`p-2 rounded-lg ${todayStatus.is_holiday_work ? 'bg-purple-500/10' : 'bg-blue-500/10'}`}>
                       <p className="text-[10px] text-muted-foreground">{todayStatus.is_holiday_work ? (lang === 'ar' ? 'إضافي' : 'OT') : t('workHours')}</p>
-                      <p className={`text-sm font-bold font-mono ${todayStatus.is_holiday_work ? 'text-purple-500' : 'text-blue-500'}`}>{(() => { const h = parseFloat(todayStatus.work_hours) || 0; return `${Math.floor(h)}h ${Math.round((h % 1) * 60)}m` })()}</p>
+                      <p className={`text-sm font-bold font-mono ${todayStatus.is_holiday_work ? 'text-purple-500' : 'text-blue-500'}`}>{(() => { const h = parseFloat(String(todayStatus.work_hours)) || 0; return `${Math.floor(h)}h ${Math.round((h % 1) * 60)}m` })()}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -958,7 +1131,7 @@ export default function EmployeePortalPage() {
                         </CardContent>
                       </Card>
                     ) : (
-                      myPermissions.map((p: any) => (
+                      myPermissions.map(p => (
                         <Card key={p.id} className="border-0 shadow-md">
                           <CardContent className="p-4">
                             <div className="flex items-center justify-between mb-2">
@@ -983,7 +1156,7 @@ export default function EmployeePortalPage() {
                               <div className="p-1.5 rounded bg-blue-500/10">
                                 <p className="text-[10px] text-muted-foreground">{lang === 'ar' ? 'المدة' : 'Duration'}</p>
                                 <p className="text-xs font-bold text-blue-500 font-mono">
-                                  {p.return_time ? (() => {
+                                  {p.return_time && p.leave_time ? (() => {
                                     const [lh, lm] = p.leave_time.split(':').map(Number)
                                     const [rh, rm] = p.return_time.split(':').map(Number)
                                     const mins = (rh * 60 + rm) - (lh * 60 + lm)

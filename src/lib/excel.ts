@@ -1,13 +1,16 @@
 import * as XLSX from 'xlsx'
 
-export function exportToExcel(data: any[], filename: string, sheetName: string = 'Sheet1') {
+type ExcelRow = Record<string, string | number>
+type ParsedRow = Record<string, string>
+
+export function exportToExcel<T extends ExcelRow>(data: T[], filename: string, sheetName: string = 'Sheet1') {
   const ws = XLSX.utils.json_to_sheet(data)
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, sheetName)
   XLSX.writeFile(wb, `${filename}.xlsx`)
 }
 
-export function parseExcelFile(file: File): Promise<any[]> {
+export function parseExcelFile(file: File): Promise<ParsedRow[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = (e) => {
@@ -16,7 +19,7 @@ export function parseExcelFile(file: File): Promise<any[]> {
         const workbook = XLSX.read(data, { type: 'array' })
         const firstSheet = workbook.SheetNames[0]
         const worksheet = workbook.Sheets[firstSheet]
-        const jsonData = XLSX.utils.sheet_to_json(worksheet)
+        const jsonData = XLSX.utils.sheet_to_json<ParsedRow>(worksheet)
         resolve(jsonData)
       } catch (err) {
         reject(err)

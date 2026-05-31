@@ -1,12 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
-
-function getSecret() {
-  const secret = process.env.JWT_SECRET
-  if (!secret) throw new Error('JWT_SECRET environment variable is required')
-  return new TextEncoder().encode(secret)
-}
+import { getJwtSecret } from '@/lib/jwt'
 
 // Fully public
 const PUBLIC_PATHS = ['/login', '/employee-login', '/api/auth']
@@ -31,17 +26,27 @@ export async function proxy(request: NextRequest) {
     return response
   }
 
-  // Block external API requests (CORS-like protection)
-  if (pathname.startsWith('/api/') && !pathname.startsWith('/api/auth')) {
+  // Cross-origin protection for ALL API routes (including /api/auth, so login/logout
+  // POSTs are covered too). Requests with no Origin header (server-side, curl) are
+  // allowed; when present, the Origin host must match the request Host or an
+  // allow-listed host from APP_URL/ALLOWED_ORIGINS.
+  if (pathname.startsWith('/api/')) {
     const origin = request.headers.get('origin')
-    const referer = request.headers.get('referer')
     const host = request.headers.get('host') || ''
 
-    // Allow same-origin requests and requests with no origin (server-side, curl for testing)
     if (origin) {
+      const allowedHosts = new Set<string>([host])
+      for (const envUrl of [process.env.APP_URL, ...(process.env.ALLOWED_ORIGINS?.split(',') || [])]) {
+        if (!envUrl) continue
+        try {
+          allowedHosts.add(new URL(envUrl.trim()).host)
+        } catch {
+          /* ignore malformed env entry */
+        }
+      }
       try {
         const originHost = new URL(origin).host
-        if (originHost !== host) {
+        if (!allowedHosts.has(originHost)) {
           return addSecurityHeaders(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
         }
       } catch {
@@ -68,7 +73,7 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(new URL('/employee-login', request.url))
     }
     try {
-      await jwtVerify(empToken, getSecret())
+      await jwtVerify(empToken, getJwtSecret())
       return NextResponse.next()
     } catch {
       return NextResponse.redirect(new URL('/employee-login', request.url))
@@ -86,7 +91,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
   try {
-    await jwtVerify(adminToken, getSecret())
+    await jwtVerify(adminToken, getJwtSecret())
     return NextResponse.next()
   } catch {
     const empToken = request.cookies.get('emp-auth-token')?.value

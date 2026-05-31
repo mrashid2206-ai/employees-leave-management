@@ -2,9 +2,8 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
 import { getEmployees, getLeaveRequests, getLeaveTypes, getSettings, getDepartments } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
 

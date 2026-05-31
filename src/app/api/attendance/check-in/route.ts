@@ -1,47 +1,26 @@
 import { NextResponse } from 'next/server'
 import pool, { omanToday, omanTime } from '@/lib/db'
 import { verifyAnyAuth, unauthorized, forbidden } from '@/lib/api-auth'
+import { ensureAttendanceLocationColumns, ensureFractionalLeaveColumns } from '@/lib/ensure-schema'
+import { isOffDay, computeWorkHours, computeOvertime, evaluateLocation } from '@/lib/attendance-calc'
 
-function getDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371000 // Earth's radius in meters
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLng = (lng2 - lng1) * Math.PI / 180
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLng/2) * Math.sin(dLng/2)
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
-  return R * c
-}
-
-async function isOffDay(dateStr: string): Promise<boolean> {
-  // Check holidays
-  const { rows: holidays } = await pool.query('SELECT id FROM holidays WHERE date = $1', [dateStr])
-  if (holidays.length > 0) return true
-
-  // Check working days from settings
-  const { rows: settings } = await pool.query('SELECT work_days FROM settings LIMIT 1')
-  const workDays = settings[0]?.work_days?.split(',').map(Number) || [0,1,2,3,4]
-  const dayOfWeek = new Date(dateStr).getDay()
-  return !workDays.includes(dayOfWeek)
+function clientIpOf(request: Request): string {
+  return (
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    'unknown'
+  )
 }
 
 export async function POST(request: Request) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
 
-  // Ensure location columns exist
-  await pool.query(`
-    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS check_in_lat DECIMAL(10,7),
-    ADD COLUMN IF NOT EXISTS check_in_lng DECIMAL(10,7),
-    ADD COLUMN IF NOT EXISTS check_in_ip VARCHAR(100),
-    ADD COLUMN IF NOT EXISTS is_offsite BOOLEAN DEFAULT FALSE
-  `).catch(() => {})
+  await ensureAttendanceLocationColumns().catch(() => {})
 
   const { employee_id, action, latitude, longitude } = await request.json()
 
-  const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-                   request.headers.get('x-real-ip') ||
-                   'unknown'
+  const clientIp = clientIpOf(request)
 
   // For employees, verify they can only check in for themselves
   if (user.role === 'employee' && user.id !== employee_id) return forbidden()
@@ -72,7 +51,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'already_checked_in', time: existing[0].check_in }, { status: 409 })
     }
 
-    // Check for approved leave today
+    // Handle any approved leave covering today
+    await ensureFractionalLeaveColumns().catch(() => {})
     let leaveCancelled = false
     const { rows: todayLeaves } = await pool.query(
       "SELECT id, days_count, start_date::text as start_date, end_date::text as end_date, leave_type_id FROM leave_requests WHERE employee_id = $1 AND status = 'approved' AND start_date <= $2 AND end_date >= $2",
@@ -80,10 +60,25 @@ export async function POST(request: Request) {
     )
     for (const leave of todayLeaves) {
       if (parseFloat(leave.days_count) <= 1) {
-        // Single-day leave: auto-cancel (employee showed up)
-        await pool.query("UPDATE leave_requests SET status = 'cancelled', updated_at = NOW() WHERE id = $1", [leave.id])
-        await pool.query('UPDATE employees SET leave_balance = leave_balance + $1 WHERE id = $2', [leave.days_count, employee_id])
-        leaveCancelled = true
+        // Single-day leave: auto-cancel and refund balance atomically + idempotently
+        // (the UPDATE ... WHERE status='approved' RETURNING guards against double refund).
+        const client = await pool.connect()
+        try {
+          await client.query('BEGIN')
+          const upd = await client.query(
+            "UPDATE leave_requests SET status = 'cancelled', updated_at = NOW() WHERE id = $1 AND status = 'approved' RETURNING days_count",
+            [leave.id]
+          )
+          if ((upd.rowCount || 0) === 1) {
+            await client.query('UPDATE employees SET leave_balance = leave_balance + $1 WHERE id = $2', [upd.rows[0].days_count, employee_id])
+            leaveCancelled = true
+          }
+          await client.query('COMMIT')
+        } catch {
+          await client.query('ROLLBACK')
+        } finally {
+          client.release()
+        }
       } else {
         // Multi-day leave: block check-in, employee must ask admin to modify leave first
         return NextResponse.json({
@@ -96,44 +91,18 @@ export async function POST(request: Request) {
     }
 
     // Location verification
-    let isOffsite = false
-    await pool.query('ALTER TABLE settings ADD COLUMN IF NOT EXISTS block_offsite_checkin BOOLEAN DEFAULT FALSE').catch(() => {})
-    const { rows: locSettings } = await pool.query('SELECT office_lat, office_lng, office_radius, office_ip, block_offsite_checkin FROM settings LIMIT 1')
+    const { rows: locSettings } = await pool.query('SELECT office_lat, office_lng, office_radius, office_ip, block_offsite_checkin FROM settings ORDER BY id LIMIT 1')
     const officeLoc = locSettings[0]
+    const { configured, onsite } = officeLoc
+      ? evaluateLocation(officeLoc, latitude ?? null, longitude ?? null, clientIp)
+      : { configured: false, onsite: true }
+    const isOffsite = configured ? !onsite : false
 
-    if (officeLoc && (officeLoc.office_lat || officeLoc.office_ip)) {
-      let locationMatch = false
-      let ipMatch = false
-
-      // Check GPS if coordinates provided
-      if (latitude && longitude && officeLoc.office_lat && officeLoc.office_lng) {
-        const distance = getDistanceMeters(latitude, longitude, parseFloat(officeLoc.office_lat), parseFloat(officeLoc.office_lng))
-        locationMatch = distance <= (officeLoc.office_radius || 200)
-      }
-
-      // Check IP if configured
-      if (officeLoc.office_ip && clientIp !== 'unknown') {
-        ipMatch = clientIp === officeLoc.office_ip
-      }
-
-      // On-site if either matches. If neither configured, assume on-site.
-      isOffsite = !locationMatch && !ipMatch
-      // If only IP is configured and no GPS, check IP only
-      if (!officeLoc.office_lat && officeLoc.office_ip) {
-        isOffsite = !ipMatch
-      }
-      // If only GPS is configured and no IP, check GPS only
-      if (officeLoc.office_lat && !officeLoc.office_ip) {
-        isOffsite = !locationMatch
-      }
-
-      // Block off-site check-in if enabled
-      if (isOffsite && officeLoc.block_offsite_checkin) {
-        return NextResponse.json({
-          error: 'offsite_blocked',
-          message: 'Check-in is only allowed from the office location. Please make sure you are at the office and GPS is enabled.',
-        }, { status: 403 })
-      }
+    if (isOffsite && officeLoc?.block_offsite_checkin) {
+      return NextResponse.json({
+        error: 'offsite_blocked',
+        message: 'Check-in is only allowed from the office location. Please make sure you are at the office and GPS is enabled.',
+      }, { status: 403 })
     }
 
     const { rows } = await pool.query(`
@@ -149,22 +118,15 @@ export async function POST(request: Request) {
     })
 
   } else if (action === 'check-out') {
-    // Location verification for checkout
-    const { rows: coLocSettings } = await pool.query('SELECT office_lat, office_lng, office_radius, office_ip, block_offsite_checkin FROM settings LIMIT 1')
+    // Location verification for checkout (shared logic with check-in)
+    const { rows: coLocSettings } = await pool.query('SELECT office_lat, office_lng, office_radius, office_ip, block_offsite_checkin FROM settings ORDER BY id LIMIT 1')
     const coOfficeLoc = coLocSettings[0]
-    if (coOfficeLoc && coOfficeLoc.block_offsite_checkin && (coOfficeLoc.office_lat || coOfficeLoc.office_ip)) {
-      let coLocationMatch = false
-      let coIpMatch = false
-      if (latitude && longitude && coOfficeLoc.office_lat && coOfficeLoc.office_lng) {
-        coLocationMatch = getDistanceMeters(latitude, longitude, parseFloat(coOfficeLoc.office_lat), parseFloat(coOfficeLoc.office_lng)) <= (coOfficeLoc.office_radius || 200)
-      }
-      if (coOfficeLoc.office_ip && clientIp !== 'unknown') {
-        coIpMatch = clientIp === coOfficeLoc.office_ip
-      }
-      const coOffsite = !coLocationMatch && !coIpMatch
-      if (!coOfficeLoc.office_lat && coOfficeLoc.office_ip) { if (!coIpMatch) { return NextResponse.json({ error: 'offsite_blocked', message: 'Check-out is only allowed from the office location.' }, { status: 403 }) } }
-      else if (coOfficeLoc.office_lat && !coOfficeLoc.office_ip) { if (!coLocationMatch) { return NextResponse.json({ error: 'offsite_blocked', message: 'Check-out is only allowed from the office location. Please enable GPS.' }, { status: 403 }) } }
-      else if (coOffsite) { return NextResponse.json({ error: 'offsite_blocked', message: 'Check-out is only allowed from the office location.' }, { status: 403 }) }
+    const co = coOfficeLoc
+      ? evaluateLocation(coOfficeLoc, latitude ?? null, longitude ?? null, clientIp)
+      : { configured: false, onsite: true }
+    const coOffsite = co.configured ? !co.onsite : false
+    if (coOffsite && coOfficeLoc?.block_offsite_checkin) {
+      return NextResponse.json({ error: 'offsite_blocked', message: 'Check-out is only allowed from the office location. Please make sure you are at the office and GPS is enabled.' }, { status: 403 })
     }
 
     const { rows: existing } = await pool.query(
@@ -180,32 +142,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'already_checked_out', time: existing[0].check_out }, { status: 409 })
     }
 
-    const [inH, inM] = existing[0].check_in.split(':').map(Number)
-    const [outH, outM] = currentTime.split(':').map(Number)
-    let workMinutes = (outH * 60 + outM) - (inH * 60 + inM)
-    if (workMinutes < 0) {
-      workMinutes += 24 * 60 // Overnight shift: add 24 hours
-    }
-    if (workMinutes <= 0) {
+    const workHours = computeWorkHours(existing[0].check_in, currentTime)
+    if (workHours === null) {
+      // Non-positive or implausibly long (>16h) duration — reject rather than inflate hours.
       return NextResponse.json({ error: 'check_out_before_check_in' }, { status: 400 })
     }
-    const workHours = Math.round(workMinutes / 60 * 100) / 100
 
     // If holiday work, ALL hours are overtime. Otherwise, overtime = hours above work_hours_per_day
-    let overtime: number
-    if (holidayWork) {
-      overtime = workHours
-    } else {
-      const { rows: settings } = await pool.query('SELECT work_hours_per_day FROM settings LIMIT 1')
-      const normalHours = settings[0]?.work_hours_per_day || 8
-      overtime = Math.max(0, Math.round((workHours - normalHours) * 100) / 100)
+    let normalHours = 8
+    if (!holidayWork) {
+      const { rows: settings } = await pool.query('SELECT work_hours_per_day FROM settings ORDER BY id LIMIT 1')
+      normalHours = settings[0]?.work_hours_per_day || 8
     }
+    const overtime = computeOvertime(workHours, normalHours, holidayWork)
 
     const { rows } = await pool.query(`
-      UPDATE attendance SET check_out = $1, work_hours = $2, overtime_hours = $3
+      UPDATE attendance SET check_out = $1, work_hours = $2, overtime_hours = $3, check_out_lat = $6, check_out_lng = $7, check_out_ip = $8, is_offsite_checkout = $9
       WHERE employee_id = $4 AND date = $5
       RETURNING id, date::text as date, check_in::text as check_in, check_out::text as check_out, work_hours, overtime_hours, is_holiday_work
-    `, [currentTime, workHours, overtime, employee_id, today])
+    `, [currentTime, workHours, overtime, employee_id, today, latitude || null, longitude || null, clientIp, coOffsite])
 
     // Auto-close any open permission (employee forgot to click "I'm Back")
     await pool.query(

@@ -10,7 +10,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const body = await request.json()
 
   if (body.return_time) {
-    // Employee marking their return
+    // Employee marking their return — must own the permission record (admins may edit any).
+    if (user.role === 'employee') {
+      const { rows: owner } = await pool.query('SELECT employee_id FROM permissions WHERE id = $1', [id])
+      if (owner.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      if (owner[0].employee_id !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
     await pool.query('UPDATE permissions SET return_time = $1 WHERE id = $2', [body.return_time, id])
   }
   if (body.status) {

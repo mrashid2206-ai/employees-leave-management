@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useMemo } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,11 +14,28 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Plus, Trash2, Pencil, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  getEmployees, getLeaveRequests, getLeaveTypes, createLeaveRequest, deleteLeaveRequest, checkLeaveConflict, updateLeaveStatus
+  getEmployees, getLeaveRequests, getLeaveTypes, deleteLeaveRequest, checkLeaveConflict, updateLeaveStatus
 } from '@/lib/api'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { useLanguage, useT } from '@/lib/language-context'
+
+interface CreateLeavePayload {
+  employee_id: number
+  leave_type_id: number
+  start_date: string
+  end_date: string
+  days_count: number
+  notes?: string
+  is_half_day: boolean
+}
+
+interface CreateLeaveResponse {
+  error?: string
+  warning?: boolean
+  absentCount?: number
+  maxAbsent?: number
+}
 
 function calculateDaysCount(start: string, end: string): number {
   if (!start || !end) return 0
@@ -45,7 +62,6 @@ export default function LeavesPage() {
   const { dir, lang } = useLanguage()
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [conflict, setConflict] = useState<{ conflict: boolean; message: string; absentCount: number } | null>(null)
-  const [checkingConflict, setCheckingConflict] = useState(false)
   const [workingDays, setWorkingDays] = useState<number | null>(null)
 
   const [filterYear, setFilterYear] = useState<string>('all')
@@ -69,14 +85,22 @@ export default function LeavesPage() {
 
   // Fetch working days when dates change
   useEffect(() => {
-    if (form.start_date && form.end_date && new Date(form.end_date) >= new Date(form.start_date)) {
-      fetch(`/api/working-days?start=${form.start_date}&end=${form.end_date}`)
-        .then(r => r.json())
-        .then(d => setWorkingDays(d.workingDays))
-        .catch(() => setWorkingDays(null))
-    } else {
-      setWorkingDays(null)
+    let cancelled = false
+    async function loadWorkingDays() {
+      if (form.start_date && form.end_date && new Date(form.end_date) >= new Date(form.start_date)) {
+        try {
+          const r = await fetch(`/api/working-days?start=${form.start_date}&end=${form.end_date}`)
+          const d: { workingDays: number } = await r.json()
+          if (!cancelled) setWorkingDays(d.workingDays)
+        } catch {
+          if (!cancelled) setWorkingDays(null)
+        }
+      } else {
+        if (!cancelled) setWorkingDays(null)
+      }
     }
+    loadWorkingDays()
+    return () => { cancelled = true }
   }, [form.start_date, form.end_date])
 
   // Get selected employee's balance
@@ -88,34 +112,34 @@ export default function LeavesPage() {
 
   // Check conflict when employee + dates change
   useEffect(() => {
+    let cancelled = false
     async function check() {
       if (form.employee_id && form.start_date && form.end_date) {
-        setCheckingConflict(true)
         try {
           const result = await checkLeaveConflict(
             parseInt(form.employee_id),
             form.start_date,
             form.end_date
           )
-          setConflict(result)
+          if (!cancelled) setConflict(result)
         } catch {
-          setConflict(null)
+          if (!cancelled) setConflict(null)
         }
-        setCheckingConflict(false)
       } else {
-        setConflict(null)
+        if (!cancelled) setConflict(null)
       }
     }
     check()
+    return () => { cancelled = true }
   }, [form.employee_id, form.start_date, form.end_date])
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => fetch('/api/leaves', {
+    mutationFn: (data: CreateLeavePayload) => fetch('/api/leaves', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }).then(async r => {
-      const json = await r.json()
+      const json: CreateLeaveResponse = await r.json()
       if (!r.ok) {
         // If it's a dept limit warning, ask admin to confirm override
         if (json.warning && json.absentCount) {
@@ -129,7 +153,10 @@ export default function LeavesPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ ...data, force: true }),
             })
-            if (!retryRes.ok) throw new Error((await retryRes.json()).error)
+            if (!retryRes.ok) {
+              const retryJson: CreateLeaveResponse = await retryRes.json()
+              throw new Error(retryJson.error)
+            }
             return retryRes.json()
           }
           throw new Error('Cancelled by admin')
@@ -182,7 +209,7 @@ export default function LeavesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ start_date, end_date }),
       }).then(r => {
-        if (!r.ok) return r.json().then(d => { throw new Error(d.error) })
+        if (!r.ok) return r.json().then((d: { error?: string }) => { throw new Error(d.error) })
         return r.json()
       }),
     onSuccess: () => {
@@ -191,7 +218,7 @@ export default function LeavesPage() {
       setEditLeave(null)
       toast.success(t('updatedSuccess'))
     },
-    onError: (err: any) => toast.error(err.message || t('error')),
+    onError: (err: Error) => toast.error(err.message || t('error')),
   })
 
   function handleSubmit() {
@@ -335,7 +362,7 @@ export default function LeavesPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
-        <Select value={filterYear} onValueChange={v => setFilterYear(v ?? 'all')}>
+        <Select value={filterYear} onValueChange={v => { setFilterYear(v ?? 'all'); setSelectedIds([]) }}>
           <SelectTrigger className="w-32">
             <SelectValue placeholder={lang === 'ar' ? 'السنة' : 'Year'} />
           </SelectTrigger>
@@ -346,7 +373,7 @@ export default function LeavesPage() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={filterMonth} onValueChange={v => setFilterMonth(v ?? 'all')}>
+        <Select value={filterMonth} onValueChange={v => { setFilterMonth(v ?? 'all'); setSelectedIds([]) }}>
           <SelectTrigger className="w-40">
             <SelectValue placeholder={lang === 'ar' ? 'الشهر' : 'Month'} />
           </SelectTrigger>

@@ -7,10 +7,22 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { CheckCircle, XCircle, Clock, Trash2 } from 'lucide-react'
+import { CheckCircle, XCircle, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage, useT } from '@/lib/language-context'
 import { getDepartments, getEmployees } from '@/lib/api'
+import type { Employee, Department } from '@/lib/types'
+
+interface Permission {
+  id: number
+  employee_id: number
+  employee?: { name: string }
+  date: string
+  leave_time: string
+  return_time: string | null
+  reason: string | null
+  status: string
+}
 
 export default function PermissionsPage() {
   const t = useT()
@@ -19,7 +31,7 @@ export default function PermissionsPage() {
   const [deptFilter, setDeptFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
 
-  const { data: permissions = [] } = useQuery({
+  const { data: permissions = [] } = useQuery<Permission[]>({
     queryKey: ['permissions'],
     queryFn: () => fetch('/api/permissions').then(r => r.json()),
   })
@@ -49,17 +61,17 @@ export default function PermissionsPage() {
 
   const filtered = useMemo(() => {
     let data = permissions
-    if (statusFilter !== 'all') data = data.filter((p: any) => p.status === statusFilter)
+    if (statusFilter !== 'all') data = data.filter((p) => p.status === statusFilter)
     if (deptFilter !== 'all') {
-      const deptEmpIds = employees.filter((e: any) => e.department_id === parseInt(deptFilter)).map((e: any) => e.id)
-      data = data.filter((p: any) => deptEmpIds.includes(p.employee_id))
+      const deptEmpIds = employees.filter((e: Employee) => e.department_id === parseInt(deptFilter)).map((e: Employee) => e.id)
+      data = data.filter((p) => deptEmpIds.includes(p.employee_id))
     }
     return data
   }, [permissions, statusFilter, deptFilter, employees])
 
   // Stats
-  const pendingCount = permissions.filter((p: any) => p.status === 'pending').length
-  const todayCount = permissions.filter((p: any) => p.date === new Date().toISOString().split('T')[0]).length
+  const pendingCount = permissions.filter((p) => p.status === 'pending').length
+  const todayCount = permissions.filter((p) => p.date === new Date().toISOString().split('T')[0]).length
 
   function calcAbsentHours(leaveTime: string, returnTime: string | null): string {
     if (!returnTime) return '-'
@@ -99,7 +111,7 @@ export default function PermissionsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t('allDepts')}</SelectItem>
-              {departments.map((d: any) => (
+              {departments.map((d: Department) => (
                 <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
               ))}
             </SelectContent>
@@ -124,13 +136,13 @@ export default function PermissionsPage() {
         <Card className="border-0 shadow-md">
           <CardContent className="p-4 text-center">
             <p className="text-xs text-muted-foreground">{t('approved')}</p>
-            <p className="text-2xl font-bold text-emerald-500">{permissions.filter((p: any) => p.status === 'approved').length}</p>
+            <p className="text-2xl font-bold text-emerald-500">{permissions.filter((p) => p.status === 'approved').length}</p>
           </CardContent>
         </Card>
         <Card className="border-0 shadow-md">
           <CardContent className="p-4 text-center">
             <p className="text-xs text-muted-foreground">{lang === 'ar' ? 'لم يعودوا' : 'Not Returned'}</p>
-            <p className="text-2xl font-bold text-rose-500">{permissions.filter((p: any) => p.status === 'approved' && !p.return_time).length}</p>
+            <p className="text-2xl font-bold text-rose-500">{permissions.filter((p) => p.status === 'approved' && !p.return_time).length}</p>
           </CardContent>
         </Card>
       </div>
@@ -158,7 +170,7 @@ export default function PermissionsPage() {
                     <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">{t('noData')}</TableCell>
                   </TableRow>
                 ) : (
-                  filtered.map((p: any) => (
+                  filtered.map((p) => (
                     <TableRow key={p.id}>
                       <TableCell className="font-medium">{p.employee?.name}</TableCell>
                       <TableCell className="text-center font-mono text-sm">{p.date}</TableCell>

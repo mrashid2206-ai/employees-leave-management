@@ -30,10 +30,11 @@ CREATE TABLE IF NOT EXISTS employees (
   id SERIAL PRIMARY KEY,
   name VARCHAR(200) NOT NULL,
   department_id INT NOT NULL REFERENCES departments(id),
-  leave_balance INT NOT NULL DEFAULT 30,
+  leave_balance NUMERIC(5,1) NOT NULL DEFAULT 30,
   is_active BOOLEAN DEFAULT TRUE,
   username VARCHAR(100) UNIQUE,
   password_hash VARCHAR(255) DEFAULT '$2a$10$defaulthash',
+  must_change_password BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -42,7 +43,7 @@ CREATE TABLE IF NOT EXISTS employees (
 CREATE TABLE IF NOT EXISTS leave_types (
   id SERIAL PRIMARY KEY,
   name_ar VARCHAR(100) NOT NULL,
-  name_en VARCHAR(100) NOT NULL,
+  name_en VARCHAR(100) NOT NULL UNIQUE,
   color VARCHAR(7) NOT NULL
 );
 
@@ -53,7 +54,8 @@ CREATE TABLE IF NOT EXISTS leave_requests (
   leave_type_id INT NOT NULL REFERENCES leave_types(id),
   start_date DATE NOT NULL,
   end_date DATE NOT NULL,
-  days_count INT NOT NULL,
+  days_count NUMERIC(5,1) NOT NULL,
+  is_half_day BOOLEAN DEFAULT FALSE,
   notes TEXT,
   status VARCHAR(20) DEFAULT 'pending',
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -80,7 +82,7 @@ CREATE TABLE IF NOT EXISTS tardiness_log (
 CREATE TABLE IF NOT EXISTS holidays (
   id SERIAL PRIMARY KEY,
   name VARCHAR(200) NOT NULL,
-  date DATE NOT NULL,
+  date DATE NOT NULL UNIQUE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -218,3 +220,12 @@ INSERT INTO tardiness_log (employee_id, date, time, minutes_late, hours_late_dec
 (5, '2026-04-02', '08:15:00', 15, 0.01042, NULL),
 (6, '2026-04-02', '08:15:00', 15, 0.01042, NULL)
 ON CONFLICT DO NOTHING;
+
+-- ============================================
+-- After running this once, also run
+-- supabase/migrations/002_hardening.sql to add
+-- audit_log, permissions, employee_notifications,
+-- location/checkout columns, must_change_password,
+-- last_reset_year and the UNIQUE indexes.
+-- It is idempotent and safe to re-run.
+-- ============================================

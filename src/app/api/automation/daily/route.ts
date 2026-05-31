@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import pool, { omanToday } from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
 import { logAudit } from '@/lib/audit'
+import { ensureFractionalLeaveColumns } from '@/lib/ensure-schema'
+import { LEAVE_TYPE_ANNUAL, TARDINESS_GRACE_MINUTES } from '@/lib/constants'
 
 export async function POST(request: Request) {
   const admin = await verifyAdmin(request)
@@ -10,6 +12,14 @@ export async function POST(request: Request) {
   const processDate = date || omanToday()
 
   await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_tardiness_unique ON tardiness_log (employee_id, date)').catch(() => {})
+  await ensureFractionalLeaveColumns().catch(() => {})
+
+  // Resolve the Annual leave type id instead of hardcoding 1.
+  const { rows: annualType } = await pool.query(
+    'SELECT id FROM leave_types WHERE name_en = $1 ORDER BY id LIMIT 1',
+    [LEAVE_TYPE_ANNUAL]
+  )
+  const annualLeaveTypeId = annualType[0]?.id || 1
 
   const results = {
     absentMarked: 0,
@@ -56,8 +66,8 @@ export async function POST(request: Request) {
   const endH = startH + workHoursDay
   const workEndTime = `${String(endH).padStart(2, '0')}:30:00`
 
-  // Skip weekends
-  const dayOfWeek = new Date(processDate).getDay()
+  // Skip weekends (read the UTC weekday so the result is server-tz independent)
+  const dayOfWeek = new Date(`${processDate}T00:00:00Z`).getUTCDay()
   const isWeekend = !workDays.includes(dayOfWeek)
 
   if (!isHoliday && !isWeekend) {
@@ -71,7 +81,8 @@ export async function POST(request: Request) {
       }
 
       if (!attendedMap.has(emp.id)) {
-        // No attendance record — mark as absent
+        // No attendance record — mark absent, then (atomically) auto-deduct one annual
+        // leave day if the employee still has balance and no leave already covers the day.
         await pool.query(`
           INSERT INTO attendance (employee_id, date, status)
           VALUES ($1, $2, 'absent')
@@ -79,28 +90,36 @@ export async function POST(request: Request) {
         `, [emp.id, processDate])
         results.absentMarked++
 
-        // Auto-deduct: create an approved annual leave for this day (only if balance > 0)
-        const { rows: empBalance } = await pool.query('SELECT leave_balance FROM employees WHERE id = $1', [emp.id])
-        const balance = empBalance[0]?.leave_balance || 0
-        const { rows: existingLeave } = await pool.query(
-          `SELECT id FROM leave_requests WHERE employee_id = $1 AND start_date = $2 AND end_date = $2`,
-          [emp.id, processDate]
-        )
-        if (existingLeave.length === 0 && balance > 0) {
-          await pool.query(`
+        const client = await pool.connect()
+        try {
+          await client.query('BEGIN')
+          const { rows: empBalance } = await client.query('SELECT leave_balance FROM employees WHERE id = $1 FOR UPDATE', [emp.id])
+          const balance = parseFloat(empBalance[0]?.leave_balance ?? '0')
+          // Idempotent: insert the auto-leave only if none already exists for the day.
+          const inserted = await client.query(`
             INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, days_count, notes, status)
-            VALUES ($1, 1, $2, $2, 1, 'Auto-deducted: absent without leave', 'approved')
-          `, [emp.id, processDate])
-          await pool.query('UPDATE employees SET leave_balance = leave_balance - 1 WHERE id = $1', [emp.id])
-          results.leaveDeducted++
+            SELECT $1, $2, $3, $3, 1, 'Auto-deducted: absent without leave', 'approved'
+            WHERE $4 > 0
+              AND NOT EXISTS (SELECT 1 FROM leave_requests WHERE employee_id = $1 AND start_date = $3 AND end_date = $3)
+            RETURNING id
+          `, [emp.id, annualLeaveTypeId, processDate, balance])
+          if ((inserted.rowCount || 0) > 0) {
+            await client.query('UPDATE employees SET leave_balance = leave_balance - 1 WHERE id = $1', [emp.id])
+            results.leaveDeducted++
+          }
+          await client.query('COMMIT')
+        } catch {
+          await client.query('ROLLBACK')
+        } finally {
+          client.release()
         }
       } else {
-        // Has attendance — check if late (after work start time)
+        // Has attendance — check if late (after work start time + grace)
         const record = attendedMap.get(emp.id)
         if (record?.check_in && !record.excused) {
           const [h, m] = record.check_in.split(':').map(Number)
           const minutesLate = (h * 60 + m) - workStartMinutes
-          if (minutesLate > 0) {
+          if (minutesLate > TARDINESS_GRACE_MINUTES) {
             // Check if tardiness record already exists
             const { rows: existing } = await pool.query(
               'SELECT id FROM tardiness_log WHERE employee_id = $1 AND date = $2',

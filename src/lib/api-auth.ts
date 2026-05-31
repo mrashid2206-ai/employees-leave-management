@@ -1,11 +1,6 @@
 import { jwtVerify } from 'jose'
 import { NextResponse } from 'next/server'
-
-function getSecret() {
-  const secret = process.env.JWT_SECRET
-  if (!secret) throw new Error('JWT_SECRET environment variable is required')
-  return new TextEncoder().encode(secret)
-}
+import { getJwtSecret, getCookie } from '@/lib/jwt'
 
 export interface AuthUser {
   id?: number
@@ -15,17 +10,11 @@ export interface AuthUser {
   department_id?: number
 }
 
-function getCookie(request: Request, name: string): string | undefined {
-  const cookieHeader = request.headers.get('cookie') || ''
-  const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`))
-  return match ? match[1] : undefined
-}
-
 export async function verifyAdmin(request: Request): Promise<AuthUser | null> {
   const token = getCookie(request, 'auth-token')
   if (!token) return null
   try {
-    const { payload } = await jwtVerify(token, getSecret())
+    const { payload } = await jwtVerify(token, getJwtSecret())
     if (payload.role !== 'admin') return null
     return payload as unknown as AuthUser
   } catch {
@@ -37,7 +26,9 @@ export async function verifyEmployee(request: Request): Promise<AuthUser | null>
   const token = getCookie(request, 'emp-auth-token')
   if (!token) return null
   try {
-    const { payload } = await jwtVerify(token, getSecret())
+    const { payload } = await jwtVerify(token, getJwtSecret())
+    // Assert this is actually an employee token (don't trust any signed token).
+    if (payload.role !== 'employee' || typeof payload.id !== 'number') return null
     return payload as unknown as AuthUser
   } catch {
     return null

@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Trophy, Medal, Award, TrendingUp, TrendingDown } from 'lucide-react'
+import { Trophy, Medal, Award } from 'lucide-react'
 import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
 
@@ -32,7 +32,7 @@ export default function RankingPage() {
 
     return activeEmps.map(emp => {
       const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
-      const usedDays = empLeaves.reduce((sum, l) => sum + l.days_count, 0)
+      const usedDays = empLeaves.reduce((sum, l) => sum + Number(l.days_count), 0)
       const empTardiness = tardiness.filter(t => t.employee_id === emp.id)
       const tardMinutes = empTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
       const tardCount = empTardiness.length
@@ -42,8 +42,9 @@ export default function RankingPage() {
       // Leave penalty: -(used_days / max_days) * 30 (max 30 points)
       // Tardiness penalty: -(tardiness_minutes / (work_hours * 60)) * 40 (max 40 points)
       // Frequency penalty: -(tard_count * 2) (max 30 points)
-      const leavePenalty = Math.min(30, (usedDays / maxPossibleDays) * 30)
-      const tardPenalty = Math.min(40, (tardMinutes / (workHoursPerDay * 60)) * 40)
+      // Guard the denominators so a 0 setting can't produce NaN scores (0/0).
+      const leavePenalty = maxPossibleDays > 0 ? Math.min(30, (usedDays / maxPossibleDays) * 30) : 0
+      const tardPenalty = workHoursPerDay > 0 ? Math.min(40, (tardMinutes / (workHoursPerDay * 60)) * 40) : 0
       const freqPenalty = Math.min(30, tardCount * 2)
 
       const score = Math.max(0, Math.round(100 - leavePenalty - tardPenalty - freqPenalty))
@@ -80,7 +81,6 @@ export default function RankingPage() {
 
   // Top 3 podium
   const top3 = rankings.slice(0, 3)
-  const rest = rankings.slice(3)
 
   return (
     <div className="space-y-6">
@@ -108,7 +108,6 @@ export default function RankingPage() {
         <div className="grid grid-cols-3 gap-4">
           {[top3[1], top3[0], top3[2]].map((emp, visualIdx) => {
             const actualRank = visualIdx === 1 ? 1 : visualIdx === 0 ? 2 : 3
-            const heights = ['h-32', 'h-40', 'h-28']
             return (
               <Card key={emp.id} className={`border-0 shadow-md flex flex-col items-center justify-end ${visualIdx === 1 ? 'order-1' : visualIdx === 0 ? 'order-0' : 'order-2'}`}>
                 <CardContent className="p-4 text-center w-full">

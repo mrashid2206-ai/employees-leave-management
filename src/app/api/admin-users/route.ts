@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
 import { logAudit } from '@/lib/audit'
+import { MIN_PASSWORD_LENGTH } from '@/lib/constants'
 
 export async function GET(request: Request) {
   const admin = await verifyAdmin(request)
@@ -35,8 +36,8 @@ export async function POST(request: Request) {
   if (!username || !password || !name) {
     return NextResponse.json({ error: 'Username, password, and name are required' }, { status: 400 })
   }
-  if (password.length < 6) {
-    return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 })
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return NextResponse.json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }, { status: 400 })
   }
 
   await pool.query(`
@@ -60,8 +61,9 @@ export async function POST(request: Request) {
     )
     await logAudit('admin_user_created', admin.username, 'admin', `Created admin user: ${username}`)
     return NextResponse.json(rows[0])
-  } catch (err: any) {
-    if (err.message?.includes('duplicate') || err.message?.includes('unique')) {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    if (msg.includes('duplicate') || msg.includes('unique')) {
       return NextResponse.json({ error: 'Username already exists' }, { status: 409 })
     }
     return NextResponse.json({ error: 'Failed to create admin user' }, { status: 500 })

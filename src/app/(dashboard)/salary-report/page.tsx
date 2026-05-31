@@ -2,25 +2,19 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
 import { Download, Printer } from 'lucide-react'
 import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings, getDepartments, getLeaveTypes } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
 import { exportToExcel } from '@/lib/excel'
-
-function formatMinutesToHHMM(minutes: number): string {
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-}
+import { computeDeduction } from '@/lib/deduction'
 
 export default function SalaryReportPage() {
   const t = useT()
-  const { lang, dir } = useLanguage()
+  const { lang } = useLanguage()
   const [deptFilter, setDeptFilter] = useState<string>('all')
 
   const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
@@ -38,13 +32,14 @@ export default function SalaryReportPage() {
       const empTardiness = tardiness.filter(t => t.employee_id === emp.id)
       const totalMinutes = empTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
       const totalHours = Math.round(totalMinutes / 60 * 100) / 100
-      const deductionRate = settings?.deduction_per_hour || 0
-      const deduction = Math.round(totalHours * deductionRate * 1000) / 1000
+      const deductionRate = Number(settings?.deduction_per_hour || 0)
+      // Shared formula so this report reconciles with every other deduction figure.
+      const deduction = computeDeduction(totalMinutes, deductionRate)
       const tardCount = empTardiness.length
 
       const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
       const unpaidTypeId = leaveTypes.find(lt => lt.name_en === 'Unpaid')?.id
-      const unpaidDays = empLeaves.filter(l => unpaidTypeId && l.leave_type_id === unpaidTypeId).reduce((sum, l) => sum + l.days_count, 0)
+      const unpaidDays = empLeaves.filter(l => unpaidTypeId && l.leave_type_id === unpaidTypeId).reduce((sum, l) => sum + Number(l.days_count), 0)
 
       return {
         id: emp.id,

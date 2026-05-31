@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { IBM_Plex_Sans_Arabic } from "next/font/google"
 import "./globals.css"
 import { QueryProvider } from "@/lib/query-provider"
@@ -17,7 +17,6 @@ export const metadata: Metadata = {
   title: "نظام إدارة الإجازات والتأخير",
   description: "Leave & Tardiness Management System",
   manifest: '/manifest.json',
-  themeColor: '#1976D2',
   icons: {
     icon: '/favicon.svg',
     apple: '/icon.svg',
@@ -27,6 +26,11 @@ export const metadata: Metadata = {
     statusBarStyle: 'default',
     title: 'EmpLeave',
   },
+}
+
+// themeColor moved out of metadata (deprecated there since Next 14) into viewport.
+export const viewport: Viewport = {
+  themeColor: '#1976D2',
 }
 
 export default function RootLayout({

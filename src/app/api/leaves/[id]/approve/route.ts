@@ -2,6 +2,17 @@ import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
 import { logAudit } from '@/lib/audit'
+import { ensureFractionalLeaveColumns } from '@/lib/ensure-schema'
+import { sendMail } from '@/lib/email'
+
+interface LeaveRow {
+  id: number
+  employee_id: number
+  status: string
+  days_count: string | number
+  start_date: string
+  end_date: string
+}
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await verifyAdmin(request)
@@ -13,10 +24,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
   }
 
+  await ensureFractionalLeaveColumns().catch(() => {})
+
   // Use transaction to prevent race condition
   const client = await pool.connect()
-  let rows: any[]
-  let currentLeave: any
+  let rows: LeaveRow[]
+  let currentLeave: LeaveRow
   let previousStatus: string
   try {
     await client.query('BEGIN')
@@ -55,7 +68,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     )
 
     if (status === 'approved' && previousStatus !== 'approved') {
-      if (empRows[0] && empRows[0].leave_balance < currentLeave.days_count) {
+      // NUMERIC columns come back as strings from pg — compare as numbers.
+      if (empRows[0] && parseFloat(empRows[0].leave_balance) < parseFloat(String(currentLeave.days_count))) {
         await client.query('ROLLBACK')
         return NextResponse.json({ error: 'Insufficient leave balance' }, { status: 400 })
       }
@@ -111,7 +125,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     )
   } catch {}
 
-  // Try to send email notification (non-blocking)
+  // Send email notification in-process (best-effort; never blocks the approval).
+  // Previously this did an authenticated self-fetch to /api/notify with no cookie,
+  // which always 401'd, so emails never sent.
   try {
     const leave = rows[0]
     const { rows: empRows } = await pool.query('SELECT name FROM employees WHERE id = $1', [leave.employee_id])
@@ -120,14 +136,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const statusText = status === 'approved' ? 'Approved ✅' : status === 'rejected' ? 'Rejected ❌' : 'Pending ⏳'
     const statusAr = status === 'approved' ? 'موافق عليها ✅' : status === 'rejected' ? 'مرفوضة ❌' : 'معلقة ⏳'
 
-    // Fire and forget — don't block the response
-    fetch(new URL('/api/notify', request.url).toString(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to: process.env.NOTIFY_EMAIL || process.env.SMTP_USER,
-        subject: `Leave Request ${statusText} - ${empName}`,
-        html: `
+    void sendMail({
+      to: process.env.NOTIFY_EMAIL || process.env.SMTP_USER,
+      subject: `Leave Request ${statusText} - ${empName}`,
+      html: `
           <div dir="rtl" style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
             <h2 style="color: #1976D2;">Leave Request Update / تحديث طلب إجازة</h2>
             <p><strong>${empName}</strong></p>
@@ -140,8 +152,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             <p style="color: #666; font-size: 12px;">Leave & Tardiness Management System</p>
           </div>
         `,
-      }),
-    }).catch(() => {})
+    })
   } catch {
     // Email failure shouldn't block the approval
   }

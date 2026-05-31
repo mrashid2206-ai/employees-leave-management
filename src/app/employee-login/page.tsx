@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,7 +10,6 @@ import { useLanguage, useT } from '@/lib/language-context'
 import { LanguageToggle } from '@/components/language-toggle'
 
 export default function EmployeeLoginPage() {
-  const router = useRouter()
   const t = useT()
   const { dir, lang } = useLanguage()
   const [username, setUsername] = useState('')
@@ -48,7 +46,7 @@ export default function EmployeeLoginPage() {
         document.cookie = `emp-user=${encodeURIComponent(JSON.stringify(data.user))};path=/;max-age=43200`
       }
       window.location.href = '/check-in'
-    } catch (err) {
+    } catch {
       setError(t('error'))
       setLoading(false)
     }
