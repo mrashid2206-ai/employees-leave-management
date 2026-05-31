@@ -1,5 +1,6 @@
 import pool, { omanToday } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
+import { logger } from '@/lib/log'
 import { ensureFractionalLeaveColumns, ensureSettingsColumns } from '@/lib/ensure-schema'
 import { LEAVE_TYPE_ANNUAL, TARDINESS_GRACE_MINUTES, AUTO_ABSENCE_LEAVE_NOTE } from '@/lib/constants'
 
@@ -103,8 +104,9 @@ export async function runDailyAutomation(date: string | undefined, actor: Actor)
             results.leaveDeducted++
           }
           await client.query('COMMIT')
-        } catch {
+        } catch (err) {
           await client.query('ROLLBACK')
+          logger.error('daily auto-absence deduction failed', err, { employeeId: emp.id, date: processDate })
         } finally {
           client.release()
         }
