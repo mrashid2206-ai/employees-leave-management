@@ -85,6 +85,17 @@ export function ensureUniqueConstraints(): Promise<void> {
   `)
 }
 
+const rateLimitRunner = once()
+export function ensureRateLimitTable(): Promise<void> {
+  return rateLimitRunner(`
+    CREATE TABLE IF NOT EXISTS rate_limits (
+      key TEXT PRIMARY KEY,
+      count INT NOT NULL DEFAULT 0,
+      reset_at TIMESTAMPTZ NOT NULL
+    )
+  `)
+}
+
 const hotIndexesRunner = once()
 export function ensureHotIndexes(): Promise<void> {
   return hotIndexesRunner(`

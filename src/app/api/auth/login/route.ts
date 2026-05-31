@@ -17,8 +17,8 @@ export async function POST(request: Request) {
   // username during a password-spray still trips the IP bucket.
   const rateKey = `admin-login:${(username || '').trim().toLowerCase()}`
   const ipKey = `admin-login-ip:${clientIp(request)}`
-  const userLimit = checkRateLimit(rateKey, 5, 900000)
-  const ipLimit = checkRateLimit(ipKey, 20, 900000)
+  const userLimit = await checkRateLimit(rateKey, 5, 900000)
+  const ipLimit = await checkRateLimit(ipKey, 20, 900000)
   if (!userLimit.allowed || !ipLimit.allowed) {
     return NextResponse.json({ error: 'Too many login attempts. Try again in 15 minutes.' }, { status: 429 })
   }
