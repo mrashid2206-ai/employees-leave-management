@@ -1,0 +1,30 @@
+name: Scheduled automation
+
+# Triggers the app's daily attendance/leave automation (and a daily yearly-reset
+# check that no-ops until the fiscal year ends). Requires two repo secrets:
+#   APP_URL      e.g. https://your-app.up.railway.app
+#   CRON_SECRET  same value as the app's CRON_SECRET env var
+on:
+  schedule:
+    # 21:00 UTC = 01:00 Asia/Muscat (UTC+4). GitHub may delay scheduled runs under load.
+    - cron: '0 21 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Daily automation
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -fsS --retry 3 -X POST "$APP_URL/api/cron/daily" \
+            -H "Authorization: Bearer $CRON_SECRET"
+      - name: Yearly reset check (no-op until fiscal year ends)
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -fsS --retry 3 -X POST "$APP_URL/api/cron/yearly" \
+            -H "Authorization: Bearer $CRON_SECRET"
