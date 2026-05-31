@@ -3,6 +3,8 @@ import pool, { omanToday } from '@/lib/db'
 import { verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 import { ensureFractionalLeaveColumns } from '@/lib/ensure-schema'
 import { countLeaveDays } from '@/lib/leave-days'
+import { parseBody } from '@/server/validation'
+import { leaveCreateSchema } from '@/server/schemas'
 import {
   LEAVE_TYPE_EMERGENCY,
   LEAVE_TYPE_SICK,
@@ -32,11 +34,9 @@ export async function POST(request: Request) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
   const body = await request.json()
-  const { employee_id, leave_type_id, start_date, end_date, days_count, notes, is_half_day } = body
-
-  if (!employee_id || !leave_type_id || !start_date || !end_date || !days_count) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
-  }
+  const valid = parseBody(leaveCreateSchema, body)
+  if (!valid.ok) return valid.response
+  const { employee_id, leave_type_id, start_date, end_date, notes, is_half_day } = body
 
   // Employees can only create leaves for themselves, always as pending
   if (user.role === 'employee') {
