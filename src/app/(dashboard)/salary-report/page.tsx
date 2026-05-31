@@ -7,22 +7,24 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Download, Printer } from 'lucide-react'
-import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings, getDepartments, getLeaveTypes } from '@/lib/api'
+import { getEmployees, getTardinessRecords, getDepartments } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
 import { exportToExcel } from '@/lib/excel'
-import { computeDeduction } from '@/lib/deduction'
 
-export default function SalaryReportPage() {
+function formatMinutesToHHMM(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+export default function TardinessSummaryPage() {
   const t = useT()
   const { lang } = useLanguage()
   const [deptFilter, setDeptFilter] = useState<string>('all')
 
   const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
   const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
-  const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
 
   const reportData = useMemo(() => {
     let emps = employees.filter(e => e.is_active)
@@ -31,44 +33,30 @@ export default function SalaryReportPage() {
     return emps.map(emp => {
       const empTardiness = tardiness.filter(t => t.employee_id === emp.id)
       const totalMinutes = empTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
-      const totalHours = Math.round(totalMinutes / 60 * 100) / 100
-      const deductionRate = Number(settings?.deduction_per_hour || 0)
-      // Shared formula so this report reconciles with every other deduction figure.
-      const deduction = computeDeduction(totalMinutes, deductionRate)
       const tardCount = empTardiness.length
-
-      const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
-      const unpaidTypeId = leaveTypes.find(lt => lt.name_en === 'Unpaid')?.id
-      const unpaidDays = empLeaves.filter(l => unpaidTypeId && l.leave_type_id === unpaidTypeId).reduce((sum, l) => sum + Number(l.days_count), 0)
-
       return {
         id: emp.id,
         name: emp.name,
         department: emp.department?.name || '',
         tardCount,
         totalMinutes,
-        totalHours,
-        deductionRate,
-        deduction,
-        unpaidDays,
-        totalImpact: deduction,
       }
-    }).sort((a, b) => b.deduction - a.deduction)
-  }, [employees, tardiness, leaves, settings, deptFilter, leaveTypes])
+    }).sort((a, b) => b.totalMinutes - a.totalMinutes)
+  }, [employees, tardiness, deptFilter])
 
-  const totalDeductions = reportData.reduce((sum, r) => sum + r.deduction, 0)
+  const totalLateCount = reportData.reduce((s, r) => s + r.tardCount, 0)
+  const totalMinutes = reportData.reduce((s, r) => s + r.totalMinutes, 0)
+  const affected = reportData.filter(r => r.tardCount > 0).length
 
   function handleExportExcel() {
     const data = reportData.map(r => ({
       [t('name')]: r.name,
       [t('department')]: r.department,
-      [lang === 'ar' ? 'عدد مرات التأخير' : 'Late Count']: r.tardCount,
+      [t('lateCount')]: r.tardCount,
       [lang === 'ar' ? 'إجمالي الدقائق' : 'Total Minutes']: r.totalMinutes,
-      [lang === 'ar' ? 'إجمالي الساعات' : 'Total Hours']: r.totalHours,
-      [lang === 'ar' ? 'سعر الساعة' : 'Rate/Hour']: r.deductionRate,
-      [t('totalDeduction') + ` (${settings?.currency || 'OMR'})`]: r.deduction,
+      [t('tardinessHHMM')]: formatMinutesToHHMM(r.totalMinutes),
     }))
-    exportToExcel(data, 'salary_deduction_report', lang === 'ar' ? 'تقرير الخصومات' : 'Deduction Report')
+    exportToExcel(data, 'tardiness_summary', lang === 'ar' ? 'ملخص التأخير' : 'Tardiness Summary')
   }
 
   return (
@@ -102,20 +90,20 @@ export default function SalaryReportPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="border-0 shadow-lg">
           <CardContent className="p-5">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">{t('totalDeduction')}</p>
-            <p className="text-2xl font-bold text-rose-500 mt-1">{totalDeductions.toFixed(3)} {settings?.currency_symbol}</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider">{lang === 'ar' ? 'إجمالي التأخير' : 'Total Late'}</p>
+            <p className="text-2xl font-bold text-amber-500 mt-1">{formatMinutesToHHMM(totalMinutes)}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-lg">
+          <CardContent className="p-5">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider">{t('lateCount')}</p>
+            <p className="text-2xl font-bold mt-1">{totalLateCount}</p>
           </CardContent>
         </Card>
         <Card className="border-0 shadow-lg">
           <CardContent className="p-5">
             <p className="text-xs text-muted-foreground uppercase tracking-wider">{lang === 'ar' ? 'الموظفين المتأثرين' : 'Affected Employees'}</p>
-            <p className="text-2xl font-bold text-amber-500 mt-1">{reportData.filter(r => r.deduction > 0).length}</p>
-          </CardContent>
-        </Card>
-        <Card className="border-0 shadow-lg">
-          <CardContent className="p-5">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">{lang === 'ar' ? 'سعر الخصم/ساعة' : 'Deduction Rate/Hour'}</p>
-            <p className="text-2xl font-bold mt-1">{settings?.deduction_per_hour || 0} {settings?.currency_symbol}</p>
+            <p className="text-2xl font-bold text-rose-500 mt-1">{affected}</p>
           </CardContent>
         </Card>
       </div>
@@ -132,22 +120,20 @@ export default function SalaryReportPage() {
                   <TableHead className="text-center">{t('department')}</TableHead>
                   <TableHead className="text-center">{t('lateCount')}</TableHead>
                   <TableHead className="text-center">{lang === 'ar' ? 'الدقائق' : 'Minutes'}</TableHead>
-                  <TableHead className="text-center">{lang === 'ar' ? 'الساعات' : 'Hours'}</TableHead>
-                  <TableHead className="text-center">{t('deduction')} ({settings?.currency || 'OMR'})</TableHead>
+                  <TableHead className="text-center">{t('tardinessHHMM')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {reportData.map((row, idx) => (
-                  <TableRow key={row.id} className={row.deduction > 0 ? '' : 'opacity-50'}>
+                  <TableRow key={row.id} className={row.tardCount > 0 ? '' : 'opacity-50'}>
                     <TableCell className="text-center">{idx + 1}</TableCell>
                     <TableCell className="font-medium">{row.name}</TableCell>
                     <TableCell className="text-center">{row.department}</TableCell>
                     <TableCell className="text-center">{row.tardCount}</TableCell>
                     <TableCell className="text-center font-mono">{row.totalMinutes}</TableCell>
-                    <TableCell className="text-center font-mono">{row.totalHours}</TableCell>
-                    <TableCell className="text-center">
-                      {row.deduction > 0 ? (
-                        <span className="font-mono font-bold text-rose-500">{row.deduction.toFixed(3)}</span>
+                    <TableCell className="text-center font-mono">
+                      {row.totalMinutes > 0 ? (
+                        <span className="font-bold text-amber-500">{formatMinutesToHHMM(row.totalMinutes)}</span>
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}
@@ -157,10 +143,9 @@ export default function SalaryReportPage() {
                 {/* Totals row */}
                 <TableRow className="border-t-2 font-bold">
                   <TableCell colSpan={3} className="text-start">{t('total')}</TableCell>
-                  <TableCell className="text-center">{reportData.reduce((s, r) => s + r.tardCount, 0)}</TableCell>
-                  <TableCell className="text-center font-mono">{reportData.reduce((s, r) => s + r.totalMinutes, 0)}</TableCell>
-                  <TableCell className="text-center font-mono">{Math.round(reportData.reduce((s, r) => s + r.totalHours, 0) * 100) / 100}</TableCell>
-                  <TableCell className="text-center font-mono text-rose-500">{totalDeductions.toFixed(3)}</TableCell>
+                  <TableCell className="text-center">{totalLateCount}</TableCell>
+                  <TableCell className="text-center font-mono">{totalMinutes}</TableCell>
+                  <TableCell className="text-center font-mono text-amber-500">{formatMinutesToHHMM(totalMinutes)}</TableCell>
                 </TableRow>
               </TableBody>
             </Table>

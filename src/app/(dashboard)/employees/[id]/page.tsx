@@ -135,7 +135,7 @@ export default function EmployeeCardPage() {
   const usedDays = approvedLeaves.reduce((sum, l) => sum + l.days_count, 0)
   const tardMinutes = tardiness.reduce((sum, t) => sum + t.minutes_late, 0)
   const remaining = employee.leave_balance
-  const deduction = settings ? Math.round(tardMinutes / 60 * settings.deduction_per_hour * 1000) / 1000 : 0
+  const tardLabel = `${Math.floor(tardMinutes / 60)}h ${tardMinutes % 60}m`
   const isOnLeave = approvedLeaves.some(l => l.start_date <= today && l.end_date >= today)
 
   // Leave breakdown by type
@@ -242,12 +242,6 @@ export default function EmployeeCardPage() {
               </Button>
             </div>
           </div>
-
-          {deduction > 0 && (
-            <p className="mt-3 text-sm text-muted-foreground">
-              {t('deduction')}: {deduction.toFixed(3)} {settings?.currency_symbol}
-            </p>
-          )}
         </CardContent>
       </Card>
 
@@ -340,8 +334,8 @@ export default function EmployeeCardPage() {
                   <p className={`text-lg font-bold ${remaining < 5 ? 'text-rose-500' : 'text-emerald-500'}`}>{remaining}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-xs text-muted-foreground">{t('deduction')}</p>
-                  <p className="text-lg font-bold">{deduction.toFixed(3)} {settings?.currency_symbol}</p>
+                  <p className="text-xs text-muted-foreground">{t('tardinessHHMM')}</p>
+                  <p className="text-lg font-bold">{tardLabel}</p>
                 </div>
               </div>
             </div>

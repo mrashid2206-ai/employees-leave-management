@@ -25,7 +25,7 @@ function formatMinutesToHHMM(minutes: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
-type SortField = 'name' | 'department' | 'balance' | 'used' | 'remaining' | 'tardiness' | 'deduction'
+type SortField = 'name' | 'department' | 'balance' | 'used' | 'remaining' | 'tardiness'
 type SortDir = 'asc' | 'desc'
 
 function SortHeader({ field, onToggle, children }: { field: SortField; onToggle: (field: SortField) => void; children: React.ReactNode }) {
@@ -217,7 +217,6 @@ export default function EmployeesPage() {
       const empTardiness = tardiness.filter(t => t.employee_id === emp.id)
       const tardMinutes = empTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
       const remaining = emp.leave_balance
-      const deduction = settings ? Math.round(tardMinutes / 60 * settings.deduction_per_hour * 1000) / 1000 : 0
 
       const isOnLeave = empLeaves.some(l => l.start_date <= today && l.end_date >= today)
 
@@ -229,11 +228,10 @@ export default function EmployeesPage() {
         byType,
         tardMinutes,
         remaining,
-        deduction,
         isOnLeave,
       }
     })
-  }, [employees, leaves, tardiness, settings, leaveTypes, today])
+  }, [employees, leaves, tardiness, leaveTypes, today])
 
   const filtered = useMemo(() => {
     let result = employeeRows
@@ -253,7 +251,6 @@ export default function EmployeesPage() {
         case 'used': cmp = a.usedDays - b.usedDays; break
         case 'remaining': cmp = a.remaining - b.remaining; break
         case 'tardiness': cmp = a.tardMinutes - b.tardMinutes; break
-        case 'deduction': cmp = a.deduction - b.deduction; break
       }
       return sortDir === 'asc' ? cmp : -cmp
     })
@@ -409,7 +406,6 @@ export default function EmployeesPage() {
                   <SortHeader field="remaining" onToggle={toggleSort}>{t('remaining')}</SortHeader>
                   <SortHeader field="tardiness" onToggle={toggleSort}>{t('tardinessHHMM')}</SortHeader>
                   <TableHead className="text-center">{t('status')}</TableHead>
-                  <SortHeader field="deduction" onToggle={toggleSort}>{t('deduction')} ({settings?.currency_symbol || 'ر.ع.'})</SortHeader>
                   <TableHead className="text-center w-20">{t('actions')}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -458,7 +454,6 @@ export default function EmployeesPage() {
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell className="text-center">{emp.deduction.toFixed(3)}</TableCell>
                     <TableCell className="text-center" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-1">
                         <Button
