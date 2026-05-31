@@ -61,6 +61,28 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: `Cannot change from ${previousStatus} to ${status}` }, { status: 400 })
     }
 
+    // Block approval when the employee already has checked-in attendance inside the
+    // leave dates — otherwise they'd be both "present" and "on leave" the same day
+    // (and wrongly charged a leave day). Same guard the create path enforces.
+    if (status === 'approved' && previousStatus !== 'approved') {
+      const { rows: att } = await client.query(
+        `SELECT a.date::text as date FROM attendance a
+           WHERE a.employee_id = $1 AND a.status = 'present' AND a.check_in IS NOT NULL
+             AND a.date >= (SELECT start_date FROM leave_requests WHERE id = $2)
+             AND a.date <= (SELECT end_date FROM leave_requests WHERE id = $2)
+           ORDER BY a.date`,
+        [currentLeave.employee_id, id]
+      )
+      if (att.length > 0) {
+        await client.query('ROLLBACK')
+        return NextResponse.json({
+          error: `Cannot approve: employee has attendance on ${att.map(r => r.date).join(', ')}. Delete those attendance records (or shorten the leave) first.`,
+          attendanceConflict: true,
+          dates: att.map(r => r.date),
+        }, { status: 409 })
+      }
+    }
+
     // Lock the employee row
     const { rows: empRows } = await client.query(
       'SELECT leave_balance FROM employees WHERE id = $1 FOR UPDATE',
