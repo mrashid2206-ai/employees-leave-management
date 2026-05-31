@@ -16,6 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { getEmployees, getTardinessRecords, createBulkTardiness, deleteTardinessRecord, getSettings } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { useLanguage, useT } from '@/lib/language-context'
+import { QueryError } from '@/components/query-error'
 
 function timeToMinutes(time: string, workStartTime: string = '08:00'): number {
   const [h, m] = time.split(':').map(Number)
@@ -48,7 +49,7 @@ export default function TardinessPage() {
 
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
   const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: allRecords = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
+  const { data: allRecords = [], isError: tardinessError, refetch: refetchTardiness } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
 
   const defaultArrivalTime = useMemo(() => {
     const startTime = settings?.work_start_time || '08:00'
@@ -115,6 +116,7 @@ export default function TardinessPage() {
 
   return (
     <div className="space-y-6">
+      {tardinessError && <QueryError onRetry={() => refetchTardiness()} />}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <h1 className="text-2xl font-bold">{t('tardiness')}</h1>
         <Dialog open={open} onOpenChange={setOpen}>

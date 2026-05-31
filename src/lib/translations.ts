@@ -1,6 +1,10 @@
 export type Lang = 'ar' | 'en'
 
 export const translations = {
+  // Data states
+  loadError: { ar: 'تعذّر تحميل البيانات', en: 'Failed to load data' },
+  retry: { ar: 'إعادة المحاولة', en: 'Retry' },
+
   // App
   appTitle: { ar: 'نظام إدارة الإجازات والتأخير', en: 'Leave & Tardiness Management System' },
   appShort: { ar: 'إدارة الإجازات', en: 'Leave Manager' },

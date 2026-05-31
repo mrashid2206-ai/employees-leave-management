@@ -17,6 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { getEmployees, getDepartments, getSettings, getLeaveRequests } from '@/lib/api'
 import { exportToExcel } from '@/lib/excel'
 import { useLanguage, useT } from '@/lib/language-context'
+import { QueryError } from '@/components/query-error'
 
 const DAY_NAMES_AR = ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت']
 const DAY_NAMES_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -76,7 +77,7 @@ export default function AttendancePage() {
   const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
   const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
-  const { data: records = [] } = useQuery<AttendanceRecord[]>({
+  const { data: records = [], isError: recordsError, refetch: refetchRecords } = useQuery<AttendanceRecord[]>({
     queryKey: ['attendance', selectedMonth],
     queryFn: () => fetch(`/api/attendance?month=${selectedMonth}`).then(r => r.json()),
   })
@@ -258,6 +259,7 @@ export default function AttendancePage() {
 
   return (
     <div className="space-y-6">
+      {recordsError && <QueryError onRetry={() => refetchRecords()} />}
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <h1 className="text-2xl font-bold">{t('attendance')}</h1>
