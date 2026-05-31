@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   const body = await request.json()
   const valid = parseBody(leaveCreateSchema, body)
   if (!valid.ok) return valid.response
-  const { employee_id, leave_type_id, start_date, end_date, days_count, notes, is_half_day } = body
+  const { employee_id, leave_type_id, start_date, end_date, notes, is_half_day } = body
 
   // Employees can only create leaves for themselves, always as pending
   if (user.role === 'employee') {
