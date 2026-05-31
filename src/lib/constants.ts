@@ -30,3 +30,7 @@ export const MAX_SHIFT_HOURS = 16
 // Grace period (minutes) before a late check-in is recorded as tardiness. The single
 // tuning point for the auto-tardiness rule (0 = no grace, current behaviour).
 export const TARDINESS_GRACE_MINUTES = 0
+
+// Note stamped on the leave the daily automation auto-creates for an unexcused absence.
+// Used to find + reverse that deduction when an admin corrects/deletes the absence.
+export const AUTO_ABSENCE_LEAVE_NOTE = 'Auto-deducted: absent without leave'

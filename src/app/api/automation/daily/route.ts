@@ -3,7 +3,7 @@ import pool, { omanToday } from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
 import { logAudit } from '@/lib/audit'
 import { ensureFractionalLeaveColumns } from '@/lib/ensure-schema'
-import { LEAVE_TYPE_ANNUAL, TARDINESS_GRACE_MINUTES } from '@/lib/constants'
+import { LEAVE_TYPE_ANNUAL, TARDINESS_GRACE_MINUTES, AUTO_ABSENCE_LEAVE_NOTE } from '@/lib/constants'
 
 export async function POST(request: Request) {
   const admin = await verifyAdmin(request)
@@ -98,11 +98,11 @@ export async function POST(request: Request) {
           // Idempotent: insert the auto-leave only if none already exists for the day.
           const inserted = await client.query(`
             INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, days_count, notes, status)
-            SELECT $1, $2, $3, $3, 1, 'Auto-deducted: absent without leave', 'approved'
+            SELECT $1, $2, $3, $3, 1, $5, 'approved'
             WHERE $4 > 0
               AND NOT EXISTS (SELECT 1 FROM leave_requests WHERE employee_id = $1 AND start_date = $3 AND end_date = $3)
             RETURNING id
-          `, [emp.id, annualLeaveTypeId, processDate, balance])
+          `, [emp.id, annualLeaveTypeId, processDate, balance, AUTO_ABSENCE_LEAVE_NOTE])
           if ((inserted.rowCount || 0) > 0) {
             await client.query('UPDATE employees SET leave_balance = leave_balance - 1 WHERE id = $1', [emp.id])
             results.leaveDeducted++

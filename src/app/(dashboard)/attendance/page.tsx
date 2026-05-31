@@ -81,6 +81,13 @@ export default function AttendancePage() {
     queryFn: () => fetch(`/api/attendance?month=${selectedMonth}`).then(r => r.json()),
   })
 
+  function refreshAttendanceQueries() {
+    queryClient.invalidateQueries({ queryKey: ['attendance'] })
+    // A reversed auto-absence changes the employee's balance and cancels a leave.
+    queryClient.invalidateQueries({ queryKey: ['leaves'] })
+    queryClient.invalidateQueries({ queryKey: ['employees'] })
+  }
+
   const createMutation = useMutation({
     mutationFn: (data: AttendancePayload[]) => fetch('/api/attendance', {
       method: 'POST',
@@ -88,7 +95,7 @@ export default function AttendancePage() {
       body: JSON.stringify(data),
     }).then(r => r.json()),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['attendance'] })
+      refreshAttendanceQueries()
       setDialogOpen(false)
       setSelectedEmployees([])
       setEditRecord(null)
@@ -99,9 +106,14 @@ export default function AttendancePage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => fetch(`/api/attendance/${id}`, { method: 'DELETE' }).then(r => r.json()),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['attendance'] })
-      toast.success(t('deletedSuccess'))
+    onSuccess: (data) => {
+      refreshAttendanceQueries()
+      const refunded = data?.refundedDays || 0
+      if (refunded > 0) {
+        toast.success(lang === 'ar' ? `تم الحذف وإرجاع ${refunded} يوم إجازة` : `Deleted — ${refunded} leave day refunded`)
+      } else {
+        toast.success(t('deletedSuccess'))
+      }
     },
   })
 
@@ -178,12 +190,14 @@ export default function AttendancePage() {
 
   function handleSubmit() {
     if (editRecord) {
-      // Edit existing record
+      // Edit existing record. For an 'absent' status, clear the times (no work hours);
+      // flipping absent → present refunds the auto-deducted leave day server-side.
+      const isAbsent = form.status === 'absent'
       const data = [{
         employee_id: editRecord.employee_id,
         date: editRecord.date,
-        check_in: form.check_in,
-        check_out: form.check_out,
+        check_in: isAbsent ? '' : form.check_in,
+        check_out: isAbsent ? '' : form.check_out,
         status: form.status,
       }]
       createMutation.mutate(data)
@@ -481,21 +495,51 @@ export default function AttendancePage() {
               <Label>{t('date')} *</Label>
               <Input type="date" value={selectedDay || ''} onChange={e => setSelectedDay(e.target.value)} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+
+            {/* Status selector (edit only) — lets an admin flip a wrongly-marked absence */}
+            {editRecord && (
               <div>
-                <Label>{t('checkIn')} *</Label>
-                <Input type="time" value={form.check_in} onChange={e => setForm(f => ({ ...f, check_in: e.target.value }))} />
+                <Label>{lang === 'ar' ? 'الحالة' : 'Status'}</Label>
+                <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v ?? 'present' }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="present">{t('present')}</SelectItem>
+                    <SelectItem value="absent">{t('absent')}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div>
-                <Label>{t('checkOut')}</Label>
-                <Input type="time" value={form.check_out} onChange={e => setForm(f => ({ ...f, check_out: e.target.value }))} />
+            )}
+
+            {(!editRecord || form.status !== 'absent') && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>{t('checkIn')} *</Label>
+                  <Input type="time" value={form.check_in} onChange={e => setForm(f => ({ ...f, check_in: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>{t('checkOut')}</Label>
+                  <Input type="time" value={form.check_out} onChange={e => setForm(f => ({ ...f, check_out: e.target.value }))} />
+                </div>
               </div>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {lang === 'ar'
-                ? '💡 الغياب يُسجل تلقائياً عبر المعالجة اليومية في الإعدادات ← الأتمتة'
-                : '💡 Absences are auto-detected via daily processing in Settings → Automation'}
-            </p>
+            )}
+
+            {editRecord && editRecord.status === 'absent' && form.status === 'present' && (
+              <p className="text-xs text-emerald-600 bg-emerald-500/10 p-2 rounded">
+                {lang === 'ar'
+                  ? '↩️ سيتم إرجاع يوم الإجازة المخصوم تلقائياً عند الحفظ'
+                  : '↩️ The auto-deducted leave day will be refunded on save'}
+              </p>
+            )}
+
+            {!editRecord && (
+              <p className="text-xs text-muted-foreground">
+                {lang === 'ar'
+                  ? '💡 الغياب يُسجل تلقائياً عبر المعالجة اليومية في الإعدادات ← الأتمتة'
+                  : '💡 Absences are auto-detected via daily processing in Settings → Automation'}
+              </p>
+            )}
 
             {!editRecord && (
               <>
