@@ -3,6 +3,8 @@ import pool, { omanToday, omanTime } from '@/lib/db'
 import { verifyAnyAuth, unauthorized, forbidden } from '@/lib/api-auth'
 import { ensureAttendanceLocationColumns, ensureFractionalLeaveColumns } from '@/lib/ensure-schema'
 import { isOffDay, computeWorkHours, computeOvertime, evaluateLocation } from '@/lib/attendance-calc'
+import { parseBody } from '@/server/validation'
+import { checkInSchema } from '@/server/schemas'
 
 function clientIpOf(request: Request): string {
   return (
@@ -18,16 +20,15 @@ export async function POST(request: Request) {
 
   await ensureAttendanceLocationColumns().catch(() => {})
 
-  const { employee_id, action, latitude, longitude } = await request.json()
+  const body = await request.json()
+  const valid = parseBody(checkInSchema, body)
+  if (!valid.ok) return valid.response
+  const { employee_id, action, latitude, longitude } = body
 
   const clientIp = clientIpOf(request)
 
   // For employees, verify they can only check in for themselves
   if (user.role === 'employee' && user.id !== employee_id) return forbidden()
-
-  if (!employee_id || !action) {
-    return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
-  }
 
   // Check employee is active
   const { rows: empCheck } = await pool.query('SELECT is_active FROM employees WHERE id = $1', [employee_id])
