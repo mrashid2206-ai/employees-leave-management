@@ -11,10 +11,12 @@ import {
   AlertTriangle, CalendarDays, UserCheck, Timer
 } from 'lucide-react'
 import { getSettings, getEmployees, getLeaveRequests, getTardinessRecords, getLeaveTypes, getDepartments } from '@/lib/api'
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
+import dynamic from 'next/dynamic'
 import { AnimatedCounter } from '@/components/animated-counter'
 import { useLanguage, useT } from '@/lib/language-context'
 import type { Employee } from '@/lib/types'
+
+const LeaveByTypeChart = dynamic(() => import('./_components/leave-by-type-chart'), { ssr: false })
 
 interface AttendanceRecord {
   id: number
@@ -326,28 +328,7 @@ export default function DashboardPage() {
           <CardContent>
             {leaveByType.length > 0 ? (
               <div className="relative">
-                <ResponsiveContainer width="100%" height={200}>
-                  <PieChart>
-                    <Pie
-                      data={leaveByType}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={55}
-                      outerRadius={85}
-                      paddingAngle={3}
-                      dataKey="value"
-                      strokeWidth={0}
-                    >
-                      {leaveByType.map((entry, index) => (
-                        <Cell key={index} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '12px', fontSize: '12px' }}
-                      formatter={(value) => [`${value} ${t('days')}`, '']}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                <LeaveByTypeChart data={leaveByType} daysLabel={t('days')} />
                 {/* Center text */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="text-center">
