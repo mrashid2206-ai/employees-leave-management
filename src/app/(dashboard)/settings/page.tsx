@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import {
   Save, Plus, Pencil, Trash2, Calendar, Clock, Building2, Palette,
-  CalendarDays, DollarSign, Users, Zap, RotateCcw, Play
+  CalendarDays, Users, Zap, RotateCcw, Play
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage, useT } from '@/lib/language-context'
@@ -204,11 +204,11 @@ export default function SettingsPage() {
 
                 <Separator />
 
-                {/* Leave & Deduction */}
+                {/* Leave */}
                 <div>
                   <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                     <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                    {lang === 'ar' ? 'الإجازات والخصومات' : 'Leave & Deductions'}
+                    {lang === 'ar' ? 'الإجازات' : 'Leave'}
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-accent/20">
                     <div>
@@ -216,32 +216,8 @@ export default function SettingsPage() {
                       <Input type="number" min="1" value={form.annual_leave_balance || ''} onChange={e => setForm(f => ({ ...f, annual_leave_balance: parseInt(e.target.value) }))} />
                     </div>
                     <div>
-                      <Label className="text-xs">{t('deductionPerHour')}</Label>
-                      <Input type="number" min="0" step="0.001" value={form.deduction_per_hour || ''} onChange={e => setForm(f => ({ ...f, deduction_per_hour: parseFloat(e.target.value) }))} />
-                    </div>
-                    <div>
                       <Label className="text-xs">{t('maxAbsent')}</Label>
                       <Input type="number" value={form.max_absent_same_dept || ''} onChange={e => setForm(f => ({ ...f, max_absent_same_dept: parseInt(e.target.value) }))} />
-                    </div>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Currency */}
-                <div>
-                  <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    {t('currency')}
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-accent/20">
-                    <div>
-                      <Label className="text-xs">{t('currency')}</Label>
-                      <Input value={form.currency || ''} onChange={e => setForm(f => ({ ...f, currency: e.target.value }))} />
-                    </div>
-                    <div>
-                      <Label className="text-xs">{t('currencySymbol')}</Label>
-                      <Input value={form.currency_symbol || ''} onChange={e => setForm(f => ({ ...f, currency_symbol: e.target.value }))} />
                     </div>
                   </div>
                 </div>

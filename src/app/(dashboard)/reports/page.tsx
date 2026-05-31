@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Download, Printer, FileSpreadsheet } from 'lucide-react'
 import { exportToExcel } from '@/lib/excel'
 import { useLanguage, useT } from '@/lib/language-context'
-import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings, getDepartments, getLeaveTypes, getHolidays } from '@/lib/api'
+import { getEmployees, getLeaveRequests, getTardinessRecords, getDepartments, getLeaveTypes, getHolidays } from '@/lib/api'
 
 function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -30,7 +30,6 @@ export default function ReportsPage() {
   const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
   const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
   const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
   const { data: holidays = [] } = useQuery({ queryKey: ['holidays'], queryFn: getHolidays })
@@ -51,7 +50,6 @@ export default function ReportsPage() {
       const empTardiness = tardiness.filter(t => t.employee_id === emp.id)
       const tardMinutes = empTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
       const remaining = emp.leave_balance
-      const deduction = settings ? Math.round(tardMinutes / 60 * Number(settings.deduction_per_hour) * 1000) / 1000 : 0
 
       // By type breakdown
       const byType: Record<string, number> = {}
@@ -70,10 +68,9 @@ export default function ReportsPage() {
         byType,
         tardMinutes,
         remaining,
-        deduction,
       }
     })
-  }, [filteredEmployees, leaves, tardiness, settings, leaveTypes])
+  }, [filteredEmployees, leaves, tardiness, leaveTypes])
 
   // Monthly leave calendar — exclude public holidays so per-month totals reconcile with
   // the Summary tab's used days (days_count is already holiday-adjusted server-side).
@@ -110,7 +107,7 @@ export default function ReportsPage() {
 
   function exportCSV() {
     const dedupedTypes = leaveTypes.filter((lt, i, arr) => arr.findIndex(t => t.name_en === lt.name_en) === i)
-    const headers = [t('name'), t('department'), t('balance'), t('used'), ...dedupedTypes.map(lt => lang === 'ar' ? lt.name_ar : lt.name_en), t('remaining'), t('tardinessHHMM') + ' (' + t('minutes') + ')', t('deduction')]
+    const headers = [t('name'), t('department'), t('balance'), t('used'), ...dedupedTypes.map(lt => lang === 'ar' ? lt.name_ar : lt.name_en), t('remaining'), t('tardinessHHMM') + ' (' + t('minutes') + ')']
     const rows = summaryData.map(emp => [
       emp.name,
       emp.department,
@@ -119,7 +116,6 @@ export default function ReportsPage() {
       ...dedupedTypes.map(lt => emp.byType[lt.name_en] || 0),
       emp.remaining,
       emp.tardMinutes,
-      emp.deduction,
     ])
 
     const csvContent = [headers, ...rows].map(r => r.join(',')).join('\n')
@@ -161,7 +157,6 @@ export default function ReportsPage() {
               [t('used')]: emp.usedDays,
               [t('remaining')]: emp.remaining,
               [t('tardinessHHMM') + ' (' + t('minutes') + ')']: emp.tardMinutes,
-              [t('deduction')]: emp.deduction,
             }))
             exportToExcel(data, 'leave_report', lang === 'ar' ? 'تقرير الإجازات' : 'Leave Report')
           }}>
@@ -202,7 +197,6 @@ export default function ReportsPage() {
                       ))}
                       <TableHead className="text-center">{t('remaining')}</TableHead>
                       <TableHead className="text-center">{t('tardinessHHMM')}</TableHead>
-                      <TableHead className="text-center">{t('deduction')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -223,7 +217,6 @@ export default function ReportsPage() {
                           </span>
                         </TableCell>
                         <TableCell className="text-center">{formatMinutesToHHMM(emp.tardMinutes)}</TableCell>
-                        <TableCell className="text-center">{emp.deduction.toFixed(3)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

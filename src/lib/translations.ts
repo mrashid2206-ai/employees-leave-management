@@ -208,7 +208,7 @@ export const translations = {
   monthlySheet: { ar: 'كشف الحضور الشهري', en: 'Monthly Attendance Sheet' },
   recordAttendance: { ar: 'تسجيل حضور', en: 'Record Attendance' },
   selectMonth: { ar: 'اختر الشهر', en: 'Select Month' },
-  salaryReport: { ar: 'تقرير الخصومات', en: 'Deduction Report' },
+  salaryReport: { ar: 'ملخص التأخير', en: 'Tardiness Summary' },
   baseSalary: { ar: 'الراتب الأساسي', en: 'Base Salary' },
   totalDeduction: { ar: 'إجمالي الخصم', en: 'Total Deduction' },
   netImpact: { ar: 'صافي التأثير', en: 'Net Impact' },

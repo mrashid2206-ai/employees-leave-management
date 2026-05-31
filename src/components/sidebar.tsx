@@ -15,7 +15,6 @@ import {
   FileText,
   Settings,
   Shield,
-  DollarSign,
   CalendarRange,
   ChevronRight,
   ChevronLeft,
@@ -40,7 +39,7 @@ const navItems: { href: string; labelKey: TranslationKey; icon: typeof LayoutDas
   // Reports
   { href: '/reports', labelKey: 'reports', icon: FileText },
   { href: '/overtime-report', labelKey: 'overtimeReport', icon: Clock },
-  { href: '/salary-report', labelKey: 'salaryReport', icon: DollarSign },
+  { href: '/salary-report', labelKey: 'salaryReport', icon: Clock },
   { href: '/ranking', labelKey: 'ranking', icon: Trophy },
   // System
   { href: '/settings', labelKey: 'settings', icon: Settings },
