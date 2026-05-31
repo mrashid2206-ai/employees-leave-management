@@ -5,7 +5,6 @@ import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ChevronRight, ChevronLeft } from 'lucide-react'
 import { getEmployees, getLeaveRequests, getLeaveTypes, getDepartments, getHolidays, getSettings } from '@/lib/api'
@@ -72,7 +71,7 @@ export default function CalendarPage() {
       days.push({ day: d, employees: empsOnLeave })
     }
     return days
-  }, [year, month, daysInMonth, leaves, filteredEmployees, employees, leaveTypes])
+  }, [year, month, daysInMonth, leaves, filteredEmployees, employees, leaveTypes, lang])
 
   function prevMonth() {
     setCurrentDate(new Date(year, month - 1, 1))
@@ -135,7 +134,6 @@ export default function CalendarPage() {
           {/* Calendar grid */}
           <div className="grid grid-cols-7 gap-1">
             {gridCells.map((cell, idx) => {
-              const hasMany = cell && cell.employees.length > 4
               const dateStr = cell ? `${year}-${String(month + 1).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}` : ''
               const isWeekend = cell ? !workDays.includes(new Date(year, month, cell.day).getDay()) : false
               const holidayName = cell ? holidayMap.get(dateStr) : null

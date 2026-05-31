@@ -1,22 +1,15 @@
 import { NextResponse } from 'next/server'
 import pool, { omanToday } from '@/lib/db'
-import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
-
-// Count all calendar days (weekends included — company policy), minus public holidays
-async function countLeaveDays(startDate: string, endDate: string): Promise<number> {
-  const [sy, sm, sd] = startDate.split('-').map(Number)
-  const [ey, em, ed] = endDate.split('-').map(Number)
-  const totalCalendarDays = Math.round((Date.UTC(ey, em - 1, ed) - Date.UTC(sy, sm - 1, sd)) / 86400000) + 1
-
-  // Subtract holidays in range
-  const { rows: holidays } = await pool.query(
-    'SELECT COUNT(*) as cnt FROM holidays WHERE date >= $1 AND date <= $2',
-    [startDate, endDate]
-  )
-  const holidayCount = parseInt(holidays[0]?.cnt || '0')
-
-  return Math.max(1, totalCalendarDays - holidayCount)
-}
+import { verifyAnyAuth, unauthorized } from '@/lib/api-auth'
+import { ensureFractionalLeaveColumns } from '@/lib/ensure-schema'
+import { countLeaveDays } from '@/lib/leave-days'
+import {
+  LEAVE_TYPE_EMERGENCY,
+  LEAVE_TYPE_SICK,
+  EMERGENCY_LEAVE_MAX_DAYS,
+  SICK_LEAVE_NOTES_THRESHOLD,
+  MAX_CONSECUTIVE_LEAVE_DAYS,
+} from '@/lib/constants'
 
 export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
@@ -24,7 +17,7 @@ export async function GET(request: Request) {
   const { rows } = await pool.query(`
     SELECT lr.id, lr.employee_id, lr.leave_type_id,
       lr.start_date::text as start_date, lr.end_date::text as end_date,
-      lr.days_count, lr.notes, lr.status, lr.created_at, lr.updated_at,
+      lr.days_count::float8 as days_count, lr.notes, lr.status, lr.created_at, lr.updated_at,
       json_build_object('id', e.id, 'name', e.name, 'department_id', e.department_id) as employee,
       json_build_object('id', lt.id, 'name_ar', lt.name_ar, 'name_en', lt.name_en, 'color', lt.color) as leave_type
     FROM leave_requests lr
@@ -54,26 +47,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'End date must be after start date' }, { status: 400 })
   }
 
-  // Block leave requests in the past
+  // Block leave requests in the past (non-admins): neither the start nor end may be before today.
   const today = omanToday()
-  if (end_date < today && user.role !== 'admin') {
+  if (user.role !== 'admin' && (start_date < today || end_date < today)) {
     return NextResponse.json({ error: 'Cannot create leave for past dates' }, { status: 400 })
   }
 
-  // Block leave outside fiscal year
-  const { rows: settingsRows } = await pool.query('SELECT year_start::text as year_start, year_end::text as year_end FROM settings LIMIT 1')
-  if (settingsRows[0]) {
-    const { year_start, year_end } = settingsRows[0]
-    if (start_date < year_start || end_date > year_end) {
-      return NextResponse.json({ error: 'Leave dates must be within the fiscal year (' + year_start + ' to ' + year_end + ')' }, { status: 400 })
-    }
+  // Settings drive fiscal-year and limit enforcement — treat a missing row as a hard
+  // error rather than silently disabling all those checks.
+  const { rows: settingsRows } = await pool.query(
+    'SELECT year_start::text as year_start, year_end::text as year_end, max_absent_same_dept FROM settings ORDER BY id LIMIT 1'
+  )
+  if (!settingsRows[0]) {
+    return NextResponse.json({ error: 'System settings are not configured' }, { status: 500 })
+  }
+  const { year_start, year_end } = settingsRows[0]
+  if (start_date < year_start || end_date > year_end) {
+    return NextResponse.json({ error: 'Leave dates must be within the fiscal year (' + year_start + ' to ' + year_end + ')' }, { status: 400 })
   }
 
   // Check department max absent — block employees, warn admin (admin can override with force flag)
   const { rows: empInfo } = await pool.query('SELECT department_id FROM employees WHERE id = $1', [employee_id])
   if (empInfo[0]) {
-    const { rows: maxAbsentSettings } = await pool.query('SELECT max_absent_same_dept FROM settings LIMIT 1')
-    const maxAbsent = maxAbsentSettings[0]?.max_absent_same_dept || 2
+    const maxAbsent = settingsRows[0].max_absent_same_dept || 2
 
     const { rows: deptAbsent } = await pool.query(
       "SELECT COUNT(DISTINCT employee_id) as cnt FROM leave_requests WHERE employee_id != $1 AND status = 'approved' AND start_date <= $2 AND end_date >= $3 AND employee_id IN (SELECT id FROM employees WHERE department_id = $4 AND is_active = true)",
@@ -96,7 +92,7 @@ export async function POST(request: Request) {
     }
   }
 
-  // Server-side: calculate actual working days (excludes weekends + holidays)
+  // Server-side: calculate actual leave days (calendar days minus holidays)
   const actualDays = await countLeaveDays(start_date, end_date)
   if (actualDays <= 0) {
     return NextResponse.json({ error: 'No working days in selected range' }, { status: 400 })
@@ -105,34 +101,29 @@ export async function POST(request: Request) {
   // Half-day support: if half-day selected and single day, use 0.5
   const finalDays = is_half_day && start_date === end_date ? 0.5 : actualDays
 
-  // Leave type limits
-  if (settingsRows[0]) {
-    const { year_start, year_end } = settingsRows[0]
+  // Leave-type limits — resolve the type by its actual id (never hardcode the SERIAL).
+  const { rows: ltCheck } = await pool.query('SELECT name_en FROM leave_types WHERE id = $1', [leave_type_id])
+  const leaveTypeName = ltCheck[0]?.name_en || ''
 
-    const { rows: ltCheck } = await pool.query('SELECT name_en FROM leave_types WHERE id = $1', [leave_type_id])
-    const leaveTypeName = ltCheck[0]?.name_en || ''
-
-    // Emergency leave: max 5 per fiscal year
-    if (leaveTypeName === 'Emergency') {
-      const { rows: emergencyCount } = await pool.query(
-        "SELECT COUNT(*) as cnt FROM leave_requests WHERE employee_id = $1 AND leave_type_id = 3 AND status IN ('approved', 'pending') AND start_date >= $2 AND end_date <= $3",
-        [employee_id, year_start, year_end]
-      )
-      if (parseInt(emergencyCount[0].cnt) >= 5) {
-        return NextResponse.json({ error: 'Emergency leave limit reached (maximum 5 per year)' }, { status: 400 })
-      }
-    }
-
-    // Sick leave > 3 days requires notes
-    if (leaveTypeName === 'Sick' && actualDays > 3 && !notes) {
-      return NextResponse.json({ error: 'Sick leave over 3 days requires notes (e.g. medical certificate reference)' }, { status: 400 })
+  // Emergency leave: max N DAYS per fiscal year (consistent with the edit path).
+  if (leaveTypeName === LEAVE_TYPE_EMERGENCY) {
+    const { rows: emergencyDays } = await pool.query(
+      "SELECT COALESCE(SUM(days_count), 0)::numeric as total FROM leave_requests WHERE employee_id = $1 AND leave_type_id = $2 AND status IN ('approved', 'pending') AND start_date >= $3 AND end_date <= $4",
+      [employee_id, leave_type_id, year_start, year_end]
+    )
+    if (parseFloat(emergencyDays[0].total) + finalDays > EMERGENCY_LEAVE_MAX_DAYS) {
+      return NextResponse.json({ error: `Emergency leave limit reached (maximum ${EMERGENCY_LEAVE_MAX_DAYS} days per year)` }, { status: 400 })
     }
   }
 
-  // Max consecutive leave days (30 days max)
-  const maxConsecutive = 30
-  if (actualDays > maxConsecutive) {
-    return NextResponse.json({ error: `Maximum consecutive leave is ${maxConsecutive} working days` }, { status: 400 })
+  // Sick leave over the threshold requires notes
+  if (leaveTypeName === LEAVE_TYPE_SICK && actualDays > SICK_LEAVE_NOTES_THRESHOLD && !notes) {
+    return NextResponse.json({ error: `Sick leave over ${SICK_LEAVE_NOTES_THRESHOLD} days requires notes (e.g. medical certificate reference)` }, { status: 400 })
+  }
+
+  // Max consecutive leave days
+  if (actualDays > MAX_CONSECUTIVE_LEAVE_DAYS) {
+    return NextResponse.json({ error: `Maximum consecutive leave is ${MAX_CONSECUTIVE_LEAVE_DAYS} days` }, { status: 400 })
   }
 
   // Check for attendance conflict
@@ -156,16 +147,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Employee already has a pending or approved leave for these dates' }, { status: 409 })
   }
 
+  await ensureFractionalLeaveColumns().catch(() => {})
+
+  const isHalfDay = !!is_half_day && start_date === end_date
   try {
     const { rows } = await pool.query(`
-      INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, days_count, notes, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, days_count, notes, status, is_half_day)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
-    `, [employee_id, leave_type_id, start_date, end_date, finalDays, notes || null, body.status || 'pending'])
+    `, [employee_id, leave_type_id, start_date, end_date, finalDays, notes || null, body.status || 'pending', isHalfDay])
 
     return NextResponse.json(rows[0])
-  } catch (err: any) {
-    if (err.message?.includes('Overlapping')) {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    if (msg.includes('Overlapping')) {
       return NextResponse.json({ error: 'Overlapping leave request exists for this employee' }, { status: 409 })
     }
     return NextResponse.json({ error: 'Failed to create leave request' }, { status: 500 })

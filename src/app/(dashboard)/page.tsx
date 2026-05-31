@@ -8,13 +8,33 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Users, CalendarOff, Wallet, Clock, TrendingUp, TrendingDown,
-  ArrowUpLeft, ArrowDownRight, ChevronLeft, ChevronRight, AlertTriangle,
-  CalendarDays, UserCheck, Timer
+  AlertTriangle, CalendarDays, UserCheck, Timer
 } from 'lucide-react'
 import { getSettings, getEmployees, getLeaveRequests, getTardinessRecords, getLeaveTypes, getDepartments } from '@/lib/api'
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { AnimatedCounter } from '@/components/animated-counter'
 import { useLanguage, useT } from '@/lib/language-context'
+import type { Employee } from '@/lib/types'
+
+interface AttendanceRecord {
+  id: number
+  employee_id: number
+  date: string
+  check_in: string | null
+  check_out: string | null
+  status: string
+  employee?: { id: number; name: string; department_id: number }
+}
+
+interface PermissionRecord {
+  id: number
+  status: string
+}
+
+// Stable empty-array fallbacks so react-query defaults don't create a fresh
+// literal each render (keeps useMemo dependencies referentially stable).
+const EMPTY_EMPLOYEES: Employee[] = []
+const EMPTY_ATTENDANCE: AttendanceRecord[] = []
 
 function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -29,26 +49,29 @@ function Skeleton({ className = '' }: { className?: string }) {
 export default function DashboardPage() {
   const router = useRouter()
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
-  const { data: employees = [], isLoading } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
+  const { data: employees = EMPTY_EMPLOYEES, isLoading } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
   const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
   const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
-  const { data: permissions = [] } = useQuery({
+  const { data: permissions = [] } = useQuery<PermissionRecord[]>({
     queryKey: ['permissions'],
     queryFn: () => fetch('/api/permissions').then(r => r.ok ? r.json() : []),
   })
-  const { data: todayAttendance = [] } = useQuery({
+  const { data: todayAttendance = EMPTY_ATTENDANCE } = useQuery<AttendanceRecord[]>({
     queryKey: ['today-attendance'],
     queryFn: () => fetch('/api/attendance?month=' + new Date().toISOString().slice(0, 7)).then(r => r.json()),
   })
 
   const t = useT()
-  const { lang, dir } = useLanguage()
+  const { lang } = useLanguage()
 
-  const today = new Date().toISOString().split('T')[0]
+  // Single Oman-local (Asia/Muscat) "today" used for every today comparison below.
+  const omanNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Muscat' }))
+  const today = `${omanNow.getFullYear()}-${String(omanNow.getMonth() + 1).padStart(2, '0')}-${String(omanNow.getDate()).padStart(2, '0')}`
+
   const activeEmployees = employees.filter(e => e.is_active)
-  const pendingPermissions = permissions.filter((p: any) => p.status === 'pending').length
+  const pendingPermissions = permissions.filter(p => p.status === 'pending').length
 
   const onLeaveToday = leaves.filter(l =>
     l.status === 'approved' && l.start_date <= today && l.end_date >= today
@@ -66,7 +89,6 @@ export default function DashboardPage() {
     const usedDays = empLeaves.reduce((sum, l) => sum + l.days_count, 0)
     const empTardiness = tardiness.filter(t => t.employee_id === emp.id)
     const tardMinutes = empTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
-    const tardDays = settings ? tardMinutes / 60 / settings.work_hours_per_day : 0
     const remaining = emp.leave_balance
     const isOnLeave = empLeaves.some(l => l.start_date <= today && l.end_date >= today)
     return { ...emp, usedDays, tardMinutes, remaining, isOnLeave }
@@ -108,14 +130,6 @@ export default function DashboardPage() {
     }
   })
 
-  // Tardiness trend (last 7 records grouped by date)
-  const tardDates = [...new Set(tardiness.map(t => t.date))].sort().slice(-7)
-  const tardTrend = tardDates.map(date => {
-    const dayRecords = tardiness.filter(t => t.date === date)
-    const totalMin = dayRecords.reduce((sum, t) => sum + t.minutes_late, 0)
-    return { date: date.slice(5), minutes: totalMin, count: dayRecords.length }
-  })
-
   // Top 5 tardiness
   const topTardiness = [...employeeStats]
     .filter(e => e.tardMinutes > 0)
@@ -138,17 +152,14 @@ export default function DashboardPage() {
   const recentLeaves = leaves.slice(0, 5)
 
   // Who's In Today
-  const omanNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Muscat' }))
-  const todayStr = `${omanNow.getFullYear()}-${String(omanNow.getMonth()+1).padStart(2,'0')}-${String(omanNow.getDate()).padStart(2,'0')}`
-
   const todayData = useMemo(() => {
-    const todayRecords = todayAttendance.filter((r: any) => r.date === todayStr)
-    const checkedIn = todayRecords.filter((r: any) => r.status === 'present' && r.check_in)
-    const checkedOut = checkedIn.filter((r: any) => r.check_out)
-    const active = employees.filter((e: any) => e.is_active)
-    const notCheckedIn = active.filter((e: any) => !todayRecords.some((r: any) => r.employee_id === e.id && r.check_in))
+    const todayRecords = todayAttendance.filter((r: AttendanceRecord) => r.date === today)
+    const checkedIn = todayRecords.filter((r: AttendanceRecord) => r.status === 'present' && r.check_in)
+    const checkedOut = checkedIn.filter((r: AttendanceRecord) => r.check_out)
+    const active = employees.filter((e: Employee) => e.is_active)
+    const notCheckedIn = active.filter((e: Employee) => !todayRecords.some((r: AttendanceRecord) => r.employee_id === e.id && r.check_in))
     return { checkedIn, checkedOut, notCheckedIn, total: active.length }
-  }, [todayAttendance, employees, todayStr])
+  }, [todayAttendance, employees, today])
 
   if (isLoading) {
     return (
@@ -266,7 +277,7 @@ export default function DashboardPage() {
                 {lang === 'ar' ? 'حاضرون' : 'Checked In'} ({todayData.checkedIn.length})
               </p>
               <div className="space-y-1 max-h-48 overflow-y-auto">
-                {todayData.checkedIn.filter((r: any) => !r.check_out).map((r: any) => (
+                {todayData.checkedIn.filter(r => !r.check_out).map(r => (
                   <div key={r.id} className="text-sm flex justify-between items-center py-1">
                     <span>{r.employee?.name}</span>
                     <span className="text-xs text-muted-foreground font-mono">{r.check_in?.slice(0,5)}</span>
@@ -281,7 +292,7 @@ export default function DashboardPage() {
                 {lang === 'ar' ? 'انصرفوا' : 'Checked Out'} ({todayData.checkedOut.length})
               </p>
               <div className="space-y-1 max-h-48 overflow-y-auto">
-                {todayData.checkedOut.map((r: any) => (
+                {todayData.checkedOut.map(r => (
                   <div key={r.id} className="text-sm flex justify-between items-center py-1">
                     <span>{r.employee?.name}</span>
                     <span className="text-xs text-muted-foreground font-mono">{r.check_in?.slice(0,5)} → {r.check_out?.slice(0,5)}</span>
@@ -296,7 +307,7 @@ export default function DashboardPage() {
                 {lang === 'ar' ? 'لم يسجلوا حضور' : 'Not Checked In'} ({todayData.notCheckedIn.length})
               </p>
               <div className="space-y-1 max-h-48 overflow-y-auto">
-                {todayData.notCheckedIn.map((e: any) => (
+                {todayData.notCheckedIn.map(e => (
                   <div key={e.id} className="text-sm py-1 text-muted-foreground">{e.name}</div>
                 ))}
               </div>

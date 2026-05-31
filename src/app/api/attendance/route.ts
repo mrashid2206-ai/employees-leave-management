@@ -1,22 +1,18 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
+import { ensureAttendanceLocationColumns } from '@/lib/ensure-schema'
+import { isOffDay, computeWorkHours, computeOvertime } from '@/lib/attendance-calc'
 
 export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
   const { searchParams } = new URL(request.url)
   const month = searchParams.get('month') // YYYY-MM format
-  const employeeId = searchParams.get('employee_id')
+  // Employees may only read their own attendance; admins may filter by any employee.
+  const employeeId = user.role === 'employee' ? String(user.id) : searchParams.get('employee_id')
 
-  // Ensure location columns exist
-  await pool.query(`
-    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS is_offsite BOOLEAN DEFAULT FALSE,
-    ADD COLUMN IF NOT EXISTS check_in_ip VARCHAR(100),
-    ADD COLUMN IF NOT EXISTS check_in_lat DECIMAL(10,7),
-    ADD COLUMN IF NOT EXISTS check_in_lng DECIMAL(10,7),
-    ADD COLUMN IF NOT EXISTS excused_tardiness BOOLEAN DEFAULT FALSE
-  `).catch(() => {})
+  await ensureAttendanceLocationColumns().catch(() => {})
 
   let query = `
     SELECT a.id, a.employee_id, a.date::text as date, a.check_in::text as check_in,
@@ -26,7 +22,7 @@ export async function GET(request: Request) {
     LEFT JOIN employees e ON a.employee_id = e.id
   `
   const conditions: string[] = []
-  const params: any[] = []
+  const params: (string | number)[] = []
 
   if (month) {
     const [y, m] = month.split('-').map(Number)
@@ -53,36 +49,40 @@ export async function POST(request: Request) {
   const body = await request.json()
   const records = Array.isArray(body) ? body : [body]
 
-  const { rows: settingsRows } = await pool.query('SELECT work_hours_per_day FROM settings LIMIT 1')
+  const { rows: settingsRows } = await pool.query('SELECT work_hours_per_day FROM settings ORDER BY id LIMIT 1')
   const normalHours = settingsRows[0]?.work_hours_per_day || 8
 
+  const allowedStatuses = new Set(['present', 'absent', 'leave', 'holiday'])
   const results = []
   for (const r of records) {
-    const workHours = r.check_in && r.check_out ? calculateWorkHours(r.check_in, r.check_out) : 0
-    const overtime = Math.max(0, workHours - normalHours)
+    if (!r.employee_id || !r.date || !/^\d{4}-\d{2}-\d{2}$/.test(r.date)) {
+      return NextResponse.json({ error: 'Invalid attendance record (employee_id and YYYY-MM-DD date required)' }, { status: 400 })
+    }
+    const status = allowedStatuses.has(r.status) ? r.status : 'present'
+
+    // Same overnight/holiday-aware work-hours math as the self-service check-out path.
+    const holidayWork = await isOffDay(r.date)
+    let workHours = 0
+    if (r.check_in && r.check_out) {
+      workHours = computeWorkHours(r.check_in, r.check_out) ?? 0
+    }
+    const overtime = computeOvertime(workHours, normalHours, holidayWork)
 
     const { rows } = await pool.query(`
-      INSERT INTO attendance (employee_id, date, check_in, check_out, work_hours, overtime_hours, status, notes)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO attendance (employee_id, date, check_in, check_out, work_hours, overtime_hours, status, notes, is_holiday_work)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       ON CONFLICT (employee_id, date) DO UPDATE SET
         check_in = COALESCE($3, attendance.check_in),
         check_out = COALESCE($4, attendance.check_out),
         work_hours = $5,
         overtime_hours = $6,
         status = $7,
-        notes = $8
+        notes = $8,
+        is_holiday_work = $9
       RETURNING *
-    `, [r.employee_id, r.date, r.check_in || null, r.check_out || null, workHours, overtime, r.status || 'present', r.notes || null])
+    `, [r.employee_id, r.date, r.check_in || null, r.check_out || null, workHours, overtime, status, r.notes || null, holidayWork])
     results.push(rows[0])
   }
 
   return NextResponse.json(results)
-}
-
-function calculateWorkHours(checkIn: string, checkOut: string): number {
-  const [inH, inM] = checkIn.split(':').map(Number)
-  const [outH, outM] = checkOut.split(':').map(Number)
-  const totalMinutes = (outH * 60 + outM) - (inH * 60 + inM)
-  if (totalMinutes <= 0) return 0
-  return Math.round(totalMinutes / 60 * 100) / 100
 }

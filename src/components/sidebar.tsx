@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useLanguage, useT } from '@/lib/language-context'
 import {
@@ -82,7 +82,6 @@ function NavContent({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
-  const router = useRouter()
   const { dir } = useLanguage()
   const t = useT()
 

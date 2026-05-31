@@ -38,6 +38,14 @@ interface AttendanceRecord {
   employee?: { id: number; name: string; department_id: number }
 }
 
+interface AttendancePayload {
+  employee_id: number
+  date: string
+  check_in: string
+  check_out: string
+  status: string
+}
+
 export default function AttendancePage() {
   const queryClient = useQueryClient()
   const t = useT()
@@ -74,7 +82,7 @@ export default function AttendancePage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (data: any[]) => fetch('/api/attendance', {
+    mutationFn: (data: AttendancePayload[]) => fetch('/api/attendance', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -83,6 +91,7 @@ export default function AttendancePage() {
       queryClient.invalidateQueries({ queryKey: ['attendance'] })
       setDialogOpen(false)
       setSelectedEmployees([])
+      setEditRecord(null)
       toast.success(t('addedSuccess'))
     },
     onError: () => toast.error(t('error')),
@@ -175,10 +184,9 @@ export default function AttendancePage() {
         date: editRecord.date,
         check_in: form.check_in,
         check_out: form.check_out,
-        status: 'present',
+        status: form.status,
       }]
       createMutation.mutate(data)
-      setEditRecord(null)
       return
     }
     if (!selectedDay || selectedEmployees.length === 0) {

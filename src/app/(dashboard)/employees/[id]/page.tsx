@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowRight, Printer, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import { getEmployee, getLeaveRequestsByEmployee, getTardinessByEmployee, getSettings, getLeaveTypes, getDepartments, updateEmployee } from '@/lib/api'
-import { format } from 'date-fns'
+import type { Employee } from '@/lib/types'
 import { useLanguage, useT } from '@/lib/language-context'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
@@ -23,6 +23,24 @@ function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+interface EmployeeUpdatePayload {
+  name: string
+  email: string | null
+  phone: string | null
+  position: string | null
+  department_id: number
+  join_date: string | null
+}
+
+interface AuditEntry {
+  id: number
+  action: string
+  user_id: string | null
+  user_role: string | null
+  details: string | null
+  created_at: string
 }
 
 export default function EmployeeCardPage() {
@@ -54,7 +72,7 @@ export default function EmployeeCardPage() {
   const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', position: '', department_id: '', join_date: '' })
 
   const editMutation = useMutation({
-    mutationFn: (data: Record<string, any>) => updateEmployee(id, data),
+    mutationFn: (data: EmployeeUpdatePayload) => updateEmployee(id, data as Partial<Employee>),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employee', id] })
       setEditProfileOpen(false)
@@ -91,22 +109,24 @@ export default function EmployeeCardPage() {
     })
   }
 
-  const [activity, setActivity] = useState<any[]>([])
+  const [activity, setActivity] = useState<AuditEntry[]>([])
 
   useEffect(() => {
-    if (employee) {
-      fetch('/api/audit')
-        .then(r => r.ok ? r.json() : [])
-        .then(data => {
-          const empActivity = data.filter((a: any) =>
-            a.details?.includes(`emp ${employee.id}`) ||
-            a.details?.includes(`Employee ${employee.id}`)
-          )
-          setActivity(empActivity)
-        })
-        .catch(() => {})
+    if (!employee?.id) return
+    let cancelled = false
+    const empToken = new RegExp(`\\b(?:emp|Employee) ${id}\\b`)
+    fetch('/api/audit')
+      .then(r => (r.ok ? r.json() : []))
+      .then((data: AuditEntry[]) => {
+        if (cancelled) return
+        const empActivity = data.filter(a => a.details != null && empToken.test(a.details))
+        setActivity(empActivity)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
     }
-  }, [employee])
+  }, [employee?.id, id])
 
   if (!employee) return <div className="p-6">{t('loading')}</div>
 
@@ -114,7 +134,6 @@ export default function EmployeeCardPage() {
   const approvedLeaves = leaves.filter(l => l.status === 'approved')
   const usedDays = approvedLeaves.reduce((sum, l) => sum + l.days_count, 0)
   const tardMinutes = tardiness.reduce((sum, t) => sum + t.minutes_late, 0)
-  const tardDays = settings ? tardMinutes / 60 / settings.work_hours_per_day : 0
   const remaining = employee.leave_balance
   const deduction = settings ? Math.round(tardMinutes / 60 * settings.deduction_per_hour * 1000) / 1000 : 0
   const isOnLeave = approvedLeaves.some(l => l.start_date <= today && l.end_date >= today)
@@ -473,7 +492,7 @@ export default function EmployeeCardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2 max-h-48 overflow-y-auto">
-              {activity.map((a: any) => (
+              {activity.map((a) => (
                 <div key={a.id} className="flex justify-between items-center text-sm py-1 border-b">
                   <span className="text-muted-foreground">{a.action}</span>
                   <span className="text-xs text-muted-foreground">{new Date(a.created_at).toLocaleDateString()}</span>

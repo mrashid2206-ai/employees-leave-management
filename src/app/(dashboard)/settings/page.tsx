@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -19,7 +18,29 @@ import { toast } from 'sonner'
 import { useLanguage, useT } from '@/lib/language-context'
 import { getSettings, updateSettings, getDepartments, createDepartment, updateDepartment, deleteDepartment, getHolidays, createHoliday, updateHoliday, deleteHoliday, getEmployees, getLeaveTypes, createLeaveType, updateLeaveType, deleteLeaveType } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import type { Settings } from '@/lib/types'
+import type { Settings, LeaveRequest } from '@/lib/types'
+
+// Settings include extra office fields managed via this form but not part of the shared Settings type.
+interface SettingsForm extends Partial<Settings> {
+  block_offsite_checkin?: boolean
+}
+
+// Result returned by the daily-process / yearly-reset automation endpoints.
+interface ProcessResult {
+  absentMarked?: number
+  leaveDeducted?: number
+  tardinessCreated?: number
+  employeesReset?: number
+  newBalance?: number
+  newYearStart?: string
+  newYearEnd?: string
+}
+
+interface AdminUser {
+  id: number
+  username: string
+  name: string
+}
 
 export default function SettingsPage() {
   const t = useT()
@@ -33,7 +54,7 @@ export default function SettingsPage() {
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
   const { data: allLeaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: () => fetch('/api/leaves').then(r => r.json()) })
 
-  const [form, setForm] = useState<Partial<Settings>>({})
+  const [form, setForm] = useState<SettingsForm>({})
   const [deptName, setDeptName] = useState('')
   const [editDept, setEditDept] = useState<{ id: number; name: string } | null>(null)
   const [holidayForm, setHolidayForm] = useState({ name: '', date: '' })
@@ -43,12 +64,19 @@ export default function SettingsPage() {
   const [ltForm, setLtForm] = useState({ name_ar: '', name_en: '', color: '#4CAF50' })
   const [editLt, setEditLt] = useState<{ id: number; name_ar: string; name_en: string; color: string } | null>(null)
   const [processDate, setProcessDate] = useState(new Date().toISOString().split('T')[0])
-  const [processResult, setProcessResult] = useState<any>(null)
+  const [processResult, setProcessResult] = useState<ProcessResult | null>(null)
   const [processing, setProcessing] = useState(false)
   const [resetConfirm, setResetConfirm] = useState(false)
   const [activeSection, setActiveSection] = useState('general')
 
-  useEffect(() => { if (settings) setForm({ ...settings, office_radius: settings.office_radius || 200, office_ip: settings.office_ip || '' } as any) }, [settings])
+  // Sync the editable form whenever the loaded settings change identity.
+  // React supports calling a setter during render to adjust state from changing data
+  // (the previous-value guard prevents an infinite loop), avoiding setState-in-effect.
+  const [syncedSettings, setSyncedSettings] = useState<Settings | undefined>(undefined)
+  if (settings && settings !== syncedSettings) {
+    setSyncedSettings(settings)
+    setForm({ ...settings, office_radius: settings.office_radius || 200, office_ip: settings.office_ip || '' })
+  }
 
   // Mutations
   const settingsMutation = useMutation({ mutationFn: (data: Partial<Settings>) => updateSettings(data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['settings'] }); toast.success(t('savedSuccess')) }, onError: () => toast.error(t('error')) })
@@ -59,7 +87,7 @@ export default function SettingsPage() {
   const updateHolidayMutation = useMutation({ mutationFn: ({ id, data }: { id: number; data: { name: string; date: string } }) => updateHoliday(id, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['holidays'] }); setEditHoliday(null); toast.success(t('updatedSuccess')) } })
   const deleteHolidayMutation = useMutation({ mutationFn: deleteHoliday, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['holidays'] }); toast.success(t('deletedSuccess')) } })
   const createLtMutation = useMutation({ mutationFn: createLeaveType, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['leaveTypes'] }); setLtForm({ name_ar: '', name_en: '', color: '#4CAF50' }); toast.success(t('addedSuccess')) } })
-  const updateLtMutation = useMutation({ mutationFn: ({ id, data }: { id: number; data: any }) => updateLeaveType(id, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['leaveTypes'] }); setEditLt(null); toast.success(t('updatedSuccess')) } })
+  const updateLtMutation = useMutation({ mutationFn: ({ id, data }: { id: number; data: { name_ar: string; name_en: string; color: string } }) => updateLeaveType(id, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['leaveTypes'] }); setEditLt(null); toast.success(t('updatedSuccess')) } })
   const deleteLtMutation = useMutation({ mutationFn: deleteLeaveType, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['leaveTypes'] }); toast.success(t('deletedSuccess')) }, onError: (err: Error) => toast.error(err.message) })
 
   async function runDailyProcess() {
@@ -185,11 +213,11 @@ export default function SettingsPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-accent/20">
                     <div>
                       <Label className="text-xs">{t('annualBalance')}</Label>
-                      <Input type="number" value={form.annual_leave_balance || ''} onChange={e => setForm(f => ({ ...f, annual_leave_balance: parseInt(e.target.value) }))} />
+                      <Input type="number" min="1" value={form.annual_leave_balance || ''} onChange={e => setForm(f => ({ ...f, annual_leave_balance: parseInt(e.target.value) }))} />
                     </div>
                     <div>
                       <Label className="text-xs">{t('deductionPerHour')}</Label>
-                      <Input type="number" step="0.001" value={form.deduction_per_hour || ''} onChange={e => setForm(f => ({ ...f, deduction_per_hour: parseFloat(e.target.value) }))} />
+                      <Input type="number" min="0" step="0.001" value={form.deduction_per_hour || ''} onChange={e => setForm(f => ({ ...f, deduction_per_hour: parseFloat(e.target.value) }))} />
                     </div>
                     <div>
                       <Label className="text-xs">{t('maxAbsent')}</Label>
@@ -243,7 +271,7 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <Label className="text-xs">{t('workHoursPerDay')}</Label>
-                    <Input type="number" value={form.work_hours_per_day || ''} onChange={e => setForm(f => ({ ...f, work_hours_per_day: parseInt(e.target.value) }))} />
+                    <Input type="number" min="1" value={form.work_hours_per_day || ''} onChange={e => setForm(f => ({ ...f, work_hours_per_day: parseInt(e.target.value) }))} />
                   </div>
                 </div>
 
@@ -368,7 +396,7 @@ export default function SettingsPage() {
                 {/* Leave types grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {leaveTypes.map(lt => {
-                    const usageCount = allLeaves.filter((l: any) => l.leave_type_id === lt.id).length
+                    const usageCount = allLeaves.filter((l: LeaveRequest) => l.leave_type_id === lt.id).length
                     return (
                       <div key={lt.id} className="flex items-center justify-between p-4 rounded-xl bg-accent/20 hover:bg-accent/30 transition-colors">
                         <div className="flex items-center gap-3">
@@ -399,8 +427,8 @@ export default function SettingsPage() {
           {/* Holidays */}
           {activeSection === 'holidays' && (() => {
             const years = [...new Set(holidays.map(h => h.date.slice(0, 4)))].sort()
-            if (years.length > 0 && !years.includes(holidayYear)) setHolidayYear(years[0])
-            const filteredHolidays = holidays.filter(h => h.date.startsWith(holidayYear))
+            const effectiveYear = years.includes(holidayYear) ? holidayYear : (years[0] ?? holidayYear)
+            const filteredHolidays = holidays.filter(h => h.date.startsWith(effectiveYear))
 
             return (
               <Card className="border-0 shadow-lg">
@@ -415,7 +443,7 @@ export default function SettingsPage() {
                         <Button
                           key={y}
                           size="sm"
-                          variant={holidayYear === y ? 'default' : 'outline'}
+                          variant={effectiveYear === y ? 'default' : 'outline'}
                           onClick={() => setHolidayYear(y)}
                           className="text-xs"
                         >
@@ -438,7 +466,7 @@ export default function SettingsPage() {
                   {/* Summary */}
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Calendar className="h-4 w-4" />
-                    <span>{filteredHolidays.length} {lang === 'ar' ? 'عطلة في' : 'holidays in'} {holidayYear}</span>
+                    <span>{filteredHolidays.length} {lang === 'ar' ? 'عطلة في' : 'holidays in'} {effectiveYear}</span>
                   </div>
 
                   {/* Holidays list */}
@@ -527,7 +555,7 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>{lang === 'ar' ? 'النطاق (متر)' : 'Radius (meters)'}</Label>
-                    <Input type="number" value={form.office_radius || 200} onChange={e => setForm(f => ({ ...f, office_radius: parseInt(e.target.value) }))} />
+                    <Input type="number" min="0" value={form.office_radius || 200} onChange={e => setForm(f => ({ ...f, office_radius: parseInt(e.target.value) }))} />
                   </div>
                   <div>
                     <Label>{lang === 'ar' ? 'عنوان IP المكتب' : 'Office IP Address'}</Label>
@@ -537,8 +565,8 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-3 p-3 rounded-lg bg-accent/30">
                   <Checkbox
                     id="block-offsite"
-                    checked={!!(form as any).block_offsite_checkin}
-                    onCheckedChange={(checked) => setForm(f => ({ ...f, block_offsite_checkin: !!checked } as any))}
+                    checked={!!form.block_offsite_checkin}
+                    onCheckedChange={(checked) => setForm(f => ({ ...f, block_offsite_checkin: !!checked }))}
                   />
                   <div>
                     <Label htmlFor="block-offsite" className="text-sm font-medium cursor-pointer">
@@ -659,7 +687,7 @@ export default function SettingsPage() {
 
           {/* Admin Users */}
           {activeSection === 'admins' && (
-            <AdminUsersSection lang={lang} dir={dir} />
+            <AdminUsersSection lang={lang} />
           )}
         </div>
       </div>
@@ -724,8 +752,8 @@ export default function SettingsPage() {
   )
 }
 
-function AdminUsersSection({ lang, dir }: { lang: string; dir: string }) {
-  const [admins, setAdmins] = useState<any[]>([])
+function AdminUsersSection({ lang }: { lang: string }) {
+  const [admins, setAdmins] = useState<AdminUser[]>([])
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ username: '', password: '', name: '' })
   const [loading, setLoading] = useState(false)

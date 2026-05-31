@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { Search, ArrowUpDown, Plus, Trash2, Pencil, Upload, Power } from 'lucide-react'
 import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings, getDepartments, getLeaveTypes, createEmployee, deleteEmployee, updateEmployee } from '@/lib/api'
+import type { Employee } from '@/lib/types'
 import { parseExcelFile } from '@/lib/excel'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
@@ -26,6 +27,20 @@ function formatMinutesToHHMM(minutes: number): string {
 
 type SortField = 'name' | 'department' | 'balance' | 'used' | 'remaining' | 'tardiness' | 'deduction'
 type SortDir = 'asc' | 'desc'
+
+function SortHeader({ field, onToggle, children }: { field: SortField; onToggle: (field: SortField) => void; children: React.ReactNode }) {
+  return (
+    <TableHead
+      className="text-center cursor-pointer select-none hover:bg-accent"
+      onClick={() => onToggle(field)}
+    >
+      <div className="flex items-center justify-center gap-1">
+        {children}
+        <ArrowUpDown className="h-3 w-3" />
+      </div>
+    </TableHead>
+  )
+}
 
 export default function EmployeesPage() {
   const router = useRouter()
@@ -55,7 +70,7 @@ export default function EmployeesPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number; name: string }>({ open: false, id: 0, name: '' })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<any> }) => updateEmployee(id, data),
+    mutationFn: ({ id, data }: { id: number; data: Partial<Employee> }) => updateEmployee(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] })
       setEditOpen(false)
@@ -92,15 +107,15 @@ export default function EmployeesPage() {
         name: editEmp.name,
         department_id: parseInt(editEmp.department_id),
         leave_balance: parseInt(editEmp.leave_balance) || (settings?.annual_leave_balance || 30),
-        email: editEmp.email || null,
-        phone: editEmp.phone || null,
-        position: editEmp.position || null,
-        join_date: editEmp.join_date || null,
+        email: editEmp.email || undefined,
+        phone: editEmp.phone || undefined,
+        position: editEmp.position || undefined,
+        join_date: editEmp.join_date || undefined,
       },
     })
   }
 
-  function openEditDialog(emp: any) {
+  function openEditDialog(emp: Employee) {
     setEditEmp({
       id: emp.id,
       name: emp.name,
@@ -136,6 +151,14 @@ export default function EmployeesPage() {
     const file = e.target.files?.[0]
     if (!file) return
 
+    // Bound the parser's exposure (xlsx@0.18.5 has unpatched ReDoS/proto-pollution advisories).
+    const MAX_IMPORT_BYTES = 2 * 1024 * 1024 // 2 MB
+    if (file.size > MAX_IMPORT_BYTES) {
+      toast.error(lang === 'ar' ? 'الملف كبير جداً (الحد 2 ميجابايت)' : 'File too large (max 2 MB)')
+      e.target.value = ''
+      return
+    }
+
     try {
       const data = await parseExcelFile(file)
       let imported = 0
@@ -154,7 +177,7 @@ export default function EmployeesPage() {
           await fetch('/api/employees', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, department_id: deptId, leave_balance: parseInt(balance) || (settings?.annual_leave_balance || 30) }),
+            body: JSON.stringify({ name, department_id: deptId, leave_balance: parseInt(String(balance)) || (settings?.annual_leave_balance || 30) }),
           })
           imported++
         }
@@ -193,7 +216,6 @@ export default function EmployeesPage() {
 
       const empTardiness = tardiness.filter(t => t.employee_id === emp.id)
       const tardMinutes = empTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
-      const tardDays = settings ? tardMinutes / 60 / settings.work_hours_per_day : 0
       const remaining = emp.leave_balance
       const deduction = settings ? Math.round(tardMinutes / 60 * settings.deduction_per_hour * 1000) / 1000 : 0
 
@@ -246,18 +268,6 @@ export default function EmployeesPage() {
       setSortDir('asc')
     }
   }
-
-  const SortHeader = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
-    <TableHead
-      className="text-center cursor-pointer select-none hover:bg-accent"
-      onClick={() => toggleSort(field)}
-    >
-      <div className="flex items-center justify-center gap-1">
-        {children}
-        <ArrowUpDown className="h-3 w-3" />
-      </div>
-    </TableHead>
-  )
 
   return (
     <div className="space-y-6">
@@ -387,19 +397,19 @@ export default function EmployeesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-center w-12">#</TableHead>
-                  <SortHeader field="name">{t('name')}</SortHeader>
-                  <SortHeader field="department">{t('department')}</SortHeader>
-                  <SortHeader field="balance">{t('balance')}</SortHeader>
-                  <SortHeader field="used">{t('used')}</SortHeader>
+                  <SortHeader field="name" onToggle={toggleSort}>{t('name')}</SortHeader>
+                  <SortHeader field="department" onToggle={toggleSort}>{t('department')}</SortHeader>
+                  <SortHeader field="balance" onToggle={toggleSort}>{t('balance')}</SortHeader>
+                  <SortHeader field="used" onToggle={toggleSort}>{t('used')}</SortHeader>
                   <TableHead className="text-center">{t('annual')}</TableHead>
                   <TableHead className="text-center">{t('sick')}</TableHead>
                   <TableHead className="text-center">{t('emergency')}</TableHead>
                   <TableHead className="text-center">{t('unpaid')}</TableHead>
                   <TableHead className="text-center">{t('other')}</TableHead>
-                  <SortHeader field="remaining">{t('remaining')}</SortHeader>
-                  <SortHeader field="tardiness">{t('tardinessHHMM')}</SortHeader>
+                  <SortHeader field="remaining" onToggle={toggleSort}>{t('remaining')}</SortHeader>
+                  <SortHeader field="tardiness" onToggle={toggleSort}>{t('tardinessHHMM')}</SortHeader>
                   <TableHead className="text-center">{t('status')}</TableHead>
-                  <SortHeader field="deduction">{t('deduction')} ({settings?.currency_symbol || 'ر.ع.'})</SortHeader>
+                  <SortHeader field="deduction" onToggle={toggleSort}>{t('deduction')} ({settings?.currency_symbol || 'ر.ع.'})</SortHeader>
                   <TableHead className="text-center w-20">{t('actions')}</TableHead>
                 </TableRow>
               </TableHeader>

@@ -1,8 +1,10 @@
 // Run this after deployment to hash all employee passwords
-// Usage: DATABASE_URL=your_url node scripts/hash-passwords.js
+// Usage: DATABASE_URL=your_url node scripts/hash-passwords.mjs
 
-const bcrypt = require('bcryptjs')
-const { Pool } = require('pg')
+import bcrypt from 'bcryptjs'
+import pg from 'pg'
+
+const { Pool } = pg
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 

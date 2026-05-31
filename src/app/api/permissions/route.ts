@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 
   let query = 'SELECT p.*, json_build_object(\'id\', e.id, \'name\', e.name) as employee FROM permissions p LEFT JOIN employees e ON p.employee_id = e.id'
   const conditions: string[] = []
-  const params: any[] = []
+  const params: (string | number)[] = []
 
   if (employeeId) {
     params.push(employeeId)
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
 
   // Employees can only see their own
   if (user.role === 'employee') {
-    params.push(user.id)
+    params.push(user.id as number)
     conditions.push(`p.employee_id = $${params.length}`)
   }
 

@@ -1,29 +1,25 @@
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
-import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
+import { verifyAdmin, unauthorized } from '@/lib/api-auth'
+import { DEFAULT_EMPLOYEE_PASSWORD } from '@/lib/constants'
+import {
+  ensureEmployeeProfileColumns,
+  ensureEmployeeAuthColumns,
+  ensureHotIndexes,
+} from '@/lib/ensure-schema'
 
 export async function GET(request: Request) {
-  const user = await verifyAnyAuth(request)
-  if (!user) return unauthorized()
+  // Admin only: the full roster exposes PII (email/phone/leave_balance) and every
+  // login username. The employee portal reads only its own record via /api/employees/[id].
+  const admin = await verifyAdmin(request)
+  if (!admin) return unauthorized()
 
-  // Ensure new columns exist
-  await pool.query(`
-    ALTER TABLE employees ADD COLUMN IF NOT EXISTS join_date DATE,
-    ADD COLUMN IF NOT EXISTS email VARCHAR(200),
-    ADD COLUMN IF NOT EXISTS phone VARCHAR(50),
-    ADD COLUMN IF NOT EXISTS position VARCHAR(200)
-  `).catch(() => {})
-
-  // Ensure indexes exist (safe to run multiple times)
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_leave_status ON leave_requests(status);
-    CREATE INDEX IF NOT EXISTS idx_leave_emp_status ON leave_requests(employee_id, status);
-    CREATE INDEX IF NOT EXISTS idx_attendance_emp_date ON attendance(employee_id, date);
-  `).catch(() => {})
+  await ensureEmployeeProfileColumns().catch(() => {})
+  await ensureHotIndexes().catch(() => {})
 
   const { rows } = await pool.query(`
-    SELECT e.id, e.name, e.department_id, e.leave_balance, e.is_active, e.username, e.join_date::text as join_date, e.email, e.phone, e.position, e.created_at, e.updated_at, json_build_object('id', d.id, 'name', d.name) as department
+    SELECT e.id, e.name, e.department_id, e.leave_balance::float8 as leave_balance, e.is_active, e.username, e.join_date::text as join_date, e.email, e.phone, e.position, e.created_at, e.updated_at, json_build_object('id', d.id, 'name', d.name) as department
     FROM employees e
     LEFT JOIN departments d ON e.department_id = d.id
     ORDER BY e.id
@@ -61,19 +57,15 @@ export async function POST(request: Request) {
     }
   }
 
-  const hashedPassword = await bcrypt.hash('123456', 10)
+  // New accounts get the shared default password and must change it on first login.
+  const hashedPassword = await bcrypt.hash(DEFAULT_EMPLOYEE_PASSWORD, 10)
 
-  // Ensure join_date column exists
-  await pool.query(`
-    ALTER TABLE employees ADD COLUMN IF NOT EXISTS join_date DATE,
-    ADD COLUMN IF NOT EXISTS email VARCHAR(200),
-    ADD COLUMN IF NOT EXISTS phone VARCHAR(50),
-    ADD COLUMN IF NOT EXISTS position VARCHAR(200)
-  `).catch(() => {})
+  await ensureEmployeeProfileColumns().catch(() => {})
+  await ensureEmployeeAuthColumns().catch(() => {})
 
   const { rows } = await pool.query(`
-    INSERT INTO employees (name, department_id, leave_balance, username, password_hash, join_date, email, phone, position)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    INSERT INTO employees (name, department_id, leave_balance, username, password_hash, must_change_password, join_date, email, phone, position)
+    VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8, $9)
     RETURNING *
   `, [name, department_id, finalBalance, username, hashedPassword, join_date || null, email || null, phone || null, position || null])
 

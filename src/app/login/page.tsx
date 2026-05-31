@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,7 +12,6 @@ import { LanguageToggle } from '@/components/language-toggle'
 export default function LoginPage() {
   const t = useT()
   const { dir } = useLanguage()
-  const router = useRouter()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)

@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Download, Printer, FileSpreadsheet } from 'lucide-react'
 import { exportToExcel } from '@/lib/excel'
 import { useLanguage, useT } from '@/lib/language-context'
-import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings, getDepartments, getLeaveTypes } from '@/lib/api'
+import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings, getDepartments, getLeaveTypes, getHolidays } from '@/lib/api'
 
 function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -33,6 +33,7 @@ export default function ReportsPage() {
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
+  const { data: holidays = [] } = useQuery({ queryKey: ['holidays'], queryFn: getHolidays })
 
   const filteredEmployees = useMemo(() => {
     let emps = employees.filter(e => e.is_active)
@@ -46,19 +47,18 @@ export default function ReportsPage() {
   const summaryData = useMemo(() => {
     return filteredEmployees.map(emp => {
       const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
-      const usedDays = empLeaves.reduce((sum, l) => sum + l.days_count, 0)
+      const usedDays = empLeaves.reduce((sum, l) => sum + Number(l.days_count), 0)
       const empTardiness = tardiness.filter(t => t.employee_id === emp.id)
       const tardMinutes = empTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
-      const tardDays = settings ? tardMinutes / 60 / settings.work_hours_per_day : 0
       const remaining = emp.leave_balance
-      const deduction = settings ? Math.round(tardMinutes / 60 * settings.deduction_per_hour * 1000) / 1000 : 0
+      const deduction = settings ? Math.round(tardMinutes / 60 * Number(settings.deduction_per_hour) * 1000) / 1000 : 0
 
       // By type breakdown
       const byType: Record<string, number> = {}
       leaveTypes.forEach(lt => {
         byType[lt.name_en] = empLeaves
           .filter(l => l.leave_type_id === lt.id)
-          .reduce((sum, l) => sum + l.days_count, 0)
+          .reduce((sum, l) => sum + Number(l.days_count), 0)
       })
 
       return {
@@ -75,7 +75,9 @@ export default function ReportsPage() {
     })
   }, [filteredEmployees, leaves, tardiness, settings, leaveTypes])
 
-  // Monthly leave calendar
+  // Monthly leave calendar — exclude public holidays so per-month totals reconcile with
+  // the Summary tab's used days (days_count is already holiday-adjusted server-side).
+  const holidaySet = useMemo(() => new Set(holidays.map(h => h.date)), [holidays])
   const monthlyData = useMemo(() => {
     return filteredEmployees.map(emp => {
       const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
@@ -88,7 +90,9 @@ export default function ReportsPage() {
         const endMs = Date.UTC(ey, em - 1, ed)
         for (let ms = startMs; ms <= endMs; ms += 86400000) {
           const d = new Date(ms)
-          // Count all calendar days (weekends included — company policy)
+          const iso = d.toISOString().split('T')[0]
+          if (holidaySet.has(iso)) continue // holidays are not counted as leave
+          // Weekends are counted (company policy)
           const month = d.getUTCMonth()
           const fiscalIdx = month >= 2 ? month - 2 : month + 10
           months[fiscalIdx]++
@@ -102,7 +106,7 @@ export default function ReportsPage() {
         total: months.reduce((s, m) => s + m, 0),
       }
     })
-  }, [filteredEmployees, leaves, settings])
+  }, [filteredEmployees, leaves, holidaySet])
 
   function exportCSV() {
     const dedupedTypes = leaveTypes.filter((lt, i, arr) => arr.findIndex(t => t.name_en === lt.name_en) === i)

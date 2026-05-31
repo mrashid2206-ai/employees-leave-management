@@ -1,10 +1,6 @@
 'use client'
 
-import { useLanguage, useT } from '@/lib/language-context'
-
 export function PageLoading() {
-  const t = useT()
-
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="h-8 w-48 rounded-lg bg-muted animate-pulse" />
