@@ -42,9 +42,10 @@ still exist but are **unused** — monetary deduction was removed by product dec
 Tunable constants: **`src/lib/constants.ts`**.
 
 - **Attendance / geofence** — `src/lib/attendance-calc.ts` + `src/app/api/attendance/check-in/route.ts`.
-  Check-in/out is geofenced: **GPS is authoritative** (within `office_radius`, default 200 m);
-  office IP is a fallback only when GPS is absent. If `block_offsite_checkin` is ON, an
-  off-site (or unverifiable) check-in is rejected with `offsite_blocked`.
+  Location is **record-only**: GPS is captured when available and the row is flagged
+  `is_offsite` / `is_offsite_checkout` for admin review, but check-in/out is **never blocked**
+  by location (laptops have no GPS and mobile fixes can fail at the office). `office_lat/lng` +
+  `office_radius` (default 200 m, IP fallback) only decide the off-site *flag*, not access.
 - **Work hours / overtime** — `computeWorkHours` (handles overnight wrap, caps at
   `MAX_SHIFT_HOURS=16`), `computeOvertime` (hours beyond `work_hours_per_day`; on a
   holiday/off-day ALL hours are overtime).
@@ -130,17 +131,11 @@ npx next build
 
 ## 11. Troubleshooting
 
-- **"تسجيل الحضور متاح فقط من موقع المكتب" / "Check-in only allowed from the office"**
-  The geofence rejected the check-in. Almost always one of:
-  1. **Slow/denied GPS on mobile** — the phone didn't return a fix, so the server saw no
-     coordinates and treated it as off-site. The client now waits longer, accepts a recent
-     cached fix, and retries at low accuracy; the employee must allow location access for the
-     site and have GPS on. (Tune the geofence with a larger `office_radius` if the office GPS
-     is jittery.)
-  2. **Wrong office coordinates / radius** — verify `office_lat/lng` and `office_radius` in
-     Settings → Location. Set lat/lng from the actual building; 150–300 m radius is typical.
-  3. **`block_offsite_checkin` ON during testing** — turn it OFF to record off-site instead
-     of blocking, until the geofence is dialed in.
+- **Check-in location** — location is **record-only**; it never blocks check-in. If you want
+  to *see* who is off-site accurately, set correct `office_lat/lng` and a sane `office_radius`
+  (150–300 m) in Settings → Location; otherwise rows may be flagged off-site harmlessly. The
+  client still tries GPS (longer timeout, cached fix, low-accuracy retry) but a failure no
+  longer prevents check-in.
 - **Everyone marked absent for a day** — the daily job must run for a *completed* day. It now
   defaults to yesterday and refuses today/future. If a bad run happened, the auto-absence
   leave is reversible: delete the `'absent'` attendance row (refunds the auto-deducted day)

@@ -92,19 +92,14 @@ export async function POST(request: Request) {
     }
 
     // Location verification
-    const { rows: locSettings } = await pool.query('SELECT office_lat, office_lng, office_radius, office_ip, block_offsite_checkin FROM settings ORDER BY id LIMIT 1')
+    const { rows: locSettings } = await pool.query('SELECT office_lat, office_lng, office_radius, office_ip FROM settings ORDER BY id LIMIT 1')
     const officeLoc = locSettings[0]
     const { configured, onsite } = officeLoc
       ? evaluateLocation(officeLoc, latitude ?? null, longitude ?? null, clientIp)
       : { configured: false, onsite: true }
+    // Record-only policy: capture location and flag off-site for admin review, but never
+    // block check-in (laptops have no GPS and mobile fixes can fail at the office).
     const isOffsite = configured ? !onsite : false
-
-    if (isOffsite && officeLoc?.block_offsite_checkin) {
-      return NextResponse.json({
-        error: 'offsite_blocked',
-        message: 'Check-in is only allowed from the office location. Please make sure you are at the office and GPS is enabled.',
-      }, { status: 403 })
-    }
 
     const { rows } = await pool.query(`
       INSERT INTO attendance (employee_id, date, check_in, status, is_holiday_work, check_in_lat, check_in_lng, check_in_ip, is_offsite)
@@ -119,16 +114,13 @@ export async function POST(request: Request) {
     })
 
   } else if (action === 'check-out') {
-    // Location verification for checkout (shared logic with check-in)
-    const { rows: coLocSettings } = await pool.query('SELECT office_lat, office_lng, office_radius, office_ip, block_offsite_checkin FROM settings ORDER BY id LIMIT 1')
+    // Record-only: capture checkout location + off-site flag, never block.
+    const { rows: coLocSettings } = await pool.query('SELECT office_lat, office_lng, office_radius, office_ip FROM settings ORDER BY id LIMIT 1')
     const coOfficeLoc = coLocSettings[0]
     const co = coOfficeLoc
       ? evaluateLocation(coOfficeLoc, latitude ?? null, longitude ?? null, clientIp)
       : { configured: false, onsite: true }
     const coOffsite = co.configured ? !co.onsite : false
-    if (coOffsite && coOfficeLoc?.block_offsite_checkin) {
-      return NextResponse.json({ error: 'offsite_blocked', message: 'Check-out is only allowed from the office location. Please make sure you are at the office and GPS is enabled.' }, { status: 403 })
-    }
 
     const { rows: existing } = await pool.query(
       'SELECT id, check_in, check_out FROM attendance WHERE employee_id = $1 AND date = $2',
