@@ -334,17 +334,35 @@ export default function EmployeePortalPage() {
     if (!confirm(confirmMsg)) return
     setLoading(true)
 
-    // Get GPS location
+    // Get GPS location. Mobile browsers often can't return a high-accuracy fix within a
+    // few seconds (indoors / first fix of the day), so we: allow a recent cached fix
+    // (maximumAge), give a generous timeout, and fall back to a low-accuracy attempt.
+    // This matters because the server treats "no coordinates" as off-site and can block
+    // check-in — so a slow GPS must not look like being away from the office.
+    const getPosition = (opts: PositionOptions) =>
+      new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, opts)
+      })
+
     let latitude: number | null = null
     let longitude: number | null = null
     try {
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000, enableHighAccuracy: true })
-      })
+      let pos: GeolocationPosition
+      try {
+        // High accuracy first; accept a fix up to 60s old, wait up to 15s.
+        pos = await getPosition({ enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 })
+      } catch {
+        // Fallback: coarse network location is faster and usually enough for a geofence.
+        pos = await getPosition({ enableHighAccuracy: false, timeout: 10000, maximumAge: 120000 })
+      }
       latitude = pos.coords.latitude
       longitude = pos.coords.longitude
     } catch {
-      // GPS denied or unavailable - continue without it
+      // GPS denied or still unavailable — warn so the employee knows to enable location,
+      // rather than getting an opaque "you're off-site" block.
+      toast.error(lang === 'ar'
+        ? 'تعذّر تحديد موقعك. فعّل خدمة الموقع (GPS) واسمح للموقع بالوصول ثم حاول مرة أخرى.'
+        : 'Could not get your location. Enable GPS/location access for this site and try again.')
     }
 
     try {
