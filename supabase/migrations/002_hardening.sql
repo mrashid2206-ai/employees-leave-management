@@ -103,7 +103,10 @@ ALTER TABLE attendance
 -- Fractional leave support (half-day = 0.5) -----------------------------------------
 ALTER TABLE leave_requests ALTER COLUMN days_count TYPE NUMERIC(5,1);
 ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS is_half_day BOOLEAN DEFAULT FALSE;
-ALTER TABLE employees ALTER COLUMN leave_balance TYPE NUMERIC(5,1);
+
+-- Tardiness->leave penalty: 3-decimal balance + per-row deduction tracking ----------
+ALTER TABLE employees ALTER COLUMN leave_balance TYPE NUMERIC(7,3);
+ALTER TABLE tardiness_log ADD COLUMN IF NOT EXISTS leave_deducted NUMERIC(7,3) NOT NULL DEFAULT 0;
 
 -- Uniqueness the ON CONFLICT seeds rely on (run /api/cleanup first if these fail) ----
 CREATE UNIQUE INDEX IF NOT EXISTS uq_leave_types_name_en ON leave_types(name_en);

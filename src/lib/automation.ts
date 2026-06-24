@@ -1,8 +1,9 @@
 import pool, { omanToday, omanYesterday } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { logger } from '@/lib/log'
-import { ensureFractionalLeaveColumns, ensureSettingsColumns } from '@/lib/ensure-schema'
-import { LEAVE_TYPE_ANNUAL, TARDINESS_GRACE_MINUTES, AUTO_ABSENCE_LEAVE_NOTE } from '@/lib/constants'
+import { ensureFractionalLeaveColumns, ensureSettingsColumns, ensureTardinessPenaltyColumns } from '@/lib/ensure-schema'
+import { LEAVE_TYPE_ANNUAL, TARDINESS_GRACE_MINUTES, AUTO_ABSENCE_LEAVE_NOTE, TARDINESS_DEDUCTS_LEAVE, TARDINESS_PENALTY_GRACE_MINUTES } from '@/lib/constants'
+import { tardinessLeaveDeduction } from '@/lib/tardiness-penalty'
 
 export interface Actor {
   id: string
@@ -30,6 +31,7 @@ export async function runDailyAutomation(date: string | undefined, actor: Actor)
 
   await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_tardiness_unique ON tardiness_log (employee_id, date)').catch(() => {})
   await ensureFractionalLeaveColumns().catch(() => {})
+  await ensureTardinessPenaltyColumns().catch(() => {})
 
   const { rows: annualType } = await pool.query(
     'SELECT id FROM leave_types WHERE name_en = $1 ORDER BY id LIMIT 1',
@@ -126,11 +128,25 @@ export async function runDailyAutomation(date: string | undefined, actor: Actor)
             )
             if (existing.length === 0) {
               const hoursDecimal = Math.round((minutesLate / 60) * 100000) / 100000
-              await pool.query(`
-                INSERT INTO tardiness_log (employee_id, date, time, minutes_late, hours_late_decimal, notes)
-                VALUES ($1, $2, $3, $4, $5, 'Auto-generated from attendance')
-              `, [emp.id, processDate, record.check_in, minutesLate, hoursDecimal])
-              results.tardinessCreated++
+              const deduction = TARDINESS_DEDUCTS_LEAVE ? tardinessLeaveDeduction(minutesLate, workHoursDay, TARDINESS_PENALTY_GRACE_MINUTES) : 0
+              const tc = await pool.connect()
+              try {
+                await tc.query('BEGIN')
+                await tc.query(`
+                  INSERT INTO tardiness_log (employee_id, date, time, minutes_late, hours_late_decimal, notes, leave_deducted)
+                  VALUES ($1, $2, $3, $4, $5, 'Auto-generated from attendance', $6)
+                `, [emp.id, processDate, record.check_in, minutesLate, hoursDecimal, deduction])
+                if (deduction > 0) {
+                  await tc.query('UPDATE employees SET leave_balance = leave_balance - $1 WHERE id = $2', [deduction, emp.id])
+                }
+                await tc.query('COMMIT')
+                results.tardinessCreated++
+              } catch (err) {
+                await tc.query('ROLLBACK')
+                logger.error('auto-tardiness deduction failed', err, { employeeId: emp.id, date: processDate })
+              } finally {
+                tc.release()
+              }
             }
           }
         }

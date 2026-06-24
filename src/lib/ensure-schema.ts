@@ -115,3 +115,14 @@ export function ensureFractionalLeaveColumns(): Promise<void> {
     ALTER TABLE employees ALTER COLUMN leave_balance TYPE NUMERIC(5,1);
   `)
 }
+
+// Support the tardiness->leave penalty: widen leave_balance to 3 decimals so small
+// proportional deductions (e.g. 2 min late ≈ 0.004 day) register instead of rounding to
+// zero, and record how much each tardiness row deducted so deleting it refunds exactly.
+const tardinessPenaltyColsRunner = once()
+export function ensureTardinessPenaltyColumns(): Promise<void> {
+  return tardinessPenaltyColsRunner(`
+    ALTER TABLE employees ALTER COLUMN leave_balance TYPE NUMERIC(7,3);
+    ALTER TABLE tardiness_log ADD COLUMN IF NOT EXISTS leave_deducted NUMERIC(7,3) NOT NULL DEFAULT 0;
+  `)
+}
