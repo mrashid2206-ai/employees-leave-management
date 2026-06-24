@@ -32,4 +32,26 @@ describe('tardinessLeaveDeduction', () => {
   it('falls back to an 8h day when work hours is missing/zero', () => {
     expect(tardinessLeaveDeduction(480, 0)).toBe(1)
   })
+
+  describe('with a grace period', () => {
+    it('charges nothing when lateness is within the grace', () => {
+      expect(tardinessLeaveDeduction(10, 8, 10)).toBe(0)
+      expect(tardinessLeaveDeduction(5, 8, 10)).toBe(0)
+    })
+
+    it('charges only the minutes beyond the grace', () => {
+      // 11 min late, 10 grace -> 1 chargeable min: 1/480 = 0.00208 -> 0.002
+      expect(tardinessLeaveDeduction(11, 8, 10)).toBe(0.002)
+      // 70 min late, 10 grace -> 60 chargeable: 60/480 = 0.125
+      expect(tardinessLeaveDeduction(70, 8, 10)).toBe(0.125)
+    })
+
+    it('a full extra workday past the grace = 1 day', () => {
+      expect(tardinessLeaveDeduction(490, 8, 10)).toBe(1) // 480 chargeable
+    })
+
+    it('grace of 0 behaves like no grace', () => {
+      expect(tardinessLeaveDeduction(2, 8, 0)).toBe(0.004)
+    })
+  })
 })

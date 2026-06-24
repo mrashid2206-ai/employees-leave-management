@@ -40,3 +40,9 @@ export const AUTO_ABSENCE_LEAVE_NOTE = 'Auto-deducted: absent without leave'
 // 480 late-minutes = 1 day and 2 late-minutes = 2/480 ≈ 0.004 day. Set to false to
 // disable the penalty (tardiness then only tracks punctuality, no balance impact).
 export const TARDINESS_DEDUCTS_LEAVE = true
+
+// Grace forgiven BEFORE charging leave: the first N late minutes each day cost nothing;
+// only minutes beyond this are converted to a leave deduction. The lateness is still
+// recorded for punctuality tracking — this only affects the penalty. (Distinct from
+// TARDINESS_GRACE_MINUTES, which controls whether lateness is logged at all.)
+export const TARDINESS_PENALTY_GRACE_MINUTES = 10

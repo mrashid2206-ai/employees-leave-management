@@ -3,7 +3,7 @@ import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 import { ensureTardinessPenaltyColumns } from '@/lib/ensure-schema'
 import { tardinessLeaveDeduction } from '@/lib/tardiness-penalty'
-import { TARDINESS_DEDUCTS_LEAVE } from '@/lib/constants'
+import { TARDINESS_DEDUCTS_LEAVE, TARDINESS_PENALTY_GRACE_MINUTES } from '@/lib/constants'
 import { logger } from '@/lib/log'
 
 export async function GET(request: Request) {
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     await client.query('BEGIN')
     for (const r of records) {
       const hoursLateDecimal = Math.round((r.minutes_late / 60) * 100000) / 100000
-      const deduction = TARDINESS_DEDUCTS_LEAVE ? tardinessLeaveDeduction(r.minutes_late, workHoursPerDay) : 0
+      const deduction = TARDINESS_DEDUCTS_LEAVE ? tardinessLeaveDeduction(r.minutes_late, workHoursPerDay, TARDINESS_PENALTY_GRACE_MINUTES) : 0
       const { rows } = await client.query(
         `INSERT INTO tardiness_log (employee_id, date, time, minutes_late, hours_late_decimal, notes, leave_deducted)
          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,

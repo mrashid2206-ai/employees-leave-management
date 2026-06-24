@@ -56,10 +56,13 @@ Tunable constants: **`src/lib/constants.ts`**.
   transactional with row locks.
 - **Tardiness** — minutes late vs `work_start_time`; feeds the commitment ranking. Late
   minutes also **deduct annual leave proportionally** (`src/lib/tardiness-penalty.ts`): a full
-  workday of accumulated lateness = 1 leave day, so 2 min late ≈ 0.004 day. The deduction is
+  workday of lateness = 1 leave day. A **grace period** is forgiven first
+  (`TARDINESS_PENALTY_GRACE_MINUTES`, default 10) — only minutes beyond it are charged, so a
+  late arrival within 10 min costs nothing (still recorded for punctuality). The deduction is
   applied when the tardiness row is created (manual add + nightly automation), stored on the
   row as `leave_deducted`, and refunded if the row is deleted. Balance may go negative.
-  Toggle with `TARDINESS_DEDUCTS_LEAVE` in `constants.ts`. (No monetary deduction — money was removed.)
+  Toggle the whole penalty with `TARDINESS_DEDUCTS_LEAVE` in `constants.ts`. (No monetary
+  deduction — money was removed.)
 - **Permissions** — temporary exits, admin-approved, auto-closed at day end.
 - **Automation** — `src/lib/automation.ts`:
   - `runDailyAutomation` processes the **previous completed day** (`omanYesterday()`), and

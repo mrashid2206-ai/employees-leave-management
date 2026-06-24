@@ -2,7 +2,7 @@ import pool, { omanToday, omanYesterday } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { logger } from '@/lib/log'
 import { ensureFractionalLeaveColumns, ensureSettingsColumns, ensureTardinessPenaltyColumns } from '@/lib/ensure-schema'
-import { LEAVE_TYPE_ANNUAL, TARDINESS_GRACE_MINUTES, AUTO_ABSENCE_LEAVE_NOTE, TARDINESS_DEDUCTS_LEAVE } from '@/lib/constants'
+import { LEAVE_TYPE_ANNUAL, TARDINESS_GRACE_MINUTES, AUTO_ABSENCE_LEAVE_NOTE, TARDINESS_DEDUCTS_LEAVE, TARDINESS_PENALTY_GRACE_MINUTES } from '@/lib/constants'
 import { tardinessLeaveDeduction } from '@/lib/tardiness-penalty'
 
 export interface Actor {
@@ -128,7 +128,7 @@ export async function runDailyAutomation(date: string | undefined, actor: Actor)
             )
             if (existing.length === 0) {
               const hoursDecimal = Math.round((minutesLate / 60) * 100000) / 100000
-              const deduction = TARDINESS_DEDUCTS_LEAVE ? tardinessLeaveDeduction(minutesLate, workHoursDay) : 0
+              const deduction = TARDINESS_DEDUCTS_LEAVE ? tardinessLeaveDeduction(minutesLate, workHoursDay, TARDINESS_PENALTY_GRACE_MINUTES) : 0
               const tc = await pool.connect()
               try {
                 await tc.query('BEGIN')
