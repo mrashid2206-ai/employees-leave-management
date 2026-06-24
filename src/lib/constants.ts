@@ -34,3 +34,9 @@ export const TARDINESS_GRACE_MINUTES = 0
 // Note stamped on the leave the daily automation auto-creates for an unexcused absence.
 // Used to find + reverse that deduction when an admin corrects/deletes the absence.
 export const AUTO_ABSENCE_LEAVE_NOTE = 'Auto-deducted: absent without leave'
+
+// Tardiness penalty: late minutes are converted to annual-leave-days proportionally —
+// one full workday of accumulated lateness costs one leave day. So with an 8h workday,
+// 480 late-minutes = 1 day and 2 late-minutes = 2/480 ≈ 0.004 day. Set to false to
+// disable the penalty (tardiness then only tracks punctuality, no balance impact).
+export const TARDINESS_DEDUCTS_LEAVE = true

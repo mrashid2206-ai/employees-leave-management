@@ -236,6 +236,7 @@ export default function TardinessPage() {
                   <TableHead className="text-center">{t('date')}</TableHead>
                   <TableHead className="text-center">{t('arrivalTime')}</TableHead>
                   <TableHead className="text-center">{t('lateMinutes')}</TableHead>
+                  <TableHead className="text-center">{lang === 'ar' ? 'خصم الإجازة' : 'Leave Deducted'}</TableHead>
                   <TableHead className="text-start">{t('notes')}</TableHead>
                   <TableHead className="text-center w-16">{t('delete')}</TableHead>
                 </TableRow>
@@ -243,7 +244,7 @@ export default function TardinessPage() {
               <TableBody>
                 {records.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       {t('noTardiness')}
                     </TableCell>
                   </TableRow>
@@ -255,6 +256,9 @@ export default function TardinessPage() {
                       <TableCell className="text-center">{rec.date}</TableCell>
                       <TableCell className="text-center">{rec.time}</TableCell>
                       <TableCell className="text-center font-bold">{rec.minutes_late}</TableCell>
+                      <TableCell className="text-center font-mono text-amber-600">
+                        {rec.leave_deducted && rec.leave_deducted > 0 ? `-${rec.leave_deducted.toFixed(3)}` : '-'}
+                      </TableCell>
                       <TableCell>{rec.notes || '-'}</TableCell>
                       <TableCell className="text-center">
                         <Button

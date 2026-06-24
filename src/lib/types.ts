@@ -67,6 +67,7 @@ export interface TardinessRecord {
   time: string
   minutes_late: number
   hours_late_decimal: number
+  leave_deducted?: number
   notes: string | null
   created_at: string
   updated_at: string

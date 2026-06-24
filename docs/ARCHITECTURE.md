@@ -54,7 +54,12 @@ Tunable constants: **`src/lib/constants.ts`**.
   `SICK_LEAVE_NOTES_THRESHOLD` days needs notes; ≤ `MAX_CONSECUTIVE_LEAVE_DAYS`;
   department `max_absent_same_dept` cap. Balance changes (approve/reject/edit/delete) are
   transactional with row locks.
-- **Tardiness** — minutes late vs `work_start_time`; feeds the commitment ranking. No money.
+- **Tardiness** — minutes late vs `work_start_time`; feeds the commitment ranking. Late
+  minutes also **deduct annual leave proportionally** (`src/lib/tardiness-penalty.ts`): a full
+  workday of accumulated lateness = 1 leave day, so 2 min late ≈ 0.004 day. The deduction is
+  applied when the tardiness row is created (manual add + nightly automation), stored on the
+  row as `leave_deducted`, and refunded if the row is deleted. Balance may go negative.
+  Toggle with `TARDINESS_DEDUCTS_LEAVE` in `constants.ts`. (No monetary deduction — money was removed.)
 - **Permissions** — temporary exits, admin-approved, auto-closed at day end.
 - **Automation** — `src/lib/automation.ts`:
   - `runDailyAutomation` processes the **previous completed day** (`omanYesterday()`), and
