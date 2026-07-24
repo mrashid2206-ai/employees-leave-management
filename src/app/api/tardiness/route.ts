@@ -5,6 +5,7 @@ import { ensureTardinessPenaltyColumns } from '@/lib/ensure-schema'
 import { tardinessLeaveDeduction } from '@/lib/tardiness-penalty'
 import { TARDINESS_DEDUCTS_LEAVE, TARDINESS_PENALTY_GRACE_MINUTES } from '@/lib/constants'
 import { logger } from '@/lib/log'
+import { notifyEmployee } from '@/lib/employee-notify'
 
 export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
@@ -53,6 +54,7 @@ export async function POST(request: Request) {
   // versa). leave_deducted is stored per row so a later delete refunds exactly that much.
   const client = await pool.connect()
   const inserted: unknown[] = []
+  const toNotify: { employee_id: number; date: string; minutes_late: number; deduction: number }[] = []
   try {
     await client.query('BEGIN')
     for (const r of records) {
@@ -68,6 +70,7 @@ export async function POST(request: Request) {
         await client.query('UPDATE employees SET leave_balance = leave_balance - $1, updated_at = NOW() WHERE id = $2', [deduction, r.employee_id])
       }
       inserted.push(rows[0])
+      toNotify.push({ employee_id: r.employee_id, date: r.date, minutes_late: r.minutes_late, deduction })
     }
     await client.query('COMMIT')
   } catch (err) {
@@ -76,6 +79,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to record tardiness' }, { status: 500 })
   } finally {
     client.release()
+  }
+
+  // Tell each employee (best-effort, after commit) so the deduction isn't a surprise.
+  for (const n of toNotify) {
+    await notifyEmployee(
+      n.employee_id,
+      `Late arrival recorded for ${n.date}: ${n.minutes_late} min late${n.deduction > 0 ? `; ${n.deduction} day deducted from your leave balance.` : ' (within grace — no deduction).'}`,
+      `تم تسجيل تأخير بتاريخ ${n.date}: ${n.minutes_late} دقيقة${n.deduction > 0 ? `؛ تم خصم ${n.deduction} يوم من رصيد إجازتك.` : ' (ضمن فترة السماح — بدون خصم).'}`
+    )
   }
 
   return NextResponse.json(inserted)

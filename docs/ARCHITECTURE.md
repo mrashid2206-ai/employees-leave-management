@@ -68,7 +68,10 @@ Tunable constants: **`src/lib/constants.ts`**.
   - `runDailyAutomation` processes the **previous completed day** (`omanYesterday()`), and
     only marks absent for days strictly before today. It marks no-shows absent, auto-deducts
     one annual day for unexcused absence (reversible — see `src/lib/auto-absence.ts`), logs
-    tardiness, and closes stale permissions. **Idempotent.**
+    tardiness, **auto-closes forgotten check-outs** at the official end-of-day time (hours/OT
+    computed, note `[Auto checkout]`), and closes stale permissions. Every charge
+    (tardiness deduction, absence deduction, auto checkout) sends the employee an **in-app
+    notification** (`src/lib/employee-notify.ts`). **Idempotent.**
   - `runYearlyReset` resets balances + advances the fiscal year; fires once at year-end
     (guarded by `last_reset_year`). **Idempotent.**
 

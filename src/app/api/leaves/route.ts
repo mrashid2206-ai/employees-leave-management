@@ -3,6 +3,7 @@ import pool, { omanToday } from '@/lib/db'
 import { verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 import { ensureFractionalLeaveColumns } from '@/lib/ensure-schema'
 import { countLeaveDays } from '@/lib/leave-days'
+import { sendMail } from '@/lib/email'
 import { parseBody } from '@/server/validation'
 import { leaveCreateSchema } from '@/server/schemas'
 import {
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
   }
 
   // Check department max absent — block employees, warn admin (admin can override with force flag)
-  const { rows: empInfo } = await pool.query('SELECT department_id FROM employees WHERE id = $1', [employee_id])
+  const { rows: empInfo } = await pool.query('SELECT department_id, name FROM employees WHERE id = $1', [employee_id])
   if (empInfo[0]) {
     const maxAbsent = settingsRows[0].max_absent_same_dept || 2
 
@@ -156,6 +157,28 @@ export async function POST(request: Request) {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
     `, [employee_id, leave_type_id, start_date, end_date, finalDays, notes || null, body.status || 'pending', isHalfDay])
+
+    // Alert the admin when a request lands PENDING so approvals aren't discovered by
+    // chance. Fire-and-forget: email failure never blocks the request.
+    if (rows[0]?.status === 'pending') {
+      const empName = empInfo[0]?.name || `Employee #${employee_id}`
+      void sendMail({
+        to: process.env.NOTIFY_EMAIL || process.env.SMTP_USER,
+        subject: `New Leave Request (pending) - ${empName}`,
+        html: `
+          <div dir="rtl" style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #1976D2;">طلب إجازة جديد / New Leave Request</h2>
+            <p><strong>${empName}</strong></p>
+            <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+              <tr><td style="padding: 8px; border: 1px solid #ddd;">From / من</td><td style="padding: 8px; border: 1px solid #ddd;">${start_date}</td></tr>
+              <tr><td style="padding: 8px; border: 1px solid #ddd;">To / إلى</td><td style="padding: 8px; border: 1px solid #ddd;">${end_date}</td></tr>
+              <tr><td style="padding: 8px; border: 1px solid #ddd;">Days / أيام</td><td style="padding: 8px; border: 1px solid #ddd;">${finalDays}</td></tr>
+            </table>
+            <p style="color: #666; font-size: 12px;">Waiting for approval — open the dashboard to approve/reject.</p>
+          </div>
+        `,
+      })
+    }
 
     return NextResponse.json(rows[0])
   } catch (err) {
