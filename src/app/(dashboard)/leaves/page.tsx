@@ -186,9 +186,17 @@ export default function LeavesPage() {
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) => updateLeaveStatus(id, status),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['leaves'] })
-      toast.success(t('updatedSuccess'))
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      // Negative balance doesn't block approval (owner policy) — but make it visible.
+      if (typeof data.balance_after === 'number' && data.balance_after < 0) {
+        toast.warning(lang === 'ar'
+          ? `تمت الموافقة — رصيد الموظف الآن ${data.balance_after.toFixed(3)} يوم (بالسالب)`
+          : `Approved — employee balance is now ${data.balance_after.toFixed(3)} days (negative)`)
+      } else {
+        toast.success(t('updatedSuccess'))
+      }
     },
   })
 

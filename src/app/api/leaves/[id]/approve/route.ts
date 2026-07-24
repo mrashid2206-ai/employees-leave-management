@@ -31,6 +31,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   let rows: LeaveRow[]
   let currentLeave: LeaveRow
   let previousStatus: string
+  let balanceAfter: number | null = null
   try {
     await client.query('BEGIN')
 
@@ -83,19 +84,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       }
     }
 
-    // Lock the employee row
-    const { rows: empRows } = await client.query(
+    // Lock the employee row so the balance mutation below is race-free. NOTE: by owner
+    // policy, insufficient/negative balance does NOT block approval — the balance simply
+    // goes (further) negative and the admin sees the resulting balance in the response.
+    await client.query(
       'SELECT leave_balance FROM employees WHERE id = $1 FOR UPDATE',
       [currentLeave.employee_id]
     )
-
-    if (status === 'approved' && previousStatus !== 'approved') {
-      // NUMERIC columns come back as strings from pg — compare as numbers.
-      if (empRows[0] && parseFloat(empRows[0].leave_balance) < parseFloat(String(currentLeave.days_count))) {
-        await client.query('ROLLBACK')
-        return NextResponse.json({ error: 'Insufficient leave balance' }, { status: 400 })
-      }
-    }
 
     // Update leave status
     const result = await client.query(
@@ -106,9 +101,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     // Deduct/restore balance
     if (status === 'approved' && previousStatus !== 'approved') {
-      await client.query('UPDATE employees SET leave_balance = leave_balance - $1 WHERE id = $2', [currentLeave.days_count, currentLeave.employee_id])
+      const upd = await client.query('UPDATE employees SET leave_balance = leave_balance - $1 WHERE id = $2 RETURNING leave_balance', [currentLeave.days_count, currentLeave.employee_id])
+      balanceAfter = parseFloat(upd.rows[0]?.leave_balance)
     } else if (previousStatus === 'approved' && status !== 'approved') {
-      await client.query('UPDATE employees SET leave_balance = leave_balance + $1 WHERE id = $2', [currentLeave.days_count, currentLeave.employee_id])
+      const upd = await client.query('UPDATE employees SET leave_balance = leave_balance + $1 WHERE id = $2 RETURNING leave_balance', [currentLeave.days_count, currentLeave.employee_id])
+      balanceAfter = parseFloat(upd.rows[0]?.leave_balance)
     }
 
     await client.query('COMMIT')
@@ -179,5 +176,5 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     // Email failure shouldn't block the approval
   }
 
-  return NextResponse.json(rows[0])
+  return NextResponse.json({ ...rows[0], balance_after: balanceAfter })
 }

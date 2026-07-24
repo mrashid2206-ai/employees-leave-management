@@ -74,6 +74,12 @@ Tunable constants: **`src/lib/constants.ts`**.
     notification** (`src/lib/employee-notify.ts`). **Idempotent.**
   - `runYearlyReset` resets balances + advances the fiscal year; fires once at year-end
     (guarded by `last_reset_year`). **Idempotent.**
+- **Balance policy (owner decisions, 2026-06):** (a) the yearly reset is a **clean slate** —
+  every active employee returns to the configured annual balance, and any negative balance
+  (tardiness/absence debt) is forgiven, deliberately; (b) a negative balance **never blocks**
+  applying for or approving leave — approval simply takes the balance further negative and
+  the admin sees the resulting balance (warning toast + `balance_after` in the approve
+  response). There is no "insufficient balance" hard stop anywhere.
 
 ## 5. Scheduling (cron)
 
