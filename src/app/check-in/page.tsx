@@ -394,6 +394,12 @@ export default function EmployeePortalPage() {
         const statusRes = await fetch(`/api/attendance/status?employee_id=${empUser.id}`)
         setTodayStatus(await statusRes.json())
         toast.success(action === 'check-in' ? `${t('checkedInAt')} ${data.time}` : `${t('checkedOutAt')} ${data.time}`)
+        // Location is record-only, but tell the employee immediately when flagged off-site.
+        if (data.isOffsite) {
+          toast.warning(lang === 'ar'
+            ? (action === 'check-in' ? '⚠️ تم تسجيل حضورك خارج موقع المكتب' : '⚠️ تم تسجيل انصرافك خارج موقع المكتب')
+            : (action === 'check-in' ? '⚠️ You checked in outside the office location' : '⚠️ You checked out outside the office location'))
+        }
       }
     } catch { toast.error(t('error')) }
     setLoading(false)
