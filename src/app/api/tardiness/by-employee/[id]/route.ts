@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAnyAuth, unauthorized, forbidden } from '@/lib/api-auth'
+import { ensureTardinessPenaltyColumns } from '@/lib/ensure-schema'
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await verifyAnyAuth(request)
@@ -9,9 +10,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
 
   if (user.role === 'employee' && String(user.id) !== id) return forbidden()
+
+  await ensureTardinessPenaltyColumns().catch(() => {})
+
   const { rows } = await pool.query(`
     SELECT id, employee_id, date::text as date, time::text as time,
-      minutes_late, hours_late_decimal, notes, created_at, updated_at
+      minutes_late, hours_late_decimal, COALESCE(leave_deducted, 0)::float8 as leave_deducted,
+      notes, created_at, updated_at
     FROM tardiness_log WHERE employee_id = $1 ORDER BY date DESC
   `, [id])
   return NextResponse.json(rows)

@@ -13,7 +13,6 @@ INSERT INTO leave_types (name_ar, name_en, color) VALUES
 ('سنوية', 'Annual', '#4CAF50'),
 ('مرضية', 'Sick', '#FF9800'),
 ('طارئة', 'Emergency', '#F44336'),
-('بدون راتب', 'Unpaid', '#9E9E9E'),
 ('أخرى', 'Other', '#607D8B')
 ON CONFLICT DO NOTHING;
 
@@ -41,7 +40,7 @@ INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, da
 (7, 1, '2026-03-12', '2026-03-22', 11, NULL, 'approved'),
 (9, 2, '2026-03-15', '2026-03-15', 1, NULL, 'approved'),
 (10, 1, '2026-03-13', '2026-03-13', 1, NULL, 'approved'),
-(11, 5, '2026-03-15', '2026-03-15', 1, NULL, 'approved');
+(11, 4, '2026-03-15', '2026-03-15', 1, NULL, 'approved');
 
 -- Tardiness log (minutes_late stored, hours_late_decimal = minutes/1440)
 INSERT INTO tardiness_log (employee_id, date, time, minutes_late, hours_late_decimal, notes) VALUES

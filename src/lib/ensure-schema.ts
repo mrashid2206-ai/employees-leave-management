@@ -85,6 +85,20 @@ export function ensureUniqueConstraints(): Promise<void> {
   `)
 }
 
+const employeeNotificationsRunner = once()
+export function ensureEmployeeNotificationsTable(): Promise<void> {
+  return employeeNotificationsRunner(`
+    CREATE TABLE IF NOT EXISTS employee_notifications (
+      id SERIAL PRIMARY KEY,
+      employee_id INT NOT NULL,
+      message TEXT NOT NULL,
+      message_ar TEXT,
+      is_read BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `)
+}
+
 const rateLimitRunner = once()
 export function ensureRateLimitTable(): Promise<void> {
   return rateLimitRunner(`

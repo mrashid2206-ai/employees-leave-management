@@ -174,7 +174,7 @@ export async function deleteLeaveRequest(id: number): Promise<void> {
   await fetch(`/api/leaves/${id}`, { method: 'DELETE' })
 }
 
-export async function updateLeaveStatus(id: number, status: string): Promise<LeaveRequest> {
+export async function updateLeaveStatus(id: number, status: string): Promise<LeaveRequest & { balance_after?: number | null }> {
   return fetchJSON(`/api/leaves/${id}/approve`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

@@ -44,6 +44,7 @@ interface TardinessRow {
   date: string
   time?: string | null
   minutes_late: number
+  leave_deducted?: number
   notes?: string | null
 }
 
@@ -206,26 +207,35 @@ export default function EmployeePortalPage() {
   }
 
   useEffect(() => {
-    // Try sessionStorage first (fast)
-    const stored = sessionStorage.getItem('emp-user')
+    let cancelled = false
+    // Try sessionStorage first (fast). The set is deferred to a microtask so the effect
+    // body doesn't call setState synchronously (react-hooks/set-state-in-effect).
+    let stored: string | null = null
+    try { stored = sessionStorage.getItem('emp-user') } catch {}
     if (stored) {
-      const user = JSON.parse(stored)
-      setEmpUser(user)
-      if (user.must_change_password) setMustChangePw(true)
-      return
-    }
-    // Fallback: fetch from JWT cookie via API (works even if sessionStorage was cleared)
-    fetch('/api/auth/employee-me')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.user) {
+      const raw = stored
+      Promise.resolve().then(() => {
+        if (cancelled) return
+        try {
+          const user = JSON.parse(raw)
+          setEmpUser(user)
+          if (user.must_change_password) setMustChangePw(true)
+        } catch {}
+      })
+    } else {
+      // Fallback: fetch from JWT cookie via API (works even if sessionStorage was cleared)
+      fetch('/api/auth/employee-me')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (cancelled || !data?.user) return
           const user = { id: data.user.id, name: data.user.name, username: data.user.username, must_change_password: !!data.user.must_change_password }
           setEmpUser(user)
           if (user.must_change_password) setMustChangePw(true)
           try { sessionStorage.setItem('emp-user', JSON.stringify(user)) } catch {}
-        }
-      })
-      .catch(() => {})
+        })
+        .catch(() => {})
+    }
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
@@ -414,7 +424,14 @@ export default function EmployeePortalPage() {
           is_half_day: leaveForm.is_half_day,
         }),
       })
-      if (!res.ok) throw new Error()
+      if (!res.ok) {
+        // Surface the server's reason (e.g. no remaining balance, overlap, dept limit)
+        // instead of a generic failure.
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || t('error'))
+        setLoading(false)
+        return
+      }
       setLeaveSubmitted(true)
       setLeaveForm({ leave_type_id: '', start_date: '', end_date: '', notes: '', is_half_day: false })
     } catch { toast.error(t('error')) }
@@ -1104,6 +1121,20 @@ export default function EmployeePortalPage() {
                 {recordsSubTab === 'tardiness' && (
                   <div className="space-y-3">
                     <h2 className="font-bold text-lg">{t('tardinessHistory')} ({tardinessRecords.length})</h2>
+                    {(() => {
+                      const totalDeducted = tardinessRecords.reduce((s, r) => s + (r.leave_deducted || 0), 0)
+                      if (totalDeducted <= 0) return null
+                      return (
+                        <Card className="border-0 shadow-md ring-1 ring-amber-500/30">
+                          <CardContent className="p-3 flex items-center justify-between text-sm">
+                            <span>{lang === 'ar' ? 'إجمالي المخصوم من رصيد إجازتك بسبب التأخير' : 'Total leave deducted for lateness'}</span>
+                            <Badge className="bg-amber-500/10 text-amber-600 border-0 font-mono">
+                              -{totalDeducted.toFixed(3)} {t('days')}
+                            </Badge>
+                          </CardContent>
+                        </Card>
+                      )
+                    })()}
                     {tardinessRecords.length === 0 ? (
                       <Card className="border-0 shadow-md">
                         <CardContent className="p-8 text-center text-muted-foreground text-sm">
@@ -1122,10 +1153,15 @@ export default function EmployeePortalPage() {
                                   {t('arrivalTime')}: <span className="font-mono">{rec.time?.slice(0, 5)}</span>
                                 </p>
                               </div>
-                              <div className="text-right">
+                              <div className="text-right space-y-1">
                                 <Badge className="bg-rose-500/10 text-rose-500 border-0">
                                   {rec.minutes_late} {t('minutes')} {t('late')}
                                 </Badge>
+                                {(rec.leave_deducted || 0) > 0 && (
+                                  <p className="text-[11px] font-mono text-amber-600">
+                                    -{(rec.leave_deducted || 0).toFixed(3)} {lang === 'ar' ? 'يوم إجازة' : 'leave day'}
+                                  </p>
+                                )}
                               </div>
                             </div>
                             {rec.notes && (

@@ -22,8 +22,10 @@ import {
   LogOut,
 } from 'lucide-react'
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { getLeaveRequests } from '@/lib/api'
 import type { TranslationKey } from '@/lib/translations'
 
 const navItems: { href: string; labelKey: TranslationKey; icon: typeof LayoutDashboard }[] = [
@@ -50,6 +52,10 @@ function NavContent({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
   const pathname = usePathname()
   const t = useT()
 
+  // Surface waiting approvals directly in the nav so admins don't discover them by chance.
+  const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests, refetchInterval: 120000 })
+  const pendingCount = leaves.filter(l => l.status === 'pending').length
+
   return (
     <nav className="flex flex-col gap-1 p-3">
       {navItems.map((item, index) => {
@@ -69,8 +75,18 @@ function NavContent({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
                   : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
               )}
             >
-              <Icon className="h-5 w-5 shrink-0" />
+              <span className="relative shrink-0">
+                <Icon className="h-5 w-5" />
+                {collapsed && item.href === '/leaves' && pendingCount > 0 && (
+                  <span className="absolute -top-1 -end-1 h-2.5 w-2.5 rounded-full bg-amber-500" />
+                )}
+              </span>
               {!collapsed && <span>{t(item.labelKey)}</span>}
+              {!collapsed && item.href === '/leaves' && pendingCount > 0 && (
+                <span className="ms-auto h-5 min-w-5 px-1.5 rounded-full bg-amber-500 text-white text-[11px] font-bold flex items-center justify-center">
+                  {pendingCount}
+                </span>
+              )}
             </Link>
           </div>
         )

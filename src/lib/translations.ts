@@ -55,7 +55,6 @@ export const translations = {
   annual: { ar: 'سنوية', en: 'Annual' },
   sick: { ar: 'مرضية', en: 'Sick' },
   emergency: { ar: 'طارئة', en: 'Emergency' },
-  unpaid: { ar: 'بدون راتب', en: 'Unpaid' },
   other: { ar: 'أخرى', en: 'Other' },
 
   // Status

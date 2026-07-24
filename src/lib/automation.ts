@@ -4,6 +4,8 @@ import { logger } from '@/lib/log'
 import { ensureFractionalLeaveColumns, ensureSettingsColumns, ensureTardinessPenaltyColumns } from '@/lib/ensure-schema'
 import { LEAVE_TYPE_ANNUAL, TARDINESS_GRACE_MINUTES, AUTO_ABSENCE_LEAVE_NOTE, TARDINESS_DEDUCTS_LEAVE, TARDINESS_PENALTY_GRACE_MINUTES } from '@/lib/constants'
 import { tardinessLeaveDeduction } from '@/lib/tardiness-penalty'
+import { notifyEmployee } from '@/lib/employee-notify'
+import { computeWorkHours, computeOvertime } from '@/lib/attendance-calc'
 
 export interface Actor {
   id: string
@@ -71,8 +73,10 @@ export async function runDailyAutomation(date: string | undefined, actor: Actor)
   const [startH, startM] = workStartTime.split(':').map(Number)
   const workStartMinutes = startH * 60 + startM
   const workHoursDay = settingsRows[0]?.work_hours_per_day || 8
-  const endH = startH + workHoursDay
-  const workEndTime = `${String(endH).padStart(2, '0')}:30:00`
+  // Official end of day = start + work hours (previously hardcoded a :30 end minute,
+  // which was only correct for a 07:30 start).
+  const endTotalMinutes = workStartMinutes + workHoursDay * 60
+  const workEndTime = `${String(Math.floor(endTotalMinutes / 60) % 24).padStart(2, '0')}:${String(endTotalMinutes % 60).padStart(2, '0')}:00`
 
   const dayOfWeek = new Date(`${processDate}T00:00:00Z`).getUTCDay()
   const isWeekend = !workDays.includes(dayOfWeek)
@@ -110,6 +114,13 @@ export async function runDailyAutomation(date: string | undefined, actor: Actor)
             results.leaveDeducted++
           }
           await client.query('COMMIT')
+          if ((inserted.rowCount || 0) > 0) {
+            await notifyEmployee(
+              emp.id,
+              `You were marked absent on ${processDate}; 1 day was deducted from your leave balance.`,
+              `تم تسجيلك غائباً بتاريخ ${processDate} وتم خصم يوم واحد من رصيد إجازتك.`
+            )
+          }
         } catch (err) {
           await client.query('ROLLBACK')
           logger.error('daily auto-absence deduction failed', err, { employeeId: emp.id, date: processDate })
@@ -141,6 +152,11 @@ export async function runDailyAutomation(date: string | undefined, actor: Actor)
                 }
                 await tc.query('COMMIT')
                 results.tardinessCreated++
+                await notifyEmployee(
+                  emp.id,
+                  `Late arrival recorded for ${processDate}: ${minutesLate} min late${deduction > 0 ? `; ${deduction} day deducted from your leave balance.` : ' (within grace — no deduction).'}`,
+                  `تم تسجيل تأخير بتاريخ ${processDate}: ${minutesLate} دقيقة${deduction > 0 ? `؛ تم خصم ${deduction} يوم من رصيد إجازتك.` : ' (ضمن فترة السماح — بدون خصم).'}`
+                )
               } catch (err) {
                 await tc.query('ROLLBACK')
                 logger.error('auto-tardiness deduction failed', err, { employeeId: emp.id, date: processDate })
@@ -152,16 +168,43 @@ export async function runDailyAutomation(date: string | undefined, actor: Actor)
         }
       }
 
-      if (attendedMap.has(emp.id)) {
-        const record = attendedMap.get(emp.id)
-        if (record?.check_in && !record.check_out) {
-          await pool.query(
-            "UPDATE attendance SET notes = COALESCE(notes, '') || ' [Missing checkout]' WHERE employee_id = $1 AND date = $2 AND check_out IS NULL",
-            [emp.id, processDate]
-          )
-          results.missingCheckout++
-        }
-      }
+    }
+  }
+
+  // Auto-close forgotten check-outs on ALL completed days — including the historical
+  // backlog from before this feature existed, so old '0 hours' days heal themselves on
+  // the next run. Idempotent (only rows with check_out IS NULL match) and never touches
+  // today: people may still be working.
+  const { rows: openCheckouts } = await pool.query(
+    `SELECT employee_id, date::text as date, check_in::text as check_in, is_holiday_work
+       FROM attendance
+      WHERE check_in IS NOT NULL AND check_out IS NULL AND date < $1`,
+    [omanToday()]
+  )
+  for (const o of openCheckouts) {
+    const autoHours = computeWorkHours(o.check_in, workEndTime)
+    if (autoHours !== null) {
+      const autoOvertime = computeOvertime(autoHours, workHoursDay, !!o.is_holiday_work)
+      await pool.query(
+        `UPDATE attendance SET check_out = $1, work_hours = $2, overtime_hours = $3,
+           notes = COALESCE(notes, '') || ' [Auto checkout]'
+         WHERE employee_id = $4 AND date = $5 AND check_out IS NULL`,
+        [workEndTime, autoHours, autoOvertime, o.employee_id, o.date]
+      )
+      await notifyEmployee(
+        o.employee_id,
+        `You forgot to check out on ${o.date}; your check-out was auto-recorded at ${workEndTime.slice(0, 5)}. Contact admin if this is wrong.`,
+        `نسيت تسجيل الانصراف بتاريخ ${o.date}؛ تم تسجيل انصرافك تلقائياً الساعة ${workEndTime.slice(0, 5)}. تواصل مع المدير إذا كان ذلك غير صحيح.`
+      )
+      results.missingCheckout++
+    } else {
+      // Implausible span (e.g. checked in after end-of-day) — flag once for admin review.
+      await pool.query(
+        `UPDATE attendance SET notes = COALESCE(notes, '') || ' [Missing checkout]'
+         WHERE employee_id = $1 AND date = $2 AND check_out IS NULL
+           AND COALESCE(notes, '') NOT LIKE '%[Missing checkout]%'`,
+        [o.employee_id, o.date]
+      )
     }
   }
 

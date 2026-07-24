@@ -96,14 +96,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       }
     }
 
-    // Adjust balance only for approved leaves, with row lock + sufficiency check when lengthening.
+    // Adjust balance only for approved leaves, under a row lock. By owner policy an
+    // insufficient/negative balance does NOT block the change — the balance may go
+    // (further) negative; the admin reviews balances in the UI.
     if (oldLeave.status === 'approved' && newDays !== oldDays) {
       const diff = oldDays - newDays // positive => days returned; negative => extra days consumed
-      const { rows: emp } = await client.query('SELECT leave_balance FROM employees WHERE id = $1 FOR UPDATE', [oldLeave.employee_id])
-      if (diff < 0 && emp[0] && parseFloat(emp[0].leave_balance) < -diff) {
-        await client.query('ROLLBACK')
-        return NextResponse.json({ error: 'Insufficient leave balance for the extended dates' }, { status: 400 })
-      }
+      await client.query('SELECT leave_balance FROM employees WHERE id = $1 FOR UPDATE', [oldLeave.employee_id])
       await client.query('UPDATE employees SET leave_balance = leave_balance + $1 WHERE id = $2', [diff, oldLeave.employee_id])
     }
 
