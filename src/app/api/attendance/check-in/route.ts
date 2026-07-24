@@ -3,6 +3,7 @@ import pool, { omanToday, omanTime } from '@/lib/db'
 import { verifyAnyAuth, unauthorized, forbidden } from '@/lib/api-auth'
 import { ensureAttendanceLocationColumns, ensureFractionalLeaveColumns } from '@/lib/ensure-schema'
 import { isOffDay, computeWorkHours, computeOvertime, evaluateLocation } from '@/lib/attendance-calc'
+import { notifyEmployee } from '@/lib/employee-notify'
 import { parseBody } from '@/server/validation'
 import { checkInSchema } from '@/server/schemas'
 
@@ -108,6 +109,15 @@ export async function POST(request: Request) {
       RETURNING id, date::text as date, check_in::text as check_in, check_out::text as check_out, is_holiday_work, is_offsite
     `, [employee_id, today, currentTime, holidayWork, latitude || null, longitude || null, clientIp, isOffsite])
 
+    // Record-only policy: not blocked, but the employee is told it was flagged off-site.
+    if (isOffsite) {
+      await notifyEmployee(
+        employee_id,
+        `Your check-in on ${today} at ${currentTime.slice(0, 5)} was recorded OUTSIDE the office location.`,
+        `تم تسجيل حضورك بتاريخ ${today} الساعة ${currentTime.slice(0, 5)} خارج موقع المكتب.`
+      )
+    }
+
     return NextResponse.json({
       success: true, action: 'check-in', time: currentTime,
       isHolidayWork: holidayWork, leaveCancelled, isOffsite, record: rows[0]
@@ -161,9 +171,18 @@ export async function POST(request: Request) {
       [currentTime, employee_id, today]
     ).catch(() => {}) // Table might not exist yet
 
+    // Record-only policy: not blocked, but the employee is told it was flagged off-site.
+    if (coOffsite) {
+      await notifyEmployee(
+        employee_id,
+        `Your check-out on ${today} at ${currentTime.slice(0, 5)} was recorded OUTSIDE the office location.`,
+        `تم تسجيل انصرافك بتاريخ ${today} الساعة ${currentTime.slice(0, 5)} خارج موقع المكتب.`
+      )
+    }
+
     return NextResponse.json({
       success: true, action: 'check-out', time: currentTime,
-      workHours, overtime, isHolidayWork: holidayWork, record: rows[0]
+      workHours, overtime, isHolidayWork: holidayWork, isOffsite: coOffsite, record: rows[0]
     })
   }
 
