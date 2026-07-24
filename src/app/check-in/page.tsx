@@ -207,26 +207,35 @@ export default function EmployeePortalPage() {
   }
 
   useEffect(() => {
-    // Try sessionStorage first (fast)
-    const stored = sessionStorage.getItem('emp-user')
+    let cancelled = false
+    // Try sessionStorage first (fast). The set is deferred to a microtask so the effect
+    // body doesn't call setState synchronously (react-hooks/set-state-in-effect).
+    let stored: string | null = null
+    try { stored = sessionStorage.getItem('emp-user') } catch {}
     if (stored) {
-      const user = JSON.parse(stored)
-      setEmpUser(user)
-      if (user.must_change_password) setMustChangePw(true)
-      return
-    }
-    // Fallback: fetch from JWT cookie via API (works even if sessionStorage was cleared)
-    fetch('/api/auth/employee-me')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.user) {
+      const raw = stored
+      Promise.resolve().then(() => {
+        if (cancelled) return
+        try {
+          const user = JSON.parse(raw)
+          setEmpUser(user)
+          if (user.must_change_password) setMustChangePw(true)
+        } catch {}
+      })
+    } else {
+      // Fallback: fetch from JWT cookie via API (works even if sessionStorage was cleared)
+      fetch('/api/auth/employee-me')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (cancelled || !data?.user) return
           const user = { id: data.user.id, name: data.user.name, username: data.user.username, must_change_password: !!data.user.must_change_password }
           setEmpUser(user)
           if (user.must_change_password) setMustChangePw(true)
           try { sessionStorage.setItem('emp-user', JSON.stringify(user)) } catch {}
-        }
-      })
-      .catch(() => {})
+        })
+        .catch(() => {})
+    }
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
@@ -415,7 +424,14 @@ export default function EmployeePortalPage() {
           is_half_day: leaveForm.is_half_day,
         }),
       })
-      if (!res.ok) throw new Error()
+      if (!res.ok) {
+        // Surface the server's reason (e.g. no remaining balance, overlap, dept limit)
+        // instead of a generic failure.
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || t('error'))
+        setLoading(false)
+        return
+      }
       setLeaveSubmitted(true)
       setLeaveForm({ leave_type_id: '', start_date: '', end_date: '', notes: '', is_half_day: false })
     } catch { toast.error(t('error')) }

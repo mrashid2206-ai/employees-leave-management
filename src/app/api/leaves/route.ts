@@ -68,7 +68,15 @@ export async function POST(request: Request) {
   }
 
   // Check department max absent — block employees, warn admin (admin can override with force flag)
-  const { rows: empInfo } = await pool.query('SELECT department_id, name FROM employees WHERE id = $1', [employee_id])
+  const { rows: empInfo } = await pool.query('SELECT department_id, name, leave_balance FROM employees WHERE id = $1', [employee_id])
+
+  // Owner policy: employees with no remaining balance cannot SUBMIT new requests.
+  // (Admins can still create/approve into negative — flexibility stays with the admin.)
+  if (user.role === 'employee' && empInfo[0] && parseFloat(empInfo[0].leave_balance) <= 0) {
+    return NextResponse.json({
+      error: 'You have no remaining leave balance / لا يوجد رصيد إجازات متبقٍ لديك',
+    }, { status: 400 })
+  }
   if (empInfo[0]) {
     const maxAbsent = settingsRows[0].max_absent_same_dept || 2
 

@@ -168,36 +168,43 @@ export async function runDailyAutomation(date: string | undefined, actor: Actor)
         }
       }
 
-      // Forgotten check-out on a COMPLETED day: auto-close at the official end-of-day
-      // time so the employee doesn't silently lose the day's hours, flagged for review.
-      // (Never auto-close an in-progress day — people may still be working.)
-      if (dayIsComplete && attendedMap.has(emp.id)) {
-        const record = attendedMap.get(emp.id)
-        if (record?.check_in && !record.check_out) {
-          const autoHours = computeWorkHours(String(record.check_in), workEndTime)
-          if (autoHours !== null) {
-            const autoOvertime = computeOvertime(autoHours, workHoursDay, false)
-            await pool.query(
-              `UPDATE attendance SET check_out = $1, work_hours = $2, overtime_hours = $3,
-                 notes = COALESCE(notes, '') || ' [Auto checkout]'
-               WHERE employee_id = $4 AND date = $5 AND check_out IS NULL`,
-              [workEndTime, autoHours, autoOvertime, emp.id, processDate]
-            )
-            await notifyEmployee(
-              emp.id,
-              `You forgot to check out on ${processDate}; your check-out was auto-recorded at ${workEndTime.slice(0, 5)}. Contact admin if this is wrong.`,
-              `نسيت تسجيل الانصراف بتاريخ ${processDate}؛ تم تسجيل انصرافك تلقائياً الساعة ${workEndTime.slice(0, 5)}. تواصل مع المدير إذا كان ذلك غير صحيح.`
-            )
-          } else {
-            // Implausible span (e.g. checked in after end-of-day) — just flag for admin.
-            await pool.query(
-              "UPDATE attendance SET notes = COALESCE(notes, '') || ' [Missing checkout]' WHERE employee_id = $1 AND date = $2 AND check_out IS NULL",
-              [emp.id, processDate]
-            )
-          }
-          results.missingCheckout++
-        }
-      }
+    }
+  }
+
+  // Auto-close forgotten check-outs on ALL completed days — including the historical
+  // backlog from before this feature existed, so old '0 hours' days heal themselves on
+  // the next run. Idempotent (only rows with check_out IS NULL match) and never touches
+  // today: people may still be working.
+  const { rows: openCheckouts } = await pool.query(
+    `SELECT employee_id, date::text as date, check_in::text as check_in, is_holiday_work
+       FROM attendance
+      WHERE check_in IS NOT NULL AND check_out IS NULL AND date < $1`,
+    [omanToday()]
+  )
+  for (const o of openCheckouts) {
+    const autoHours = computeWorkHours(o.check_in, workEndTime)
+    if (autoHours !== null) {
+      const autoOvertime = computeOvertime(autoHours, workHoursDay, !!o.is_holiday_work)
+      await pool.query(
+        `UPDATE attendance SET check_out = $1, work_hours = $2, overtime_hours = $3,
+           notes = COALESCE(notes, '') || ' [Auto checkout]'
+         WHERE employee_id = $4 AND date = $5 AND check_out IS NULL`,
+        [workEndTime, autoHours, autoOvertime, o.employee_id, o.date]
+      )
+      await notifyEmployee(
+        o.employee_id,
+        `You forgot to check out on ${o.date}; your check-out was auto-recorded at ${workEndTime.slice(0, 5)}. Contact admin if this is wrong.`,
+        `نسيت تسجيل الانصراف بتاريخ ${o.date}؛ تم تسجيل انصرافك تلقائياً الساعة ${workEndTime.slice(0, 5)}. تواصل مع المدير إذا كان ذلك غير صحيح.`
+      )
+      results.missingCheckout++
+    } else {
+      // Implausible span (e.g. checked in after end-of-day) — flag once for admin review.
+      await pool.query(
+        `UPDATE attendance SET notes = COALESCE(notes, '') || ' [Missing checkout]'
+         WHERE employee_id = $1 AND date = $2 AND check_out IS NULL
+           AND COALESCE(notes, '') NOT LIKE '%[Missing checkout]%'`,
+        [o.employee_id, o.date]
+      )
     }
   }
 
