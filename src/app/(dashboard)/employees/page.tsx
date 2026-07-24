@@ -403,7 +403,6 @@ export default function EmployeesPage() {
                   <TableHead className="text-center">{t('annual')}</TableHead>
                   <TableHead className="text-center">{t('sick')}</TableHead>
                   <TableHead className="text-center">{t('emergency')}</TableHead>
-                  <TableHead className="text-center">{t('unpaid')}</TableHead>
                   <TableHead className="text-center">{t('other')}</TableHead>
                   <SortHeader field="remaining" onToggle={toggleSort}>{t('remaining')}</SortHeader>
                   <SortHeader field="tardiness" onToggle={toggleSort}>{t('tardinessHHMM')}</SortHeader>
@@ -433,7 +432,6 @@ export default function EmployeesPage() {
                     <TableCell className="text-center">{emp.byType['Annual'] || 0}</TableCell>
                     <TableCell className="text-center">{emp.byType['Sick'] || 0}</TableCell>
                     <TableCell className="text-center">{emp.byType['Emergency'] || 0}</TableCell>
-                    <TableCell className="text-center">{emp.byType['Unpaid'] || 0}</TableCell>
                     <TableCell className="text-center">{emp.byType['Other'] || 0}</TableCell>
                     <TableCell className="text-center font-bold">
                       <span className={emp.remaining < 5 ? 'text-[#F44336]' : ''}>
