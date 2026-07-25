@@ -5,12 +5,12 @@ import { ensureFractionalLeaveColumns, ensureSettingsColumns, ensureTardinessPen
 import { LEAVE_TYPE_ANNUAL, TARDINESS_GRACE_MINUTES, AUTO_ABSENCE_LEAVE_NOTE, TARDINESS_DEDUCTS_LEAVE, TARDINESS_PENALTY_GRACE_MINUTES } from '@/lib/constants'
 import { tardinessLeaveDeduction } from '@/lib/tardiness-penalty'
 import { notifyEmployee } from '@/lib/employee-notify'
+import { actorLabel, type Actor as ActorType } from '@/server/result'
 import { computeWorkHours, computeOvertime } from '@/lib/attendance-calc'
 
-export interface Actor {
-  id: string
-  role: string
-}
+// Single shared Actor shape (see src/server/result.ts) so services, routes and the
+// automation jobs all describe "who did this" the same way.
+export type { Actor } from '@/server/result'
 
 export interface DailyResult {
   success: true
@@ -24,7 +24,7 @@ export interface DailyResult {
 
 // Mark absentees, auto-deduct leave, log tardiness, close stale permissions for a day.
 // Idempotent: safe to run repeatedly for the same date (ON CONFLICT + NOT EXISTS guards).
-export async function runDailyAutomation(date: string | undefined, actor: Actor): Promise<DailyResult> {
+export async function runDailyAutomation(date: string | undefined, actor: ActorType): Promise<DailyResult> {
   // Default to the previous COMPLETED day. Absence-marking only runs for days strictly
   // before today, so an in-progress day (where people haven't checked in yet) can never
   // flag everyone absent.
@@ -217,7 +217,7 @@ export async function runDailyAutomation(date: string | undefined, actor: Actor)
     permissionsClosed = rowCount || 0
   } catch {} // Table might not exist yet
 
-  await logAudit('daily_process', actor.id, actor.role, `Daily process (${processDate}): ${results.absentMarked} absent, ${results.tardinessCreated} tardiness, ${results.missingCheckout} missing checkout, ${permissionsClosed} permissions auto-closed`)
+  await logAudit('daily_process', actorLabel(actor), actor.role, `Daily process (${processDate}): ${results.absentMarked} absent, ${results.tardinessCreated} tardiness, ${results.missingCheckout} missing checkout, ${permissionsClosed} permissions auto-closed`)
 
   return { success: true, ...results, permissionsClosed }
 }
@@ -229,7 +229,7 @@ export type YearlyResult =
 // Reset balances + advance the fiscal year. Idempotent via last_reset_year.
 // When not forced (cron), it only fires once the fiscal year has actually ended,
 // so it is safe to call daily — it no-ops every day until year_end passes.
-export async function runYearlyReset(actor: Actor, opts: { force?: boolean } = {}): Promise<YearlyResult> {
+export async function runYearlyReset(actor: ActorType, opts: { force?: boolean } = {}): Promise<YearlyResult> {
   await ensureSettingsColumns().catch(() => {})
 
   const client = await pool.connect()
@@ -237,7 +237,7 @@ export async function runYearlyReset(actor: Actor, opts: { force?: boolean } = {
     await client.query('BEGIN')
 
     const { rows: settings } = await client.query(
-      'SELECT id, year_start::text as year_start, year_end::text as year_end, annual_leave_balance, last_reset_year FROM settings ORDER BY id LIMIT 1 FOR UPDATE'
+      "SELECT id, year_start::text as year_start, year_end::text as year_end, annual_leave_balance, last_reset_year, to_char(last_reset_at, 'YYYY-MM-DD') as last_reset_day FROM settings ORDER BY id LIMIT 1 FOR UPDATE"
     )
     if (settings.length === 0) {
       await client.query('ROLLBACK')
@@ -252,10 +252,17 @@ export async function runYearlyReset(actor: Actor, opts: { force?: boolean } = {
       return { success: false, notDue: true, message: `Fiscal year ends ${s.year_end}; not due yet.` }
     }
 
-    // Idempotency: never reset/advance the same fiscal year twice.
+    // Idempotency, two ways. (a) never reset the same fiscal year twice; (b) never reset
+    // twice in one day — needed because a successful reset ADVANCES the fiscal year, so an
+    // immediate second run sees a different fromYear and would otherwise slip past (a) and
+    // double-advance.
     if (s.last_reset_year === fromYear) {
       await client.query('ROLLBACK')
       return { success: false, alreadyReset: true, message: `Fiscal year starting ${s.year_start} has already been reset.` }
+    }
+    if (s.last_reset_day && s.last_reset_day === new Date().toISOString().split('T')[0]) {
+      await client.query('ROLLBACK')
+      return { success: false, alreadyReset: true, message: 'A yearly reset has already run today.' }
     }
 
     const { rowCount } = await client.query(
@@ -271,13 +278,13 @@ export async function runYearlyReset(actor: Actor, opts: { force?: boolean } = {
     const newYearEnd = ye.toISOString().split('T')[0]
 
     await client.query(
-      'UPDATE settings SET year_start = $1, year_end = $2, last_reset_year = $3 WHERE id = $4',
+      'UPDATE settings SET year_start = $1, year_end = $2, last_reset_year = $3, last_reset_at = NOW() WHERE id = $4',
       [newYearStart, newYearEnd, fromYear, s.id]
     )
 
     await client.query('COMMIT')
 
-    await logAudit('yearly_reset', actor.id, actor.role, `Yearly reset: ${rowCount} employees, fiscal year ${s.year_start} → ${newYearStart}`)
+    await logAudit('yearly_reset', actorLabel(actor), actor.role, `Yearly reset: ${rowCount} employees, fiscal year ${s.year_start} → ${newYearStart}`)
 
     return { success: true, employeesReset: rowCount || 0, newBalance: s.annual_leave_balance, newYearStart, newYearEnd }
   } catch (err) {

@@ -6,6 +6,6 @@ export async function POST(request: Request) {
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
   const { date } = await request.json().catch(() => ({}))
-  const result = await runDailyAutomation(date, { id: admin.username, role: 'admin' })
+  const result = await runDailyAutomation(date, admin)
   return NextResponse.json(result)
 }

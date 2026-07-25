@@ -1,0 +1,22 @@
+name: Check-in reminder
+
+# Pushes a "you haven't checked in" reminder to employees who opted in to
+# notifications. Requires repo secrets APP_URL + CRON_SECRET (same as the app's env),
+# and VAPID keys configured on the server. Harmless no-op on holidays/weekends.
+on:
+  schedule:
+    # 04:15 UTC = 08:15 Asia/Muscat (UTC+4) — shortly after the usual work start.
+    - cron: '15 4 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send check-in reminders
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -fsS --retry 3 -X POST "$APP_URL/api/cron/checkin-reminder" \
+            -H "Authorization: Bearer $CRON_SECRET"

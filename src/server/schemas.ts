@@ -103,6 +103,21 @@ export const permissionUpdateSchema = z
   })
   .passthrough()
 
+// ---- Attendance corrections -----------------------------------------------------
+export const correctionCreateSchema = z
+  .object({
+    employee_id: id,
+    date: dateStr,
+    requested_check_in: timeStr.nullish(),
+    requested_check_out: timeStr.nullish(),
+    reason: z.string().min(1, 'a reason is required'),
+  })
+  .passthrough()
+
+export const correctionReviewSchema = z
+  .object({ status: z.enum(['approved', 'rejected']) })
+  .passthrough()
+
 // ---- People & reference data ----------------------------------------------------
 export const employeeCreateSchema = z
   .object({
