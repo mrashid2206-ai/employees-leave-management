@@ -20,6 +20,22 @@ export interface WorkingDaysInfo {
   totalDays: number
 }
 
+export interface LeaveForecast {
+  currentBalance: number
+  approvedUpcomingDays: number
+  pendingDays: number
+  projectedBalance: number
+  tardinessDeductedYtd: number
+  tardinessProjectedYearEnd: number
+  projectedYearEndBalance: number
+  expiringDays: number
+  daysLeftInYear: number
+  yearElapsedFraction: number
+  status: 'negative' | 'critical' | 'tight' | 'healthy'
+  fiscalYearEnd: string
+  annualAllowance: number
+}
+
 export interface AttendanceStatus {
   check_in?: string | null
   check_out?: string | null
@@ -195,11 +211,23 @@ export const portalKeys = {
   leaveTypes: () => ['portal', 'leave-types'] as const,
   calendar: () => ['portal', 'calendar'] as const,
   workingDays: (start: string, end: string) => ['portal', 'working-days', start, end] as const,
+  forecast: (id: EmpId) => ['portal', 'leave-forecast', id] as const,
 }
 
 /* -------------------------------------------------------------------------- */
 /* Queries                                                                     */
 /* -------------------------------------------------------------------------- */
+
+export function useLeaveForecast(empId: EmpId) {
+  return useQuery({
+    queryKey: portalKeys.forecast(empId),
+    queryFn: async (): Promise<LeaveForecast> => {
+      if (!empId) throw new ApiError({ error: 'no_employee' })
+      return getJSON<LeaveForecast>(`/api/leave-forecast?employee_id=${empId}`)
+    },
+    enabled: !!empId,
+  })
+}
 
 export function useAttendanceStatus(empId: EmpId) {
   return useQuery({

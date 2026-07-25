@@ -502,6 +502,24 @@ export const translations = {
   // ---- Holiday seeding ----
   seedOmanHolidays: { ar: 'إضافة عطلات سلطنة عُمان لسنة كاملة', en: 'Add a full year of Oman public holidays' },
   seedEstimateNote: { ar: 'التواريخ الهجرية تقديرية — يرجى تأكيدها بعد الإعلان الرسمي. لن يتم تعديل أي عطلة مضافة مسبقاً.', en: 'Islamic dates are estimates — confirm them against the official announcement. Holidays you already added are never changed.' },
+
+  // ---- Leave forecast ----
+  leaveForecast: { ar: 'توقعات رصيد الإجازات', en: 'Leave forecast' },
+  currentBalance: { ar: 'الرصيد الحالي', en: 'Current balance' },
+  bookedUpcoming: { ar: 'إجازات محجوزة', en: 'Booked ahead' },
+  awaitingApproval: { ar: 'بانتظار الموافقة', en: 'Awaiting approval' },
+  ifAllApproved: { ar: 'الرصيد بعد الموافقة', en: 'If all approved' },
+  forecastHealthy: { ar: 'رصيد جيد', en: 'Healthy' },
+  forecastTight: { ar: 'رصيد محدود', en: 'Running low' },
+  forecastCritical: { ar: 'رصيد حرج', en: 'Critical' },
+  forecastNegative: { ar: 'لا يوجد رصيد', en: 'No balance' },
+  forecastNoBalanceHint: { ar: 'رصيدك صفر أو أقل، لذلك لا يمكنك تقديم طلب إجازة جديد حتى تجديد السنة. تواصل مع الإدارة إذا كان لديك ظرف طارئ.', en: 'Your balance is zero or below, so you cannot submit a new leave request until the yearly reset. Talk to admin if you have an emergency.' },
+
+  // ---- Audit log filtering ----
+  search2: { ar: 'بحث', en: 'Search' },
+  searchAuditPlaceholder: { ar: 'ابحث في التفاصيل...', en: 'Search details...' },
+  allRoles: { ar: 'كل الأدوار', en: 'All roles' },
+  clearFilters: { ar: 'مسح الفلاتر', en: 'Clear filters' },
 } as const
 
 export type TranslationKey = keyof typeof translations
