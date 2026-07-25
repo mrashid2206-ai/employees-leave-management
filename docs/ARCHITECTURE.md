@@ -93,6 +93,14 @@ Tunable constants: **`src/lib/constants.ts`**.
     notification** (`src/lib/employee-notify.ts`). **Idempotent.**
   - `runYearlyReset` resets balances + advances the fiscal year; fires once at year-end
     (guarded by `last_reset_year`). **Idempotent.**
+  - **Every run is journalled and reversible** — `src/lib/automation-journal.ts`. Each
+    mutation is written to `automation_effects` with the row id and its prior values, so
+    **Settings → Automation → history → Undo** puts everything back: absences removed,
+    leave days refunded, auto check-outs reopened, a yearly reset's balances and fiscal
+    year restored. This exists because a run once marked all 14 employees absent and the
+    cleanup was hand-written SQL against production. Undo is conditional on each row still
+    looking the way the automation left it — **undoing the robot never undoes a human's
+    later edit** — and a run can only be undone once.
 - **Balance policy (owner decisions, 2026-06):** (a) the yearly reset is a **clean slate** —
   every active employee returns to the configured annual balance, and any negative balance
   (tardiness/absence debt) is forgiven, deliberately; (b) **employees with balance ≤ 0
@@ -121,6 +129,11 @@ deploys) · `jwt.ts` · `audit.ts` · `email.ts` · `api.ts` (typed client) ·
 `query-keys.ts` (`qk.*` factory) · `schedule.ts` (employee→department→global work schedule) ·
 `leave-forecast.ts` · `oman-holidays.ts` · `tardiness-penalty.ts`.
 
+**Error visibility:** `onRequestError` in `src/instrumentation.ts` is Next's global
+server-error hook; it persists every captured error to `error_log`, viewable at
+**Settings → Error log**. Before this, a production 500 only reached stdout and was
+invisible unless someone happened to be tailing Railway logs at that moment.
+
 Request validation: `src/server/schemas.ts` + `src/server/validation.ts` (zod at write
 boundaries). Business logic that mutates balances lives in `src/server/services/*`
 (`leave-service`, `correction-service`, `holiday-service`) and returns a `ServiceResult`,
@@ -129,9 +142,14 @@ which routes hand to `respond()` — so the same logic is callable from tests wi
 ### Translations
 
 All UI strings live in `src/lib/translations.ts` and are read via `useT()` → `t('key')`.
-Do **not** add new `lang === 'ar' ? '…' : '…'` ternaries — 261 of them were migrated into
-keys. The ~50 that remain inline are the ones that interpolate values, plus a few that are
-not translations at all (text direction, the language toggle's own label).
+Do **not** add new `lang === 'ar' ? '…' : '…'` ternaries.
+
+Sentences containing values use placeholders — `t('balanceLow', { name, days })` against
+`'{name} balance low ({days} days)'`. The placeholder sits **inside** the translated
+string rather than being concatenated around it, because Arabic and English order the
+words differently. An unknown placeholder is left visible (`{missing}`) instead of
+rendering "undefined". A test asserts both languages of a key declare the same
+placeholders.
 
 ## 7. Schema & migrations
 
@@ -154,6 +172,7 @@ Recent migrations worth knowing about:
 | `0009_uniqueness_guards` | Adopts the last indexes the self-heal owned. **Dedupes first** — and refunds the leave charged by duplicate `tardiness_log` rows before removing them |
 | `0010_drop_money_columns` | Drops the dead payroll columns |
 | `0011_audit_log_indexes` | Indexes `audit_log` by `created_at` / `action` for server-side filtering |
+| `0012_automation_journal` | `automation_runs` + `automation_effects` (undo), and `error_log` |
 
 Historical/legacy SQL (`supabase/migrations/*`, `railway-migration.sql`) predates the runner
 and is kept for reference only.

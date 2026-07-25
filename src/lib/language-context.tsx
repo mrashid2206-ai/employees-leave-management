@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
-import { translations, type Lang, type TranslationKey } from './translations'
+import { translations, interpolate, type Lang, type TranslationKey } from './translations'
 
 interface LanguageContextType {
   lang: Lang
@@ -52,9 +52,23 @@ export function useLanguage() {
   return useContext(LanguageContext)
 }
 
+/**
+ * Translate a key, optionally filling `{placeholders}`.
+ *
+ *   t('greeting')                      -> "مرحباً"
+ *   t('balanceLow', { name, days: 3 }) -> "رصيد أحمد منخفض (3 يوم)"
+ *
+ * Interpolation exists so sentences with values in them can live in translations.ts
+ * like every other string, instead of being written twice inline as
+ * `lang === 'ar' ? \`...\` : \`...\``. Word ORDER differs between Arabic and English,
+ * which is exactly why the placeholder has to sit inside the translated string rather
+ * than being concatenated around it.
+ *
+ * A placeholder with no matching value is left untouched, so a missing argument shows
+ * up as a visible `{name}` rather than silently rendering "undefined".
+ */
 export function useT() {
   const { lang } = useLanguage()
-  return (key: TranslationKey) => {
-    return translations[key]?.[lang] || key
-  }
+  return (key: TranslationKey, vars?: Record<string, string | number>) =>
+    interpolate(translations[key]?.[lang] || key, vars)
 }

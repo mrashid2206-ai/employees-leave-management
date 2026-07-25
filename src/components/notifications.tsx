@@ -22,7 +22,7 @@ interface Notification {
 export function NotificationBell() {
   const [open, setOpen] = useState(false)
   const t = useT()
-  const { lang, dir } = useLanguage()
+  const { dir } = useLanguage()
   const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
   const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
   const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
@@ -41,14 +41,14 @@ export function NotificationBell() {
           id: `low-${emp.id}`,
           type: 'danger',
           icon: AlertTriangle,
-          message: lang === 'ar' ? `رصيد ${emp.name} منخفض جداً (${Math.round(remaining * 10) / 10} يوم)` : `${emp.name} balance critically low (${Math.round(remaining * 10) / 10} days)`,
+          message: t('balanceCriticallyLow', { name: emp.name, days: Math.round(remaining * 10) / 10 }),
         })
       } else if (remaining <= 7) {
         notifications.push({
           id: `warn-${emp.id}`,
           type: 'warning',
           icon: AlertTriangle,
-          message: lang === 'ar' ? `رصيد ${emp.name} منخفض (${Math.round(remaining * 10) / 10} يوم)` : `${emp.name} balance low (${Math.round(remaining * 10) / 10} days)`,
+          message: t('balanceLow', { name: emp.name, days: Math.round(remaining * 10) / 10 }),
         })
       }
     })
@@ -62,7 +62,7 @@ export function NotificationBell() {
           id: `tard-${emp.id}`,
           type: 'warning',
           icon: Clock,
-          message: lang === 'ar' ? `تأخير ${emp.name} تجاوز ساعة (${totalMinutes} دقيقة)` : `${emp.name} tardiness exceeds 1hr (${totalMinutes} min)`,
+          message: t('tardinessExceedsHour', { name: emp.name, minutes: totalMinutes }),
         })
       }
     })
@@ -74,7 +74,7 @@ export function NotificationBell() {
         id: 'many-leave',
         type: 'info',
         icon: CalendarOff,
-        message: lang === 'ar' ? `${onLeaveToday.length} موظفين في إجازة اليوم` : `${onLeaveToday.length} employees on leave today`,
+        message: t('employeesOnLeaveToday', { count: onLeaveToday.length }),
       })
     }
 
@@ -85,7 +85,7 @@ export function NotificationBell() {
         id: 'pending',
         type: 'warning',
         icon: CalendarOff,
-        message: lang === 'ar' ? `${pendingLeaves.length} طلب إجازة بانتظار الموافقة` : `${pendingLeaves.length} leave requests pending approval`,
+        message: t('leaveRequestsPending', { count: pendingLeaves.length }),
       })
     }
   }

@@ -7,6 +7,7 @@ import { notifyEmployee } from '@/lib/employee-notify'
 import { actorLabel, type Actor as ActorType } from '@/server/result'
 import { computeWorkHours, computeOvertime, isNonWorkingWeekday } from '@/lib/attendance-calc'
 import { resolveScheduleMap, globalSchedule, scheduleEndTime } from '@/lib/schedule'
+import { startRun, recordEffect, finishRun } from '@/lib/automation-journal'
 
 // Single shared Actor shape (see src/server/result.ts) so services, routes and the
 // automation jobs all describe "who did this" the same way.
@@ -30,6 +31,9 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
   // flag everyone absent.
   const processDate = date || omanYesterday()
   const dayIsComplete = processDate < omanToday()
+
+  // Journal every mutation so a misfiring run can be undone from the UI.
+  const runId = await startRun('daily', processDate, actor)
 
   const { rows: annualType } = await pool.query(
     'SELECT id FROM leave_types WHERE name_en = $1 ORDER BY id LIMIT 1',
@@ -85,12 +89,18 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
       }
 
       if (!attendedMap.has(emp.id) && dayIsComplete) {
-        await pool.query(`
+        const marked = await pool.query(`
           INSERT INTO attendance (employee_id, date, status)
           VALUES ($1, $2, 'absent')
           ON CONFLICT (employee_id, date) DO NOTHING
+          RETURNING id
         `, [emp.id, processDate])
         results.absentMarked++
+        // Only journal rows this run actually created — ON CONFLICT means a pre-existing
+        // row was left alone, and undoing the run must not delete it.
+        if ((marked.rowCount || 0) > 0) {
+          await recordEffect(runId, 'absence_marked', emp.id, { date: processDate })
+        }
 
         const client = await pool.connect()
         try {
@@ -107,6 +117,9 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
           if ((inserted.rowCount || 0) > 0) {
             await client.query('UPDATE employees SET leave_balance = leave_balance - 1 WHERE id = $1', [emp.id])
             results.leaveDeducted++
+            // Inside the same transaction as the deduction, so the journal can never
+            // disagree with the balance it is meant to be able to refund.
+            await recordEffect(runId, 'absence_leave', emp.id, { leave_id: inserted.rows[0].id, days: 1 }, client)
           }
           await client.query('COMMIT')
           if ((inserted.rowCount || 0) > 0) {
@@ -137,13 +150,19 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
               const tc = await pool.connect()
               try {
                 await tc.query('BEGIN')
-                await tc.query(`
+                const tardyRow = await tc.query(`
                   INSERT INTO tardiness_log (employee_id, date, time, minutes_late, notes, leave_deducted)
                   VALUES ($1, $2, $3, $4, 'Auto-generated from attendance', $5)
+                  RETURNING id
                 `, [emp.id, processDate, record.check_in, minutesLate, deduction])
                 if (deduction > 0) {
                   await tc.query('UPDATE employees SET leave_balance = leave_balance - $1 WHERE id = $2', [deduction, emp.id])
                 }
+                await recordEffect(
+                  runId, 'tardiness_created', emp.id,
+                  { tardiness_id: tardyRow.rows[0].id, leave_deducted: deduction },
+                  tc
+                )
                 await tc.query('COMMIT')
                 results.tardinessCreated++
                 await notifyEmployee(
@@ -170,7 +189,8 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
   // the next run. Idempotent (only rows with check_out IS NULL match) and never touches
   // today: people may still be working.
   const { rows: openCheckouts } = await pool.query(
-    `SELECT employee_id, date::text as date, check_in::text as check_in, is_holiday_work
+    `SELECT employee_id, date::text as date, check_in::text as check_in, is_holiday_work,
+            work_hours, overtime_hours, notes
        FROM attendance
       WHERE check_in IS NOT NULL AND check_out IS NULL AND date < $1`,
     [omanToday()]
@@ -182,12 +202,23 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
     const autoHours = computeWorkHours(o.check_in, oEndTime)
     if (autoHours !== null) {
       const autoOvertime = computeOvertime(autoHours, oSchedule.workHoursPerDay, !!o.is_holiday_work)
-      await pool.query(
+      const closed = await pool.query(
         `UPDATE attendance SET check_out = $1, work_hours = $2, overtime_hours = $3,
            notes = COALESCE(notes, '') || ' [Auto checkout]'
          WHERE employee_id = $4 AND date = $5 AND check_out IS NULL`,
         [oEndTime, autoHours, autoOvertime, o.employee_id, o.date]
       )
+      if ((closed.rowCount || 0) > 0) {
+        // Keep the prior values verbatim so an undo restores the row exactly, including
+        // the notes we appended '[Auto checkout]' to.
+        await recordEffect(runId, 'auto_checkout', o.employee_id, {
+          date: o.date,
+          check_out: oEndTime,
+          prev_work_hours: o.work_hours,
+          prev_overtime: o.overtime_hours,
+          prev_notes: o.notes,
+        })
+      }
       await notifyEmployee(
         o.employee_id,
         `You forgot to check out on ${o.date}; your check-out was auto-recorded at ${oEndTime.slice(0, 5)}. Contact admin if this is wrong.`,
@@ -214,15 +245,20 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
       [processDate]
     )
     for (const p of openPerms) {
-      await pool.query('UPDATE permissions SET return_time = $1 WHERE id = $2', [
-        scheduleEndTime(scheduleFor(p.employee_id)),
-        p.id,
-      ])
+      const closeAt = scheduleEndTime(scheduleFor(p.employee_id))
+      await pool.query('UPDATE permissions SET return_time = $1 WHERE id = $2', [closeAt, p.id])
+      await recordEffect(runId, 'permission_closed', p.employee_id, {
+        permission_id: p.id,
+        return_time: closeAt,
+        prev_return_time: null,
+      })
       permissionsClosed++
     }
   } catch {} // Table might not exist yet
 
   await logAudit('daily_process', actorLabel(actor), actor.role, `Daily process (${processDate}): ${results.absentMarked} absent, ${results.tardinessCreated} tardiness, ${results.missingCheckout} missing checkout, ${permissionsClosed} permissions auto-closed`)
+
+  await finishRun(runId, { ...results, permissionsClosed })
 
   return { success: true, ...results, permissionsClosed }
 }
@@ -269,6 +305,24 @@ export async function runYearlyReset(actor: ActorType, opts: { force?: boolean }
       return { success: false, alreadyReset: true, message: 'A yearly reset has already run today.' }
     }
 
+    // Journal every prior balance BEFORE overwriting it. A reset is a clean slate — the
+    // old balances are gone the moment this UPDATE lands — so this snapshot is the only
+    // way back if the reset fires on the wrong day.
+    const runId = await startRun('yearly', s.year_end, actor)
+    const { rows: priorBalances } = await client.query(
+      'SELECT id, leave_balance FROM employees WHERE is_active = true'
+    )
+    for (const b of priorBalances) {
+      await recordEffect(runId, 'yearly_balance', b.id, { prev_balance: b.leave_balance }, client)
+    }
+    await recordEffect(runId, 'yearly_settings', null, {
+      settings_id: s.id,
+      prev_year_start: s.year_start,
+      prev_year_end: s.year_end,
+      prev_last_reset_year: s.last_reset_year,
+      prev_last_reset_at: s.last_reset_day,
+    }, client)
+
     const { rowCount } = await client.query(
       'UPDATE employees SET leave_balance = $1, updated_at = NOW() WHERE is_active = true',
       [s.annual_leave_balance]
@@ -289,6 +343,14 @@ export async function runYearlyReset(actor: ActorType, opts: { force?: boolean }
     await client.query('COMMIT')
 
     await logAudit('yearly_reset', actorLabel(actor), actor.role, `Yearly reset: ${rowCount} employees, fiscal year ${s.year_start} → ${newYearStart}`)
+
+    await finishRun(runId, {
+      employeesReset: rowCount || 0,
+      newBalance: s.annual_leave_balance,
+      fromYearStart: s.year_start,
+      newYearStart,
+      newYearEnd,
+    })
 
     return { success: true, employeesReset: rowCount || 0, newBalance: s.annual_leave_balance, newYearStart, newYearEnd }
   } catch (err) {

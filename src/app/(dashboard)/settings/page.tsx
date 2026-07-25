@@ -12,13 +12,15 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import {
   Save, Plus, Pencil, Trash2, Calendar, Clock, Building2, Palette,
-  CalendarDays, Users, Zap, RotateCcw, Play
+  CalendarDays, Users, Zap, RotateCcw, Play, AlertTriangle
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage, useT } from '@/lib/language-context'
 import { getSettings, updateSettings, getDepartments, createDepartment, updateDepartment, deleteDepartment, getHolidays, createHoliday, updateHoliday, deleteHoliday, getEmployees, getLeaveTypes, createLeaveType, updateLeaveType, deleteLeaveType } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { DepartmentSchedules } from './_components/department-schedules'
+import { AutomationRuns } from './_components/automation-runs'
+import { ErrorLog } from './_components/error-log'
 import type { Settings, LeaveRequest } from '@/lib/types'
 
 // Settings include extra office fields managed via this form but not part of the shared Settings type.
@@ -168,6 +170,7 @@ export default function SettingsPage() {
     { id: 'holidays', icon: Calendar, label: t('holidays') },
     { id: 'location', icon: Building2, label: t('officeLocation') },
     { id: 'automation', icon: Zap, label: t('automation') },
+    { id: 'errors', icon: AlertTriangle, label: t('errorLog') },
     { id: 'admins', icon: Users, label: t('adminUsers') },
   ]
 
@@ -650,6 +653,7 @@ export default function SettingsPage() {
           {/* Automation */}
           {activeSection === 'automation' && (
             <div className="space-y-6">
+              <AutomationRuns />
               <Card className="border-0 shadow-lg">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -743,6 +747,8 @@ export default function SettingsPage() {
           )}
 
           {/* Admin Users */}
+          {activeSection === 'errors' && <ErrorLog />}
+
           {activeSection === 'admins' && (
             <AdminUsersSection lang={lang} />
           )}
