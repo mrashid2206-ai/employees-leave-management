@@ -2,19 +2,14 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { getDepartments, getSettings, updateDepartment } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
+import { ScheduleFields } from '@/components/schedule-fields'
 import type { DepartmentUpdate } from '@/lib/types'
-
-const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
-const DAY_LABELS_AR = ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت']
-const DAY_LABELS_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 // Per-department working hours. Every field is optional — blank means "inherit the
 // global schedule above", so a company with one schedule never has to touch this.
@@ -22,7 +17,6 @@ export function DepartmentSchedules() {
   const t = useT()
   const { lang } = useLanguage()
   const queryClient = useQueryClient()
-  const dayLabels = lang === 'ar' ? DAY_LABELS_AR : DAY_LABELS_EN
 
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
@@ -61,8 +55,6 @@ export function DepartmentSchedules() {
 
       {departments.map(dept => {
         const draft = drafts[dept.id]
-        const daysValue = String(valueFor(dept.id, 'work_days', dept.work_days) || '')
-        const selectedDays = daysValue ? daysValue.split(',').map(Number) : null
 
         return (
           <div key={dept.id} className="p-4 rounded-xl bg-accent/20 space-y-3">
@@ -75,61 +67,23 @@ export function DepartmentSchedules() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs">{t('workStartTime')}</Label>
-                <Input
-                  type="time"
-                  value={String(valueFor(dept.id, 'work_start_time', dept.work_start_time?.slice(0, 5)) || '')}
-                  placeholder={settings?.work_start_time?.slice(0, 5) || '08:00'}
-                  onChange={e => setDraft(dept.id, 'work_start_time', e.target.value)}
-                />
-              </div>
-              <div>
-                <Label className="text-xs">{t('workHoursPerDay')}</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={String(valueFor(dept.id, 'work_hours_per_day', dept.work_hours_per_day) || '')}
-                  placeholder={String(settings?.work_hours_per_day || 8)}
-                  onChange={e => setDraft(dept.id, 'work_hours_per_day', e.target.value === '' ? null : parseInt(e.target.value))}
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label className="text-xs mb-1.5 block">{t('workDays')}</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {DAY_KEYS.map((_key, i) => {
-                  const active = selectedDays ? selectedDays.includes(i) : false
-                  return (
-                    <button
-                      key={i}
-                      type="button"
-                      className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${
-                        active ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground'
-                      }`}
-                      onClick={() => {
-                        const base = selectedDays ?? (settings?.work_days || '0,1,2,3,4').split(',').map(Number)
-                        const updated = base.includes(i) ? base.filter(d => d !== i) : [...base, i].sort()
-                        setDraft(dept.id, 'work_days', updated.join(','))
-                      }}
-                    >
-                      {dayLabels[i]}
-                    </button>
-                  )
-                })}
-                {selectedDays && (
-                  <button
-                    type="button"
-                    className="px-2.5 py-1 rounded-lg text-xs text-muted-foreground underline"
-                    onClick={() => setDraft(dept.id, 'work_days', null)}
-                  >
-                    {t('inherit')}
-                  </button>
-                )}
-              </div>
-            </div>
+            <ScheduleFields
+              value={{
+                work_start_time: valueFor(dept.id, 'work_start_time', dept.work_start_time) as string | null,
+                work_days: valueFor(dept.id, 'work_days', dept.work_days) as string | null,
+                work_hours_per_day: valueFor(dept.id, 'work_hours_per_day', dept.work_hours_per_day) as number | null,
+              }}
+              onChange={patch => {
+                for (const [field, v] of Object.entries(patch)) {
+                  setDraft(dept.id, field as keyof DepartmentUpdate, v as string | number | null)
+                }
+              }}
+              fallback={{
+                work_start_time: settings?.work_start_time,
+                work_days: settings?.work_days,
+                work_hours_per_day: settings?.work_hours_per_day,
+              }}
+            />
 
             <Button
               size="sm"

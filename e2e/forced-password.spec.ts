@@ -18,7 +18,7 @@ test('new hire is forced to change password before using the portal', async ({ p
 
   // Gate is shown and the normal portal (check-in button) is NOT reachable.
   await expect(page.getByText('Password Change Required')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Check In' })).toHaveCount(0)
+  await expect(page.getByTestId('btn-check-in')).toHaveCount(0)
 
   await page.getByPlaceholder('Current password').fill(E2E.newHire.password)
   await page.getByPlaceholder('New password').fill('brand-new-pass-1')
@@ -26,5 +26,5 @@ test('new hire is forced to change password before using the portal', async ({ p
   await page.getByRole('button', { name: 'Change Password' }).click()
 
   // Gate clears and the portal becomes usable.
-  await expect(page.getByRole('button', { name: 'Check In' })).toBeVisible()
+  await expect(page.getByTestId('btn-check-in')).toBeVisible()
 })

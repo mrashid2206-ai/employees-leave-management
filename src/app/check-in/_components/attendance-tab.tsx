@@ -197,6 +197,9 @@ export function AttendanceTab({ empId }: AttendanceTabProps) {
       <div className="grid grid-cols-2 gap-3">
         <Button
           size="lg"
+          // Stable hook for e2e: the bottom nav tab carries the same visible label, so
+          // selecting this button by its text is ambiguous.
+          data-testid="btn-check-in"
           className="h-16 sm:h-20 text-base sm:text-lg bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800 flex-col gap-1 shadow-lg shadow-emerald-500/20"
           onClick={() => handleCheckAction('check-in')}
           disabled={loading || !!todayStatus?.check_in}
@@ -206,6 +209,7 @@ export function AttendanceTab({ empId }: AttendanceTabProps) {
         </Button>
         <Button
           size="lg"
+          data-testid="btn-check-out"
           className="h-16 sm:h-20 text-base sm:text-lg bg-gradient-to-br from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800 flex-col gap-1 shadow-lg shadow-amber-500/20"
           onClick={() => handleCheckAction('check-out')}
           disabled={loading || !todayStatus?.check_in || !!todayStatus?.check_out}

@@ -27,12 +27,12 @@ test.describe('employee check-in', () => {
 
     await loginAsEmployee(page)
 
-    await page.getByRole('button', { name: 'Check In' }).click()
+    await page.getByTestId('btn-check-in').click()
 
     // Today's status panel only appears once a check-in exists.
     await expect(page.getByText("Today's Status")).toBeVisible()
     // Check-in is now recorded, so the button is disabled for the rest of the day.
-    await expect(page.getByRole('button', { name: 'Check In' })).toBeDisabled()
+    await expect(page.getByTestId('btn-check-in')).toBeDisabled()
   })
 
   test('a second check-in the same day is refused', async ({ page }) => {
@@ -41,6 +41,6 @@ test.describe('employee check-in', () => {
     await loginAsEmployee(page)
 
     // Already checked in by the previous test (same seeded employee, same day).
-    await expect(page.getByRole('button', { name: 'Check In' })).toBeDisabled()
+    await expect(page.getByTestId('btn-check-in')).toBeDisabled()
   })
 })

@@ -215,8 +215,7 @@ export const translations = {
   monthlySheet: { ar: 'كشف الحضور الشهري', en: 'Monthly Attendance Sheet' },
   recordAttendance: { ar: 'تسجيل حضور', en: 'Record Attendance' },
   selectMonth: { ar: 'اختر الشهر', en: 'Select Month' },
-  salaryReport: { ar: 'ملخص التأخير', en: 'Tardiness Summary' },
-  baseSalary: { ar: 'الراتب الأساسي', en: 'Base Salary' },
+  tardinessSummary: { ar: 'ملخص التأخير', en: 'Tardiness Summary' },
   netImpact: { ar: 'صافي التأثير', en: 'Net Impact' },
   monthlyReport: { ar: 'التقرير الشهري', en: 'Monthly Report' },
   corrections: { ar: 'طلبات تصحيح الحضور', en: 'Attendance Corrections' },
@@ -520,6 +519,10 @@ export const translations = {
   searchAuditPlaceholder: { ar: 'ابحث في التفاصيل...', en: 'Search details...' },
   allRoles: { ar: 'كل الأدوار', en: 'All roles' },
   clearFilters: { ar: 'مسح الفلاتر', en: 'Clear filters' },
+
+  // ---- Per-employee schedule ----
+  inheritsDepartment: { ar: 'يتبع دوام القسم', en: 'Follows department' },
+  employeeScheduleHint: { ar: 'اترك الحقول فارغة ليتبع الموظف دوام قسمه. يُحتسب التأخير مقابل هذا الدوام، والتأخير يُخصم من رصيد الإجازات.', en: 'Leave blank to follow the department schedule. Tardiness is measured against this schedule, and tardiness costs annual leave.' },
 } as const
 
 export type TranslationKey = keyof typeof translations

@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { Search, ArrowUpDown, Plus, Trash2, Pencil, Upload, Power } from 'lucide-react'
 import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings, getDepartments, getLeaveTypes, createEmployee, deleteEmployee, updateEmployee } from '@/lib/api'
-import type { Employee } from '@/lib/types'
+import type { Employee, ScheduleOverride } from '@/lib/types'
+import { ScheduleFields } from '@/components/schedule-fields'
 import { parseExcelFile } from '@/lib/excel'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
@@ -68,6 +69,9 @@ export default function EmployeesPage() {
 
   const [editOpen, setEditOpen] = useState(false)
   const [editEmp, setEditEmp] = useState({ id: 0, name: '', department_id: '', leave_balance: '', email: '', phone: '', position: '', join_date: '' })
+  // Per-employee schedule override, kept separate because blank/null is meaningful here
+  // (it means "inherit the department's schedule") rather than just an empty field.
+  const [editSchedule, setEditSchedule] = useState<ScheduleOverride>({})
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number; name: string }>({ open: false, id: 0, name: '' })
 
   const updateMutation = useMutation({
@@ -112,6 +116,11 @@ export default function EmployeesPage() {
         phone: editEmp.phone || undefined,
         position: editEmp.position || undefined,
         join_date: editEmp.join_date || undefined,
+        // Sent explicitly (including null) so clearing a field really does reset the
+        // employee back to inheriting their department's schedule.
+        work_start_time: editSchedule.work_start_time ?? null,
+        work_days: editSchedule.work_days ?? null,
+        work_hours_per_day: editSchedule.work_hours_per_day ?? null,
       },
     })
   }
@@ -126,6 +135,11 @@ export default function EmployeesPage() {
       phone: emp.phone || '',
       position: emp.position || '',
       join_date: emp.join_date || '',
+    })
+    setEditSchedule({
+      work_start_time: emp.work_start_time ?? null,
+      work_days: emp.work_days ?? null,
+      work_hours_per_day: emp.work_hours_per_day ?? null,
     })
     setEditOpen(true)
   }
@@ -199,6 +213,17 @@ export default function EmployeesPage() {
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
+
+  // What the employee being edited would inherit if their own schedule is left blank:
+  // their department's override, falling back to the global schedule.
+  const editEmpDeptSchedule = useMemo(() => {
+    const dept = departments.find(d => String(d.id) === editEmp.department_id)
+    return {
+      work_start_time: dept?.work_start_time ?? settings?.work_start_time ?? null,
+      work_days: dept?.work_days ?? settings?.work_days ?? null,
+      work_hours_per_day: dept?.work_hours_per_day ?? settings?.work_hours_per_day ?? null,
+    }
+  }, [departments, settings, editEmp.department_id])
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -552,6 +577,25 @@ export default function EmployeesPage() {
                 type="date"
                 value={editEmp.join_date}
                 onChange={e => setEditEmp(f => ({ ...f, join_date: e.target.value }))}
+              />
+            </div>
+
+            {/* Individual work schedule. Blank = follow the department. This matters
+                because tardiness is measured against the start time and costs annual
+                leave, so someone on different hours must not be judged by their
+                department's schedule. */}
+            <div className="pt-2 border-t space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="font-semibold">{t('workSchedule')}</Label>
+                {!editSchedule.work_start_time && !editSchedule.work_days && !editSchedule.work_hours_per_day && (
+                  <Badge variant="outline" className="text-[10px]">{t('inheritsDepartment')}</Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">{t('employeeScheduleHint')}</p>
+              <ScheduleFields
+                value={editSchedule}
+                onChange={patch => setEditSchedule(s => ({ ...s, ...patch }))}
+                fallback={editEmpDeptSchedule}
               />
             </div>
           </div>

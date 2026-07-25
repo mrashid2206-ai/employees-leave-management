@@ -55,13 +55,13 @@ export default function TardinessSummaryPage() {
       [t('totalMinutes')]: r.totalMinutes,
       [t('tardinessHHMM')]: formatMinutesToHHMM(r.totalMinutes),
     }))
-    exportToExcel(data, 'tardiness_summary', t('salaryReport'))
+    exportToExcel(data, 'tardiness_summary', t('tardinessSummary'))
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <h1 className="text-2xl font-bold">{t('salaryReport')}</h1>
+        <h1 className="text-2xl font-bold">{t('tardinessSummary')}</h1>
         <div className="flex gap-3">
           <Select value={deptFilter} onValueChange={(v) => setDeptFilter(v ?? 'all')}>
             <SelectTrigger className="w-40">

@@ -5,6 +5,38 @@ async function useEnglish(page: Page) {
   await page.addInitScript(() => window.localStorage.setItem('app-lang', 'en'))
 }
 
+// Authenticated API calls have to be made from INSIDE the page, not via
+// `page.request`. The auth cookies are set `secure: NODE_ENV === 'production'` and
+// `next start` always runs in production mode, so they are Secure cookies served over
+// plain HTTP. Chrome attaches them anyway because localhost counts as a trustworthy
+// origin, but Playwright's request context applies the stricter rule and drops them —
+// which makes every `page.request` call come back 401.
+async function apiGet<T>(p: Page, url: string): Promise<T> {
+  return p.evaluate(async (u: string) => {
+    const res = await fetch(u)
+    if (!res.ok) throw new Error(`GET ${u} → ${res.status}`)
+    return res.json()
+  }, url)
+}
+
+async function apiPost<T>(
+  p: Page,
+  url: string,
+  data: unknown
+): Promise<{ ok: boolean; status: number; body: T }> {
+  return p.evaluate(
+    async ({ u, d }: { u: string; d: unknown }) => {
+      const res = await fetch(u, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(d),
+      })
+      return { ok: res.ok, status: res.status, body: await res.json() }
+    },
+    { u: url, d: data }
+  )
+}
+
 // Full-stack leave lifecycle: an employee's half-day request must survive the API, the
 // approval UI, and land as an exact 0.5-day balance deduction.
 test('half-day request → admin approval → balance drops by 0.5', async ({ page, browser }) => {
@@ -17,29 +49,27 @@ test('half-day request → admin approval → balance drops by 0.5', async ({ pa
   await page.getByRole('button', { name: 'Login' }).click()
   await page.waitForURL('**/check-in')
 
-  const me = await (await page.request.get('/api/auth/employee-me')).json()
+  const me = await apiGet<{ user: { id: number } }>(page, '/api/auth/employee-me')
   const employeeId = me.user.id
 
-  const types = await (await page.request.get('/api/leave-types')).json()
-  const annual = types.find((t: { name_en: string }) => t.name_en === 'Annual')
+  const types = await apiGet<{ id: number; name_en: string }[]>(page, '/api/leave-types')
+  const annual = types.find(t => t.name_en === 'Annual')!
 
   // A future single day, flagged half-day.
   const day = new Date()
   day.setDate(day.getDate() + 14)
   const date = day.toISOString().split('T')[0]
 
-  const created = await page.request.post('/api/leaves', {
-    data: {
-      employee_id: employeeId,
-      leave_type_id: annual.id,
-      start_date: date,
-      end_date: date,
-      days_count: 0.5,
-      is_half_day: true,
-    },
+  const created = await apiPost<{ days_count: string }>(page, '/api/leaves', {
+    employee_id: employeeId,
+    leave_type_id: annual.id,
+    start_date: date,
+    end_date: date,
+    days_count: 0.5,
+    is_half_day: true,
   })
-  expect(created.ok()).toBeTruthy()
-  expect(parseFloat((await created.json()).days_count)).toBe(0.5)
+  expect(created.ok, `POST /api/leaves → ${created.status}`).toBeTruthy()
+  expect(parseFloat(created.body.days_count)).toBe(0.5)
 
   // --- admin approves from the dashboard inbox ---
   const adminContext = await browser.newContext()
@@ -58,8 +88,8 @@ test('half-day request → admin approval → balance drops by 0.5', async ({ pa
 
   // --- the deduction is exactly half a day ---
   await expect(async () => {
-    const employees = await (await admin.request.get('/api/employees')).json()
-    const emp = employees.find((e: { id: number }) => e.id === employeeId)
+    const employees = await apiGet<{ id: number; leave_balance: number }[]>(admin, '/api/employees')
+    const emp = employees.find(e => e.id === employeeId)!
     expect(Number(emp.leave_balance)).toBe(29.5)
   }).toPass({ timeout: 15_000 })
 
