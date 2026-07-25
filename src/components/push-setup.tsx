@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Bell, BellOff } from 'lucide-react'
 import { toast } from 'sonner'
-import { useLanguage } from '@/lib/language-context'
+import { useT } from '@/lib/language-context'
 
 // VAPID keys arrive base64url-encoded; the Push API needs raw bytes.
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -19,7 +19,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 // Registers the service worker (making the portal installable) and lets the employee
 // opt in to push reminders. Renders nothing when push isn't supported or configured.
 export function PushSetup() {
-  const { lang } = useLanguage()
+  const t = useT()
   const [supported, setSupported] = useState(false)
   const [enabled, setEnabled] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -47,13 +47,13 @@ export function PushSetup() {
       const keyRes = await fetch('/api/push/subscribe')
       const { key } = await keyRes.json()
       if (!key) {
-        toast.error(lang === 'ar' ? 'الإشعارات غير مفعّلة على الخادم' : 'Push is not configured on the server')
+        toast.error(t('pushNotConfigured'))
         setBusy(false)
         return
       }
       const permission = await Notification.requestPermission()
       if (permission !== 'granted') {
-        toast.error(lang === 'ar' ? 'تم رفض إذن الإشعارات' : 'Notification permission denied')
+        toast.error(t('pushDenied'))
         setBusy(false)
         return
       }
@@ -69,9 +69,9 @@ export function PushSetup() {
       })
       if (!res.ok) throw new Error()
       setEnabled(true)
-      toast.success(lang === 'ar' ? 'تم تفعيل التذكيرات' : 'Reminders enabled')
+      toast.success(t('remindersEnabled'))
     } catch {
-      toast.error(lang === 'ar' ? 'تعذّر تفعيل التذكيرات' : 'Could not enable reminders')
+      toast.error(t('remindersEnableFailed'))
     }
     setBusy(false)
   }
@@ -90,9 +90,9 @@ export function PushSetup() {
         await sub.unsubscribe()
       }
       setEnabled(false)
-      toast.success(lang === 'ar' ? 'تم إيقاف التذكيرات' : 'Reminders disabled')
+      toast.success(t('remindersDisabled'))
     } catch {
-      toast.error(lang === 'ar' ? 'تعذّر الإيقاف' : 'Could not disable reminders')
+      toast.error(t('remindersDisableFailed'))
     }
     setBusy(false)
   }
@@ -109,8 +109,8 @@ export function PushSetup() {
     >
       {enabled ? <BellOff className="h-3.5 w-3.5 me-1.5" /> : <Bell className="h-3.5 w-3.5 me-1.5" />}
       {enabled
-        ? (lang === 'ar' ? 'إيقاف تذكيرات الحضور' : 'Turn off check-in reminders')
-        : (lang === 'ar' ? 'تفعيل تذكيرات الحضور' : 'Enable check-in reminders')}
+        ? (t('remindersTurnOff'))
+        : (t('remindersTurnOn'))}
     </Button>
   )
 }

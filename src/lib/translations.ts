@@ -523,12 +523,59 @@ export const translations = {
   // ---- Per-employee schedule ----
   inheritsDepartment: { ar: 'يتبع دوام القسم', en: 'Follows department' },
   employeeScheduleHint: { ar: 'اترك الحقول فارغة ليتبع الموظف دوام قسمه. يُحتسب التأخير مقابل هذا الدوام، والتأخير يُخصم من رصيد الإجازات.', en: 'Leave blank to follow the department schedule. Tardiness is measured against this schedule, and tardiness costs annual leave.' },
+
+  // ---- Automation history / undo ----
+  automationHistory: { ar: 'سجل التشغيل التلقائي', en: 'Automation history' },
+  automationHistoryHint: { ar: 'ما غيّرته كل عملية تلقائية، مع إمكانية التراجع عنها بالكامل.', en: 'What each automated run changed, and a one-click undo.' },
+  dailyProcess: { ar: 'العملية اليومية', en: 'Daily' },
+  undone: { ar: 'تم التراجع', en: 'Undone' },
+  undo: { ar: 'تراجع', en: 'Undo' },
+  changes: { ar: 'تغيير', en: 'changes' },
+  undoRunTitle: { ar: 'التراجع عن هذه العملية؟', en: 'Undo this run?' },
+  undoRunWarning: { ar: 'سيتم إرجاع كل ما غيّرته هذه العملية: حذف الغياب المسجل تلقائياً، وإعادة أيام الإجازة المخصومة، وإلغاء الانصراف التلقائي. لن يتم المساس بأي تعديل قام به شخص بعد العملية.', en: 'This reverses everything the run changed: auto-marked absences are removed, deducted leave days are refunded, and auto check-outs are undone. Anything a person edited afterwards is left untouched.' },
+
+  // ---- Error log ----
+  errorLog: { ar: 'سجل الأخطاء', en: 'Error log' },
+  errorLogHint: { ar: 'أخطاء الخادم المسجّلة تلقائياً، لتتمكن من رؤية الأعطال بعد وقوعها.', en: 'Server errors captured automatically, so failures are visible after the fact.' },
+  noErrorsRecorded: { ar: 'لا توجد أخطاء مسجّلة', en: 'No errors recorded' },
+
+  // ---- Push reminders ----
+  pushNotConfigured: { ar: 'الإشعارات غير مفعّلة على الخادم', en: 'Push is not configured on the server' },
+  pushDenied: { ar: 'تم رفض إذن الإشعارات', en: 'Notification permission denied' },
+  remindersEnabled: { ar: 'تم تفعيل التذكيرات', en: 'Reminders enabled' },
+  remindersEnableFailed: { ar: 'تعذّر تفعيل التذكيرات', en: 'Could not enable reminders' },
+  remindersDisabled: { ar: 'تم إيقاف التذكيرات', en: 'Reminders disabled' },
+  remindersDisableFailed: { ar: 'تعذّر الإيقاف', en: 'Could not disable reminders' },
+  remindersTurnOff: { ar: 'إيقاف تذكيرات الحضور', en: 'Turn off check-in reminders' },
+  remindersTurnOn: { ar: 'تفعيل تذكيرات الحضور', en: 'Enable check-in reminders' },
+
+  // ---- Interpolated sentences ({placeholders} filled by useT) ----
+  // Word order differs between Arabic and English, which is why the value sits INSIDE
+  // the translated sentence rather than being concatenated around it.
+  balanceCriticallyLow: { ar: 'رصيد {name} منخفض جداً ({days} يوم)', en: '{name} balance critically low ({days} days)' },
+  balanceLow: { ar: 'رصيد {name} منخفض ({days} يوم)', en: '{name} balance low ({days} days)' },
+  tardinessExceedsHour: { ar: 'تأخير {name} تجاوز ساعة ({minutes} دقيقة)', en: '{name} tardiness exceeds 1hr ({minutes} min)' },
+  employeesOnLeaveToday: { ar: '{count} موظفين في إجازة اليوم', en: '{count} employees on leave today' },
+  leaveRequestsPending: { ar: '{count} طلب إجازة بانتظار الموافقة', en: '{count} leave requests pending approval' },
+  runSummaryDaily: { ar: '{absent} غياب · {tardiness} تأخير · {checkouts} انصراف تلقائي', en: '{absent} absent · {tardiness} tardiness · {checkouts} auto check-out' },
+  runSummaryYearly: { ar: '{count} موظف · سنة {year}', en: '{count} employees reset · year → {year}' },
 } as const
 
 export type TranslationKey = keyof typeof translations
 
-export function t(key: TranslationKey, lang: Lang): string {
-  return translations[key]?.[lang] || key
+/**
+ * Fill `{placeholders}` in a translated string.
+ *
+ * A placeholder with no matching value is left as-is on purpose: a missing argument then
+ * shows up as a visible `{name}` instead of silently rendering "undefined" to a user.
+ */
+export function interpolate(raw: string, vars?: Record<string, string | number>): string {
+  if (!vars) return raw
+  return raw.replace(/\{(\w+)\}/g, (match, name: string) => (name in vars ? String(vars[name]) : match))
+}
+
+export function t(key: TranslationKey, lang: Lang, vars?: Record<string, string | number>): string {
+  return interpolate(translations[key]?.[lang] || key, vars)
 }
 
 export function leaveTypeName(lt: { name_ar: string; name_en: string } | undefined | null, lang: Lang): string {
