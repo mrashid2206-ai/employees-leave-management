@@ -2,7 +2,8 @@ import pool from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { notifyEmployee } from '@/lib/employee-notify'
 import { ensureCorrectionsTable } from '@/lib/ensure-schema'
-import { isOffDay, computeWorkHours, computeOvertime } from '@/lib/attendance-calc'
+import { isOffDayFor, computeWorkHours, computeOvertime } from '@/lib/attendance-calc'
+import { resolveSchedule } from '@/lib/schedule'
 import { ok, fail, type ServiceResult, type Actor, actorLabel } from '@/server/result'
 
 // Employees formally request a fix to a wrong attendance record; admins review a queue.
@@ -76,9 +77,8 @@ export async function reviewCorrection(
       const checkIn = req.requested_check_in || existing[0]?.check_in || null
       const checkOut = req.requested_check_out || existing[0]?.check_out || null
 
-      const holidayWork = await isOffDay(dateStr)
-      const { rows: s } = await client.query('SELECT work_hours_per_day FROM settings ORDER BY id LIMIT 1')
-      const normalHours = s[0]?.work_hours_per_day || 8
+      const holidayWork = await isOffDayFor(req.employee_id, dateStr)
+      const normalHours = (await resolveSchedule(req.employee_id)).workHoursPerDay
 
       let workHours = 0
       if (checkIn && checkOut) workHours = computeWorkHours(String(checkIn), String(checkOut)) ?? 0

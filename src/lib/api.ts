@@ -1,4 +1,4 @@
-import type { Settings, Employee, LeaveRequest, TardinessRecord, LeaveType, Department } from '@/lib/types'
+import type { Settings, Employee, LeaveRequest, TardinessRecord, LeaveType, Department, DepartmentUpdate } from '@/lib/types'
 
 async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, options)
@@ -32,11 +32,13 @@ export async function createDepartment(name: string): Promise<Department> {
   })
 }
 
-export async function updateDepartment(id: number, name: string): Promise<Department> {
+export async function updateDepartment(id: number, data: string | DepartmentUpdate): Promise<Department> {
+  // Accepts a bare name (rename) or a partial update including the work schedule.
+  const body = typeof data === 'string' ? { name: data } : data
   return fetchJSON(`/api/departments/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(body),
   })
 }
 

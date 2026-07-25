@@ -1,5 +1,6 @@
 import pool from '@/lib/db'
 import { MAX_SHIFT_HOURS, DEFAULT_OFFICE_RADIUS_M } from '@/lib/constants'
+import { globalSchedule, resolveSchedule } from '@/lib/schedule'
 
 export function getDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000 // Earth's radius in metres
@@ -44,16 +45,32 @@ export function evaluateLocation(
   return { configured: true, onsite: false }
 }
 
-// True if the given YYYY-MM-DD is a public holiday or falls outside configured work days.
-export async function isOffDay(dateStr: string): Promise<boolean> {
-  const { rows: holidays } = await pool.query('SELECT id FROM holidays WHERE date = $1', [dateStr])
-  if (holidays.length > 0) return true
+export async function isHoliday(dateStr: string): Promise<boolean> {
+  const { rows } = await pool.query('SELECT id FROM holidays WHERE date = $1', [dateStr])
+  return rows.length > 0
+}
 
-  const { rows: settings } = await pool.query('SELECT work_days FROM settings ORDER BY id LIMIT 1')
-  const workDays: number[] = settings[0]?.work_days?.split(',').map(Number) || [0, 1, 2, 3, 4]
-  // Parse at UTC midnight and read the UTC weekday so the result is server-tz independent.
-  const dayOfWeek = new Date(`${dateStr}T00:00:00Z`).getUTCDay()
-  return !workDays.includes(dayOfWeek)
+// Weekday check against a given schedule's work days. Parsed at UTC midnight and read as
+// the UTC weekday so the result is server-timezone independent.
+export function isNonWorkingWeekday(workDays: number[], dateStr: string): boolean {
+  return !workDays.includes(new Date(`${dateStr}T00:00:00Z`).getUTCDay())
+}
+
+// True if the date is a public holiday or outside the ORGANISATION-WIDE work days.
+// Use isOffDayFor() whenever an employee is known — departments/employees may have their
+// own schedules, and this global view would misclassify their weekends.
+export async function isOffDay(dateStr: string): Promise<boolean> {
+  if (await isHoliday(dateStr)) return true
+  const schedule = await globalSchedule()
+  return isNonWorkingWeekday(schedule.workDays, dateStr)
+}
+
+// True if the date is a public holiday or a non-working day for THIS employee's
+// effective schedule (employee -> department -> global).
+export async function isOffDayFor(employeeId: number, dateStr: string): Promise<boolean> {
+  if (await isHoliday(dateStr)) return true
+  const schedule = await resolveSchedule(employeeId)
+  return isNonWorkingWeekday(schedule.workDays, dateStr)
 }
 
 // Work hours between two HH:MM(:SS) wall-clock times. Adds 24h for a genuine

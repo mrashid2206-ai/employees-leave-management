@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 import { ensureAttendanceLocationColumns } from '@/lib/ensure-schema'
-import { isOffDay, computeWorkHours, computeOvertime } from '@/lib/attendance-calc'
+import { isOffDayFor, computeWorkHours, computeOvertime } from '@/lib/attendance-calc'
+import { resolveSchedule } from '@/lib/schedule'
 import { reverseAutoAbsenceLeave } from '@/lib/auto-absence'
 import { parseBody } from '@/server/validation'
 import { attendanceUpsertSchema } from '@/server/schemas'
@@ -53,17 +54,16 @@ export async function POST(request: Request) {
   if (!valid.ok) return valid.response
   const records = Array.isArray(valid.data) ? valid.data : [valid.data]
 
-  const { rows: settingsRows } = await pool.query('SELECT work_hours_per_day FROM settings ORDER BY id LIMIT 1')
-  const normalHours = settingsRows[0]?.work_hours_per_day || 8
-
   const allowedStatuses = new Set(['present', 'absent', 'leave', 'holiday'])
   const results = []
   for (const r of records) {
     // employee_id / date shape is guaranteed by the zod schema at the route boundary.
     const status = r.status && allowedStatuses.has(r.status) ? r.status : 'present'
 
-    // Same overnight/holiday-aware work-hours math as the self-service check-out path.
-    const holidayWork = await isOffDay(r.date)
+    // Same overnight/holiday-aware work-hours math as the self-service check-out path,
+    // measured against this employee's own schedule.
+    const holidayWork = await isOffDayFor(r.employee_id, r.date)
+    const normalHours = (await resolveSchedule(r.employee_id)).workHoursPerDay
     let workHours = 0
     if (r.check_in && r.check_out) {
       workHours = computeWorkHours(r.check_in, r.check_out) ?? 0

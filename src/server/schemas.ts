@@ -76,7 +76,9 @@ export const tardinessRecordSchema = z
     employee_id: id,
     date: dateStr,
     time: timeStr,
-    minutes_late: z.coerce.number().int().positive(),
+    // Advisory only: the server recomputes minutes late from `time` against each
+    // employee's own schedule, since a bulk add can span different start times.
+    minutes_late: z.coerce.number().int().optional(),
     notes: z.string().nullish(),
   })
   .passthrough()

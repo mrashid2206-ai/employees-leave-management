@@ -18,6 +18,7 @@ import { toast } from 'sonner'
 import { useLanguage, useT } from '@/lib/language-context'
 import { getSettings, updateSettings, getDepartments, createDepartment, updateDepartment, deleteDepartment, getHolidays, createHoliday, updateHoliday, deleteHoliday, getEmployees, getLeaveTypes, createLeaveType, updateLeaveType, deleteLeaveType } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { DepartmentSchedules } from './_components/department-schedules'
 import type { Settings, LeaveRequest } from '@/lib/types'
 
 // Settings include extra office fields managed via this form but not part of the shared Settings type.
@@ -313,6 +314,17 @@ export default function SettingsPage() {
                   <Save className="h-4 w-4 ml-2" />
                   {settingsMutation.isPending ? '...' : t('saveSettings')}
                 </Button>
+
+                <Separator />
+
+                {/* Departments that work different hours override the global schedule here */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    {lang === 'ar' ? 'دوام الأقسام' : 'Department schedules'}
+                  </h3>
+                  <DepartmentSchedules />
+                </div>
               </CardContent>
             </Card>
           )}

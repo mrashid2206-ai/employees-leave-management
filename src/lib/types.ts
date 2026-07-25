@@ -20,6 +20,17 @@ export interface Department {
   id: number
   name: string
   created_at: string
+  // Optional per-department work schedule. NULL means "inherit the global setting".
+  work_start_time?: string | null
+  work_days?: string | null
+  work_hours_per_day?: number | null
+}
+
+export interface DepartmentUpdate {
+  name?: string
+  work_start_time?: string | null
+  work_days?: string | null
+  work_hours_per_day?: number | null
 }
 
 export interface Employee {

@@ -70,12 +70,22 @@ export default function TardinessPage() {
 
   const createMutation = useMutation({
     mutationFn: createBulkTardiness,
-    onSuccess: () => {
+    onSuccess: (records, submitted) => {
       queryClient.invalidateQueries({ queryKey: ['tardiness'] })
+      queryClient.invalidateQueries({ queryKey: ['employees'] }) // lateness costs leave
       setOpen(false)
       setSelectedEmployees([])
       setForm({ date: '', time: defaultArrivalTime, notes: '' })
-      toast.success(t('addedSuccess'))
+      // The server recomputes lateness per employee's own schedule, so some of the
+      // selected people may turn out to have been on time.
+      const skipped = submitted.length - (records?.length ?? 0)
+      if (skipped > 0) {
+        toast.success(lang === 'ar'
+          ? `تم التسجيل — تم تجاهل ${skipped} (لم يتأخروا حسب دوامهم)`
+          : `Recorded — ${skipped} skipped (on time for their own schedule)`)
+      } else {
+        toast.success(t('addedSuccess'))
+      }
     },
     onError: () => toast.error(t('error')),
   })

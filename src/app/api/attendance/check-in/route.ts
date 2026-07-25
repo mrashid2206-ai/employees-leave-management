@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import pool, { omanToday, omanTime } from '@/lib/db'
 import { verifyAnyAuth, unauthorized, forbidden } from '@/lib/api-auth'
 import { ensureAttendanceLocationColumns, ensureFractionalLeaveColumns } from '@/lib/ensure-schema'
-import { isOffDay, computeWorkHours, computeOvertime, evaluateLocation, permissionMinutesFor } from '@/lib/attendance-calc'
+import { isOffDayFor, computeWorkHours, computeOvertime, evaluateLocation, permissionMinutesFor } from '@/lib/attendance-calc'
+import { resolveSchedule } from '@/lib/schedule'
 import { notifyEmployee } from '@/lib/employee-notify'
 import { parseBody } from '@/server/validation'
 import { checkInSchema } from '@/server/schemas'
@@ -40,8 +41,8 @@ export async function POST(request: Request) {
   const today = omanToday()
   const currentTime = omanTime()
 
-  // Check if today is a holiday/weekend
-  const holidayWork = await isOffDay(today)
+  // Holiday, or a non-working day for THIS employee's schedule.
+  const holidayWork = await isOffDayFor(employee_id, today)
 
   if (action === 'check-in') {
     const { rows: existing } = await pool.query(
@@ -152,9 +153,10 @@ export async function POST(request: Request) {
     }
 
     const { rows: settings } = await pool.query(
-      'SELECT work_hours_per_day, deduct_permission_hours FROM settings ORDER BY id LIMIT 1'
+      'SELECT deduct_permission_hours FROM settings ORDER BY id LIMIT 1'
     )
-    const normalHours = settings[0]?.work_hours_per_day || 8
+    // Overtime is measured against the employee's own working-day length.
+    const normalHours = (await resolveSchedule(employee_id)).workHoursPerDay
 
     // Optionally subtract approved mid-day permission time from the paid hours.
     let workHours = rawHours
