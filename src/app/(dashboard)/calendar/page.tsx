@@ -196,7 +196,7 @@ export default function CalendarPage() {
                     <PopoverContent className="w-72 p-0" dir={dir}>
                       <div className="p-3 border-b">
                         <h4 className="font-bold text-sm">
-                          {cell.day} {(lang === 'ar' ? MONTH_NAMES_AR : MONTH_NAMES_EN)[month]} — {cell.employees.length} {lang === 'ar' ? 'موظف' : 'employees'}
+                          {cell.day} {(lang === 'ar' ? MONTH_NAMES_AR : MONTH_NAMES_EN)[month]} — {cell.employees.length} {t('employeeUnit')}
                         </h4>
                       </div>
                       <div className="p-2 space-y-1.5 max-h-60 overflow-y-auto">
@@ -229,11 +229,11 @@ export default function CalendarPage() {
             ))}
             <div className="flex items-center gap-1.5 text-sm">
               <div className="w-3 h-3 rounded-sm bg-rose-500/30" />
-              <span>{lang === 'ar' ? 'عطلة نهاية الأسبوع' : 'Weekend'}</span>
+              <span>{t('weekend')}</span>
             </div>
             <div className="flex items-center gap-1.5 text-sm">
               <div className="w-3 h-3 rounded-sm bg-purple-500/30" />
-              <span>{lang === 'ar' ? 'عطلة رسمية' : 'Holiday'}</span>
+              <span>{t('holiday2')}</span>
             </div>
           </div>
         </CardContent>

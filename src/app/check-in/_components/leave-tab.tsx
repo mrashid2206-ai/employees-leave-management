@@ -103,7 +103,7 @@ export function LeaveTab({ empId, onGoToRequests }: LeaveTabProps) {
           {!!empId && (
             <Card className="border-0 shadow-md bg-primary/5">
               <CardContent className="p-3 flex items-center justify-between">
-                <span className="text-sm">{lang === 'ar' ? 'رصيدك المتبقي' : 'Your Balance'}</span>
+                <span className="text-sm">{t('yourBalance')}</span>
                 <Badge className="bg-primary/10 text-primary border-0 text-sm font-bold">
                   {empInfo?.remaining ?? '...'} {t('days')}
                 </Badge>
@@ -160,7 +160,7 @@ export function LeaveTab({ empId, onGoToRequests }: LeaveTabProps) {
                       onCheckedChange={(checked) => setLeaveForm(f => ({ ...f, is_half_day: !!checked }))}
                     />
                     <Label htmlFor="half-day-emp" className="text-sm">
-                      {lang === 'ar' ? 'نصف يوم' : 'Half Day'}
+                      {t('halfDay')}
                     </Label>
                   </div>
                 )}
@@ -171,7 +171,7 @@ export function LeaveTab({ empId, onGoToRequests }: LeaveTabProps) {
                       {isHalfDay ? 0.5 : (workingDaysInfo ? workingDaysInfo.workingDays : leaveDays)} {t('days')}
                       {workingDaysInfo && workingDaysInfo.workingDays < leaveDays && (
                         <span className="text-xs text-muted-foreground ml-1">
-                          ({lang === 'ar' ? 'أيام عمل فقط' : 'working days only'})
+                          ({t('workingDaysOnly')})
                         </span>
                       )}
                     </span>

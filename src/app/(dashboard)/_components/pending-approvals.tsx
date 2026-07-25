@@ -42,7 +42,7 @@ export function PendingApprovals() {
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
           <Inbox className="h-4 w-4 text-amber-500" />
-          {lang === 'ar' ? 'طلبات بانتظار الموافقة' : 'Requests awaiting approval'}
+          {t('requestsAwaitingApproval')}
           <Badge className="bg-amber-500 text-white border-0">{pending.length}</Badge>
         </CardTitle>
       </CardHeader>
@@ -80,7 +80,7 @@ export function PendingApprovals() {
         ))}
         {pending.length > 5 && (
           <p className="text-xs text-muted-foreground text-center pt-1">
-            +{pending.length - 5} {lang === 'ar' ? 'طلبات أخرى' : 'more'}
+            +{pending.length - 5} {t('more')}
           </p>
         )}
       </CardContent>

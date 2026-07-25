@@ -25,7 +25,7 @@ import { apiErrorPayload, useChangePassword, type EmpUser } from './_hooks/use-p
  */
 export default function EmployeePortalPage() {
   const t = useT()
-  const { lang, dir } = useLanguage()
+  const { dir } = useLanguage()
 
   const [activeTab, setActiveTab] = useState<PortalTab>('attendance')
   const [empUser, setEmpUser] = useState<EmpUser | null>(null)
@@ -79,14 +79,14 @@ export default function EmployeePortalPage() {
   async function handleForcedChange() {
     if (!forcedPw.current_password || !forcedPw.new_password) { toast.error(t('fillRequired')); return }
     if (forcedPw.new_password !== forcedPw.confirm_password) {
-      toast.error(lang === 'ar' ? 'كلمة المرور غير متطابقة' : 'Passwords do not match'); return
+      toast.error(t('passwordsDoNotMatch')); return
     }
     if (forcedPw.new_password.length < 6) {
-      toast.error(lang === 'ar' ? 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' : 'Password must be at least 6 characters'); return
+      toast.error(t('passwordMustBeAtLeast')); return
     }
     try {
       await changePassword.mutateAsync({ current_password: forcedPw.current_password, new_password: forcedPw.new_password })
-      toast.success(lang === 'ar' ? 'تم تغيير كلمة المرور بنجاح' : 'Password changed successfully')
+      toast.success(t('passwordChangedSuccessfully'))
       setForcedPw({ current_password: '', new_password: '', confirm_password: '' })
       // Clear the stale flag so it isn't re-triggered from cache.
       if (empUser) {
@@ -116,31 +116,31 @@ export default function EmployeePortalPage() {
               <div className="mx-auto w-14 h-14 rounded-full bg-amber-500/10 flex items-center justify-center mb-3">
                 <AlertTriangle className="h-7 w-7 text-amber-500" />
               </div>
-              <h2 className="text-lg font-bold">{lang === 'ar' ? 'يجب تغيير كلمة المرور' : 'Password Change Required'}</h2>
+              <h2 className="text-lg font-bold">{t('passwordChangeRequired')}</h2>
               <p className="text-sm text-muted-foreground mt-1">
-                {lang === 'ar' ? 'لحماية حسابك، يرجى تعيين كلمة مرور جديدة قبل المتابعة.' : 'For your security, set a new password before continuing.'}
+                {t('forYourSecuritySetA')}
               </p>
             </div>
             <Input
               type="password"
-              placeholder={lang === 'ar' ? 'كلمة المرور الحالية' : 'Current password'}
+              placeholder={t('currentPassword')}
               value={forcedPw.current_password}
               onChange={e => setForcedPw(f => ({ ...f, current_password: e.target.value }))}
             />
             <Input
               type="password"
-              placeholder={lang === 'ar' ? 'كلمة المرور الجديدة' : 'New password'}
+              placeholder={t('newPassword')}
               value={forcedPw.new_password}
               onChange={e => setForcedPw(f => ({ ...f, new_password: e.target.value }))}
             />
             <Input
               type="password"
-              placeholder={lang === 'ar' ? 'تأكيد كلمة المرور' : 'Confirm password'}
+              placeholder={t('confirmPassword')}
               value={forcedPw.confirm_password}
               onChange={e => setForcedPw(f => ({ ...f, confirm_password: e.target.value }))}
             />
             <Button className="w-full" disabled={changePassword.isPending} onClick={handleForcedChange}>
-              {changePassword.isPending ? '...' : (lang === 'ar' ? 'تغيير كلمة المرور' : 'Change Password')}
+              {changePassword.isPending ? '...' : (t('changePassword'))}
             </Button>
           </CardContent>
         </Card>

@@ -11,7 +11,7 @@ import { LanguageToggle } from '@/components/language-toggle'
 
 export default function EmployeeLoginPage() {
   const t = useT()
-  const { dir, lang } = useLanguage()
+  const { dir } = useLanguage()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -64,7 +64,7 @@ export default function EmployeeLoginPage() {
             <User className="h-8 w-8 text-primary" />
           </div>
           <CardTitle className="text-xl">
-            {lang === 'ar' ? 'بوابة الموظف' : 'Employee Portal'}
+            {t('employeePortal')}
           </CardTitle>
           <p className="text-muted-foreground text-sm mt-1">{t('loginSubtitle')}</p>
         </CardHeader>
@@ -118,7 +118,7 @@ export default function EmployeeLoginPage() {
           {/* Quick links after login */}
           <div className="mt-6 pt-4 border-t">
             <p className="text-xs text-muted-foreground text-center mb-3">
-              {lang === 'ar' ? 'بعد تسجيل الدخول يمكنك:' : 'After login you can:'}
+              {t('afterLoginYouCan')}
             </p>
             <div className="grid grid-cols-2 gap-2">
               <div className="flex items-center gap-2 p-2 rounded-lg bg-accent/30 text-sm">

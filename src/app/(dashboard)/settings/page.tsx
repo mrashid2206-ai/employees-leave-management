@@ -118,7 +118,7 @@ export default function SettingsPage() {
 
   function formatHolidayDate(dateStr: string) {
     try {
-      return new Date(dateStr + 'T00:00:00').toLocaleDateString(lang === 'ar' ? 'ar-OM' : 'en-US', {
+      return new Date(dateStr + 'T00:00:00').toLocaleDateString(t('enUs'), {
         weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
       })
     } catch { return dateStr }
@@ -136,13 +136,13 @@ export default function SettingsPage() {
 
   const sections = [
     { id: 'general', icon: Building2, label: t('generalSettings') },
-    { id: 'schedule', icon: Clock, label: lang === 'ar' ? 'جدول العمل' : 'Work Schedule' },
+    { id: 'schedule', icon: Clock, label: t('workSchedule') },
     { id: 'departments', icon: Users, label: t('departments') },
     { id: 'leaveTypes', icon: Palette, label: t('leaveTypes') },
     { id: 'holidays', icon: Calendar, label: t('holidays') },
-    { id: 'location', icon: Building2, label: lang === 'ar' ? 'موقع المكتب' : 'Office Location' },
+    { id: 'location', icon: Building2, label: t('officeLocation') },
     { id: 'automation', icon: Zap, label: t('automation') },
-    { id: 'admins', icon: Users, label: lang === 'ar' ? 'المدراء' : 'Admin Users' },
+    { id: 'admins', icon: Users, label: t('adminUsers') },
   ]
 
   return (
@@ -210,7 +210,7 @@ export default function SettingsPage() {
                 <div>
                   <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                     <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                    {lang === 'ar' ? 'الإجازات' : 'Leave'}
+                    {t('leave2')}
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-accent/20">
                     <div>
@@ -229,7 +229,7 @@ export default function SettingsPage() {
                       />
                       <div>
                         <Label htmlFor="deduct-permission-hours" className="text-sm">
-                          {lang === 'ar' ? 'خصم وقت أذونات الخروج من ساعات العمل' : 'Subtract permission (exit) time from work hours'}
+                          {t('subtractPermissionExitTimeFrom')}
                         </Label>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {lang === 'ar'
@@ -255,7 +255,7 @@ export default function SettingsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Clock className="h-5 w-5 text-[#1976D2]" />
-                  {lang === 'ar' ? 'جدول العمل' : 'Work Schedule'}
+                  {t('workSchedule')}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -321,7 +321,7 @@ export default function SettingsPage() {
                 <div>
                   <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                     <Users className="h-4 w-4 text-muted-foreground" />
-                    {lang === 'ar' ? 'دوام الأقسام' : 'Department schedules'}
+                    {t('departmentSchedules')}
                   </h3>
                   <DepartmentSchedules />
                 </div>
@@ -358,7 +358,7 @@ export default function SettingsPage() {
                           </div>
                           <div>
                             <p className="font-semibold text-sm">{dept.name}</p>
-                            <p className="text-xs text-muted-foreground">{empCount} {lang === 'ar' ? 'موظف' : 'employees'}</p>
+                            <p className="text-xs text-muted-foreground">{empCount} {t('employeeUnit')}</p>
                           </div>
                         </div>
                         <div className="flex gap-1">
@@ -411,7 +411,7 @@ export default function SettingsPage() {
                           </div>
                           <div>
                             <p className="font-semibold text-sm">{lt.name_ar}</p>
-                            <p className="text-xs text-muted-foreground">{lt.name_en} · {usageCount} {lang === 'ar' ? 'استخدام' : 'uses'}</p>
+                            <p className="text-xs text-muted-foreground">{lt.name_en} · {usageCount} {t('uses')}</p>
                           </div>
                         </div>
                         <div className="flex gap-1">
@@ -472,7 +472,7 @@ export default function SettingsPage() {
                   {/* Summary */}
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Calendar className="h-4 w-4" />
-                    <span>{filteredHolidays.length} {lang === 'ar' ? 'عطلة في' : 'holidays in'} {effectiveYear}</span>
+                    <span>{filteredHolidays.length} {t('holidaysIn')} {effectiveYear}</span>
                   </div>
 
                   {/* Holidays list */}
@@ -501,22 +501,22 @@ export default function SettingsPage() {
                               <p className="font-semibold text-sm">{h.name}</p>
                               <p className="text-xs text-muted-foreground">{formatHolidayDate(h.date)}</p>
                               {fallsOnWeekend && (
-                                <Badge className="bg-amber-500/10 text-amber-500 border-0 text-[10px]">{lang === 'ar' ? 'يصادف عطلة' : 'Falls on weekend'}</Badge>
+                                <Badge className="bg-amber-500/10 text-amber-500 border-0 text-[10px]">{t('fallsOnWeekend')}</Badge>
                               )}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
                             {isToday ? (
                               <Badge className="bg-emerald-500/10 text-emerald-500 border-0 text-[10px]">
-                                {lang === 'ar' ? 'اليوم' : 'Today'}
+                                {t('today')}
                               </Badge>
                             ) : isPast ? (
                               <Badge variant="outline" className="text-[10px] opacity-60">
-                                {lang === 'ar' ? 'انتهت' : 'Past'}
+                                {t('past')}
                               </Badge>
                             ) : (
                               <Badge variant="outline" className={`text-[10px] ${isSoon ? 'border-amber-500/30 text-amber-500' : ''}`}>
-                                {daysLeft} {lang === 'ar' ? 'يوم' : 'days'}
+                                {daysLeft} {t('days')}
                               </Badge>
                             )}
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-[#1976D2]" onClick={() => setEditHoliday({ id: h.id, name: h.name, date: h.date })}>
@@ -542,29 +542,29 @@ export default function SettingsPage() {
           {activeSection === 'location' && (
             <Card className="border-0 shadow-lg">
               <CardHeader>
-                <CardTitle>{lang === 'ar' ? 'إعدادات موقع المكتب' : 'Office Location Settings'}</CardTitle>
+                <CardTitle>{t('officeLocationSettings')}</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  {lang === 'ar' ? 'يستخدم للتحقق من أن الموظف في المكتب عند تسجيل الحضور' : 'Used to verify employee is at the office when checking in'}
+                  {t('usedToVerifyEmployeeIs')}
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>{lang === 'ar' ? 'خط العرض' : 'Latitude'}</Label>
+                    <Label>{t('latitude')}</Label>
                     <Input type="number" step="0.0000001" value={form.office_lat || ''} onChange={e => setForm(f => ({ ...f, office_lat: parseFloat(e.target.value) }))} placeholder="23.5880" />
                   </div>
                   <div>
-                    <Label>{lang === 'ar' ? 'خط الطول' : 'Longitude'}</Label>
+                    <Label>{t('longitude')}</Label>
                     <Input type="number" step="0.0000001" value={form.office_lng || ''} onChange={e => setForm(f => ({ ...f, office_lng: parseFloat(e.target.value) }))} placeholder="58.3829" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>{lang === 'ar' ? 'النطاق (متر)' : 'Radius (meters)'}</Label>
+                    <Label>{t('radiusMeters')}</Label>
                     <Input type="number" min="0" value={form.office_radius || 200} onChange={e => setForm(f => ({ ...f, office_radius: parseInt(e.target.value) }))} />
                   </div>
                   <div>
-                    <Label>{lang === 'ar' ? 'عنوان IP المكتب' : 'Office IP Address'}</Label>
+                    <Label>{t('officeIpAddress')}</Label>
                     <Input value={form.office_ip || ''} onChange={e => setForm(f => ({ ...f, office_ip: e.target.value }))} placeholder="203.0.113.1" />
                   </div>
                 </div>
@@ -576,10 +576,10 @@ export default function SettingsPage() {
                   />
                   <div>
                     <Label htmlFor="block-offsite" className="text-sm font-medium cursor-pointer">
-                      {lang === 'ar' ? 'منع تسجيل الحضور من خارج المكتب' : 'Block check-in from outside office'}
+                      {t('blockCheckInFromOutside')}
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      {lang === 'ar' ? 'إذا مفعّل، لن يتمكن الموظف من تسجيل الحضور إلا من موقع المكتب' : 'If enabled, employees can only check in from the office location'}
+                      {t('ifEnabledEmployeesCanOnly')}
                     </p>
                   </div>
                 </div>
@@ -629,7 +629,7 @@ export default function SettingsPage() {
                         <p className="text-xl font-bold text-rose-500">{processResult.absentMarked}</p>
                       </div>
                       <div className="p-3 rounded-xl bg-amber-500/10 text-center">
-                        <p className="text-xs text-muted-foreground">{lang === 'ar' ? 'إجازة مخصومة' : 'Leave deducted'}</p>
+                        <p className="text-xs text-muted-foreground">{t('leaveDeducted')}</p>
                         <p className="text-xl font-bold text-amber-500">{processResult.leaveDeducted || 0}</p>
                       </div>
                       <div className="p-3 rounded-xl bg-blue-500/10 text-center">
@@ -673,11 +673,11 @@ export default function SettingsPage() {
                   {processResult && processResult.employeesReset !== undefined && (
                     <div className="mt-4 grid grid-cols-3 gap-3">
                       <div className="p-3 rounded-xl bg-accent/30 text-center">
-                        <p className="text-xs text-muted-foreground">{lang === 'ar' ? 'تم التعيين' : 'Reset'}</p>
+                        <p className="text-xs text-muted-foreground">{t('reset')}</p>
                         <p className="text-xl font-bold">{processResult.employeesReset}</p>
                       </div>
                       <div className="p-3 rounded-xl bg-accent/30 text-center">
-                        <p className="text-xs text-muted-foreground">{lang === 'ar' ? 'الرصيد' : 'Balance'}</p>
+                        <p className="text-xs text-muted-foreground">{t('balance')}</p>
                         <p className="text-xl font-bold">{processResult.newBalance}</p>
                       </div>
                       <div className="p-3 rounded-xl bg-accent/30 text-center">
@@ -735,7 +735,7 @@ export default function SettingsPage() {
       {editHoliday && (
         <Dialog open={!!editHoliday} onOpenChange={() => setEditHoliday(null)}>
           <DialogContent className="max-w-sm" dir={dir}>
-            <DialogHeader><DialogTitle>{lang === 'ar' ? 'تعديل العطلة' : 'Edit Holiday'}</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{t('editHoliday')}</DialogTitle></DialogHeader>
             <div className="space-y-3">
               <div><Label>{t('holidayName')}</Label><Input value={editHoliday.name} onChange={e => setEditHoliday(d => d ? { ...d, name: e.target.value } : null)} /></div>
               <div><Label>{t('date')}</Label><Input type="date" value={editHoliday.date} onChange={e => setEditHoliday(d => d ? { ...d, date: e.target.value } : null)} /></div>
@@ -759,6 +759,7 @@ export default function SettingsPage() {
 }
 
 function AdminUsersSection({ lang }: { lang: string }) {
+  const t = useT()
   const [admins, setAdmins] = useState<AdminUser[]>([])
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ username: '', password: '', name: '' })
@@ -770,7 +771,7 @@ function AdminUsersSection({ lang }: { lang: string }) {
 
   async function handleAdd() {
     if (!form.username || !form.password || !form.name) {
-      toast.error(lang === 'ar' ? 'جميع الحقول مطلوبة' : 'All fields required')
+      toast.error(t('allFieldsRequired'))
       return
     }
     setLoading(true)
@@ -785,7 +786,7 @@ function AdminUsersSection({ lang }: { lang: string }) {
       setAdmins(prev => [...prev, data])
       setForm({ username: '', password: '', name: '' })
       setShowAdd(false)
-      toast.success(lang === 'ar' ? 'تم إضافة المدير' : 'Admin added')
+      toast.success(t('adminAdded'))
     } catch { toast.error('Error') }
     setLoading(false)
   }
@@ -795,10 +796,10 @@ function AdminUsersSection({ lang }: { lang: string }) {
       <Card className="border-0 shadow-lg">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>{lang === 'ar' ? 'إدارة المدراء' : 'Admin User Management'}</CardTitle>
+            <CardTitle>{t('adminUserManagement')}</CardTitle>
             <Button size="sm" onClick={() => setShowAdd(!showAdd)}>
               <Plus className="h-4 w-4 ml-1" />
-              {lang === 'ar' ? 'إضافة مدير' : 'Add Admin'}
+              {t('addAdmin')}
             </Button>
           </div>
         </CardHeader>
@@ -807,35 +808,35 @@ function AdminUsersSection({ lang }: { lang: string }) {
             <div className="p-4 rounded-xl bg-accent/30 space-y-3">
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <Label>{lang === 'ar' ? 'اسم المستخدم' : 'Username'}</Label>
+                  <Label>{t('username')}</Label>
                   <Input value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} placeholder="admin2" />
                 </div>
                 <div>
-                  <Label>{lang === 'ar' ? 'الاسم' : 'Name'}</Label>
+                  <Label>{t('name')}</Label>
                   <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Manager Name" />
                 </div>
                 <div>
-                  <Label>{lang === 'ar' ? 'كلمة المرور' : 'Password'}</Label>
+                  <Label>{t('password')}</Label>
                   <Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" onClick={handleAdd} disabled={loading}>{loading ? '...' : (lang === 'ar' ? 'إضافة' : 'Add')}</Button>
-                <Button size="sm" variant="outline" onClick={() => setShowAdd(false)}>{lang === 'ar' ? 'إلغاء' : 'Cancel'}</Button>
+                <Button size="sm" onClick={handleAdd} disabled={loading}>{loading ? '...' : (t('add'))}</Button>
+                <Button size="sm" variant="outline" onClick={() => setShowAdd(false)}>{t('cancel')}</Button>
               </div>
             </div>
           )}
 
           <div className="space-y-2">
             <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10">
-              <Badge className="bg-amber-500/20 text-amber-500 border-0">{lang === 'ar' ? 'افتراضي' : 'Default'}</Badge>
+              <Badge className="bg-amber-500/20 text-amber-500 border-0">{t('default')}</Badge>
               <span className="text-sm font-medium">admin</span>
-              <span className="text-xs text-muted-foreground">({lang === 'ar' ? 'مدمج في النظام' : 'Built-in'})</span>
+              <span className="text-xs text-muted-foreground">({t('builtIn')})</span>
             </div>
             {admins.map(a => (
               <div key={a.id} className="flex items-center justify-between p-3 rounded-lg bg-accent/20">
                 <div className="flex items-center gap-2">
-                  <Badge className="bg-blue-500/20 text-blue-500 border-0">{lang === 'ar' ? 'مدير' : 'Admin'}</Badge>
+                  <Badge className="bg-blue-500/20 text-blue-500 border-0">{t('admin')}</Badge>
                   <span className="text-sm font-medium">{a.name}</span>
                   <span className="text-xs text-muted-foreground">@{a.username}</span>
                 </div>
@@ -849,7 +850,7 @@ function AdminUsersSection({ lang }: { lang: string }) {
                       const res = await fetch(`/api/admin-users/${a.id}`, { method: 'DELETE' })
                       if (res.ok) {
                         setAdmins(prev => prev.filter(x => x.id !== a.id))
-                        toast.success(lang === 'ar' ? 'تم الحذف' : 'Deleted')
+                        toast.success(t('deleted'))
                       } else {
                         toast.error('Error')
                       }

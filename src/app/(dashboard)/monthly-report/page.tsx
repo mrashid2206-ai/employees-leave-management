@@ -126,22 +126,22 @@ export default function MonthlyReportPage() {
       const base: Record<string, string | number> = {
         [t('name')]: r.name,
         [t('department')]: r.department,
-        [lang === 'ar' ? 'أيام العمل' : 'Days Worked']: r.daysWorked,
-        [lang === 'ar' ? 'أيام الغياب' : 'Absent Days']: r.absentDays,
+        [t('daysWorked')]: r.daysWorked,
+        [t('absentDays2')]: r.absentDays,
         [t('workHours')]: r.workHours,
         [t('overtime')]: r.overtime,
-        [lang === 'ar' ? 'أيام الإجازة' : 'Leave Days']: r.leaveDays,
+        [t('leaveDays')]: r.leaveDays,
       }
       for (const lt of dedupedTypes) {
         base[lang === 'ar' ? lt.name_ar : lt.name_en] = r.byType[lt.name_en] || 0
       }
       base[t('lateCount')] = r.lateCount
-      base[lang === 'ar' ? 'دقائق التأخير' : 'Late Minutes'] = r.lateMinutes
-      base[lang === 'ar' ? 'خصم الإجازة (تأخير)' : 'Leave Deducted (lateness)'] = r.leaveDeducted
+      base[t('lateMinutes')] = r.lateMinutes
+      base[t('leaveDeductedLateness')] = r.leaveDeducted
       base[t('remaining')] = r.balance
       return base
     })
-    exportToExcel(data, `monthly-report-${monthKey}`, lang === 'ar' ? 'التقرير الشهري' : 'Monthly Report')
+    exportToExcel(data, `monthly-report-${monthKey}`, t('monthlyReport'))
   }
 
   const totals = {
@@ -200,16 +200,16 @@ export default function MonthlyReportPage() {
                 <TableRow>
                   <TableHead className="text-start">{t('name')}</TableHead>
                   <TableHead className="text-center">{t('department')}</TableHead>
-                  <TableHead className="text-center">{lang === 'ar' ? 'أيام العمل' : 'Worked'}</TableHead>
+                  <TableHead className="text-center">{t('worked')}</TableHead>
                   <TableHead className="text-center">{t('absent')}</TableHead>
                   <TableHead className="text-center">{t('workHours')}</TableHead>
                   <TableHead className="text-center">{t('overtime')}</TableHead>
-                  <TableHead className="text-center">{lang === 'ar' ? 'إجازة' : 'Leave'}</TableHead>
+                  <TableHead className="text-center">{t('leave')}</TableHead>
                   {dedupedTypes.map(lt => (
                     <TableHead key={lt.id} className="text-center">{lang === 'ar' ? lt.name_ar : lt.name_en}</TableHead>
                   ))}
                   <TableHead className="text-center">{t('tardinessHHMM')}</TableHead>
-                  <TableHead className="text-center">{lang === 'ar' ? 'خصم' : 'Deducted'}</TableHead>
+                  <TableHead className="text-center">{t('deducted')}</TableHead>
                   <TableHead className="text-center">{t('remaining')}</TableHead>
                 </TableRow>
               </TableHeader>

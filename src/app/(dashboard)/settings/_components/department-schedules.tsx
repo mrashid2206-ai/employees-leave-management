@@ -70,7 +70,7 @@ export function DepartmentSchedules() {
               <p className="font-semibold text-sm">{dept.name}</p>
               {!dept.work_start_time && !dept.work_days && !dept.work_hours_per_day && (
                 <Badge variant="outline" className="text-[10px]">
-                  {lang === 'ar' ? 'يتبع الدوام العام' : 'inherits global'}
+                  {t('inheritsGlobal')}
                 </Badge>
               )}
             </div>
@@ -125,7 +125,7 @@ export function DepartmentSchedules() {
                     className="px-2.5 py-1 rounded-lg text-xs text-muted-foreground underline"
                     onClick={() => setDraft(dept.id, 'work_days', null)}
                   >
-                    {lang === 'ar' ? 'إعادة للعام' : 'inherit'}
+                    {t('inherit')}
                   </button>
                 )}
               </div>

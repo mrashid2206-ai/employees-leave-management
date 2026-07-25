@@ -231,14 +231,14 @@ export default function AttendancePage() {
 
   function handleExportAttendance() {
     const data = monthlyStats.map(emp => ({
-      [lang === 'ar' ? 'الاسم' : 'Name']: emp.name,
-      [lang === 'ar' ? 'حاضر' : 'Present Days']: emp.presentDays,
-      [lang === 'ar' ? 'غائب' : 'Absent Days']: emp.absentDays,
-      [lang === 'ar' ? 'عمل عطلة' : 'Holiday Work']: emp.holidayDays,
-      [lang === 'ar' ? 'ساعات العمل' : 'Work Hours']: emp.totalWorkHours,
-      [lang === 'ar' ? 'ساعات إضافية' : 'Overtime Hours']: emp.totalOvertime,
+      [t('name')]: emp.name,
+      [t('presentDays')]: emp.presentDays,
+      [t('absentDays')]: emp.absentDays,
+      [t('holidayWork')]: emp.holidayDays,
+      [t('workHours')]: emp.totalWorkHours,
+      [t('overtimeHours')]: emp.totalOvertime,
     }))
-    exportToExcel(data, `attendance-${selectedMonth}`, lang === 'ar' ? 'الحضور' : 'Attendance')
+    exportToExcel(data, `attendance-${selectedMonth}`, t('attendance2'))
   }
 
   // Grid cells
@@ -249,7 +249,7 @@ export default function AttendancePage() {
   // Day detail records
   const dayDetailRecords = selectedDay ? records.filter(r => r.date === selectedDay) : []
 
-  const monthLabel = currentDate.toLocaleDateString(lang === 'ar' ? 'ar-OM' : 'en-US', { year: 'numeric', month: 'long' })
+  const monthLabel = currentDate.toLocaleDateString(t('enUs'), { year: 'numeric', month: 'long' })
 
   // KPIs for the month
   const totalPresent = Object.values(calendarData).reduce((s, d) => s + d.present, 0)
@@ -277,7 +277,7 @@ export default function AttendancePage() {
           </Select>
           <Button variant="outline" size="sm" onClick={() => { setSelectedDay(new Date().toISOString().split('T')[0]); setDialogOpen(true); setEditRecord(null) }}>
             <Plus className="h-4 w-4 mr-1.5" />
-            {lang === 'ar' ? 'تسجيل يدوي' : 'Manual Record'}
+            {t('manualRecord')}
           </Button>
           <Button variant="outline" size="sm" onClick={handleExportAttendance}>
             <Download className="h-4 w-4 mr-1.5" />
@@ -328,7 +328,7 @@ export default function AttendancePage() {
 
       <Tabs defaultValue="calendar" dir={dir}>
         <TabsList>
-          <TabsTrigger value="calendar">{lang === 'ar' ? 'التقويم' : 'Calendar'}</TabsTrigger>
+          <TabsTrigger value="calendar">{t('calendar2')}</TabsTrigger>
           <TabsTrigger value="sheet">{t('monthlySheet')}</TabsTrigger>
         </TabsList>
 
@@ -384,7 +384,7 @@ export default function AttendancePage() {
                         <span className={`text-sm font-semibold ${todayMark ? 'text-[#1976D2]' : weekend ? 'text-rose-400' : ''}`}>
                           {day}
                         </span>
-                        {weekend && <span className="text-[8px] text-rose-400 font-medium">{lang === 'ar' ? 'عطلة' : 'OFF'}</span>}
+                        {weekend && <span className="text-[8px] text-rose-400 font-medium">{t('off')}</span>}
                       </div>
                       {hasRecords && (
                         <div className="space-y-0.5">
@@ -419,7 +419,7 @@ export default function AttendancePage() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-2.5 h-2.5 rounded-full bg-rose-500/30" />
-                  <span className="text-muted-foreground">{lang === 'ar' ? 'عطلة نهاية الأسبوع' : 'Weekend'}</span>
+                  <span className="text-muted-foreground">{t('weekend')}</span>
                 </div>
               </div>
             </CardContent>
@@ -437,7 +437,7 @@ export default function AttendancePage() {
                       <TableHead className="text-start">{t('name')}</TableHead>
                       <TableHead className="text-center">{t('present')}</TableHead>
                       <TableHead className="text-center">{t('absent')}</TableHead>
-                      <TableHead className="text-center">{lang === 'ar' ? 'عمل عطلة' : 'Holiday'}</TableHead>
+                      <TableHead className="text-center">{t('holiday')}</TableHead>
                       <TableHead className="text-center">{t('workHours')}</TableHead>
                       <TableHead className="text-center">{t('overtime')}</TableHead>
                     </TableRow>
@@ -487,7 +487,7 @@ export default function AttendancePage() {
           <DialogHeader>
             <DialogTitle>
               {editRecord
-                ? `${lang === 'ar' ? 'تعديل حضور' : 'Edit Attendance'} — ${editRecord.employee?.name}`
+                ? `${t('editAttendance')} — ${editRecord.employee?.name}`
                 : `${t('recordAttendance')} — ${selectedDay}`
               }
             </DialogTitle>
@@ -501,7 +501,7 @@ export default function AttendancePage() {
             {/* Status selector (edit only) — lets an admin flip a wrongly-marked absence */}
             {editRecord && (
               <div>
-                <Label>{lang === 'ar' ? 'الحالة' : 'Status'}</Label>
+                <Label>{t('status')}</Label>
                 <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v ?? 'present' }))}>
                   <SelectTrigger>
                     <SelectValue />
@@ -548,7 +548,7 @@ export default function AttendancePage() {
                 {/* Existing records for this day */}
                 {dayDetailRecords.length > 0 && (
                   <div>
-                    <p className="text-sm font-medium mb-2">{lang === 'ar' ? 'السجلات الحالية' : 'Existing records'}:</p>
+                    <p className="text-sm font-medium mb-2">{t('existingRecords')}:</p>
                     <div className="border rounded-lg p-2 max-h-32 overflow-y-auto space-y-1">
                       {dayDetailRecords.map(rec => (
                         <div key={rec.id} className="flex items-center justify-between text-sm p-1">
@@ -564,9 +564,9 @@ export default function AttendancePage() {
 
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <Label>{lang === 'ar' ? 'اختر الموظفين' : 'Select employees'}</Label>
+                    <Label>{t('selectEmployees')}</Label>
                     <Button variant="ghost" size="sm" className="text-xs h-6" onClick={selectAllEmployees}>
-                      {selectedEmployees.length === filteredEmployees.length ? (lang === 'ar' ? 'إلغاء الكل' : 'Deselect all') : (lang === 'ar' ? 'تحديد الكل' : 'Select all')}
+                      {selectedEmployees.length === filteredEmployees.length ? (t('deselectAll')) : (t('selectAll'))}
                     </Button>
                   </div>
                   <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-1.5">
@@ -580,13 +580,13 @@ export default function AttendancePage() {
                             disabled={hasRecord}
                           />
                           <span className="text-sm flex-1">{emp.name}</span>
-                          {hasRecord && <Badge variant="outline" className="text-[10px] h-5">{lang === 'ar' ? 'مسجل' : 'recorded'}</Badge>}
+                          {hasRecord && <Badge variant="outline" className="text-[10px] h-5">{t('recorded')}</Badge>}
                         </label>
                       )
                     })}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {selectedEmployees.length} {lang === 'ar' ? 'محدد' : 'selected'}
+                    {selectedEmployees.length} {t('selected')}
                   </p>
                 </div>
               </>
@@ -605,7 +605,7 @@ export default function AttendancePage() {
         <DialogContent className="max-w-md max-h-[85vh] flex flex-col" dir={dir}>
           <DialogHeader>
             <DialogTitle>
-              {selectedDay} — {dayDetailRecords.length} {lang === 'ar' ? 'سجل' : 'records'}
+              {selectedDay} — {dayDetailRecords.length} {t('records')}
             </DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto space-y-2">
@@ -616,10 +616,10 @@ export default function AttendancePage() {
               if (conflicts.length === 0) return null
               return (
                 <div className="p-3 rounded-lg bg-amber-500/10 text-amber-600 text-xs">
-                  <p className="font-semibold mb-1">⚠️ {lang === 'ar' ? 'تعارض: حضور وإجازة في نفس اليوم' : 'Conflict: Attendance + Leave on same day'}</p>
+                  <p className="font-semibold mb-1">⚠️ {t('conflictAttendanceLeaveOnSame')}</p>
                   {conflicts.map(rec => {
                     const leave = dayLeaves.find(l => l.employee_id === rec.employee_id)
-                    return <p key={rec.id}>{rec.employee?.name} — {lang === 'ar' ? 'لديه إجازة معتمدة' : 'has approved leave'} ({leave?.leave_type?.name_en})</p>
+                    return <p key={rec.id}>{rec.employee?.name} — {t('hasApprovedLeave')} ({leave?.leave_type?.name_en})</p>
                   })}
                 </div>
               )
@@ -637,7 +637,7 @@ export default function AttendancePage() {
                         <p className="text-sm font-medium truncate">{rec.employee?.name}</p>
                         {rec.is_holiday_work && <Badge className="bg-purple-500/10 text-purple-500 border-0 text-[9px] h-4 shrink-0">⭐</Badge>}
                         {rec.excused_tardiness && <Badge className="bg-blue-500/10 text-blue-500 border-0 text-[9px] h-4 shrink-0">{t('excused')}</Badge>}
-                        {rec.is_offsite && <Badge className="bg-amber-500/10 text-amber-500 border-0 text-[9px] h-4 shrink-0">{lang === 'ar' ? 'خارج المكتب' : 'Off-site'}</Badge>}
+                        {rec.is_offsite && <Badge className="bg-amber-500/10 text-amber-500 border-0 text-[9px] h-4 shrink-0">{t('offSite')}</Badge>}
                       </div>
                       <p className="text-xs text-muted-foreground font-mono">
                         {rec.check_in ? `${rec.check_in?.slice(0, 5)} → ${rec.check_out?.slice(0, 5) || '...'}` : t('absent')}

@@ -47,7 +47,7 @@ export default function EmployeesPage() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const t = useT()
-  const { dir, lang } = useLanguage()
+  const { dir } = useLanguage()
   const [search, setSearch] = useState('')
   const [deptFilter, setDeptFilter] = useState<string>('all')
   const [sortField, setSortField] = useState<SortField>('name')
@@ -155,7 +155,7 @@ export default function EmployeesPage() {
     // Bound the parser's exposure (xlsx@0.18.5 has unpatched ReDoS/proto-pollution advisories).
     const MAX_IMPORT_BYTES = 2 * 1024 * 1024 // 2 MB
     if (file.size > MAX_IMPORT_BYTES) {
-      toast.error(lang === 'ar' ? 'الملف كبير جداً (الحد 2 ميجابايت)' : 'File too large (max 2 MB)')
+      toast.error(t('fileTooLargeMax2'))
       e.target.value = ''
       return
     }
@@ -322,7 +322,7 @@ export default function EmployeesPage() {
                 />
               </div>
               <div>
-                <Label>{lang === 'ar' ? 'البريد الإلكتروني' : 'Email'}</Label>
+                <Label>{t('email')}</Label>
                 <Input
                   type="email"
                   value={newEmp.email}
@@ -330,21 +330,21 @@ export default function EmployeesPage() {
                 />
               </div>
               <div>
-                <Label>{lang === 'ar' ? 'الهاتف' : 'Phone'}</Label>
+                <Label>{t('phone')}</Label>
                 <Input
                   value={newEmp.phone}
                   onChange={e => setNewEmp(f => ({ ...f, phone: e.target.value }))}
                 />
               </div>
               <div>
-                <Label>{lang === 'ar' ? 'المنصب' : 'Position'}</Label>
+                <Label>{t('position')}</Label>
                 <Input
                   value={newEmp.position}
                   onChange={e => setNewEmp(f => ({ ...f, position: e.target.value }))}
                 />
               </div>
               <div>
-                <Label>{lang === 'ar' ? 'تاريخ الالتحاق' : 'Join Date'}</Label>
+                <Label>{t('joinDate')}</Label>
                 <Input
                   type="date"
                   value={newEmp.join_date}
@@ -422,7 +422,7 @@ export default function EmployeesPage() {
                       {emp.name}
                       {!emp.is_active && (
                         <Badge variant="outline" className="ms-2 text-[10px] bg-muted text-muted-foreground border-muted-foreground/30">
-                          {lang === 'ar' ? 'غير نشط' : 'Inactive'}
+                          {t('inactive')}
                         </Badge>
                       )}
                     </TableCell>
@@ -442,7 +442,7 @@ export default function EmployeesPage() {
                     <TableCell className="text-center">
                       {!emp.is_active ? (
                         <Badge variant="outline" className="bg-muted text-muted-foreground border-muted-foreground/30">
-                          {lang === 'ar' ? 'غير نشط' : 'Inactive'}
+                          {t('inactive')}
                         </Badge>
                       ) : emp.isOnLeave ? (
                         <Badge variant="outline" className="bg-[#FF9800]/10 text-[#FF9800] border-[#FF9800]/30">
@@ -460,7 +460,7 @@ export default function EmployeesPage() {
                           variant="ghost"
                           size="icon"
                           className={`h-7 w-7 ${emp.is_active ? 'text-emerald-500 hover:bg-emerald-500/10' : 'text-muted-foreground hover:bg-muted'}`}
-                          title={emp.is_active ? (lang === 'ar' ? 'تعطيل' : 'Deactivate') : (lang === 'ar' ? 'تفعيل' : 'Activate')}
+                          title={emp.is_active ? (t('deactivate')) : (t('activate'))}
                           onClick={() => toggleActiveMutation.mutate({ id: emp.id, is_active: !emp.is_active })}
                         >
                           <Power className="h-3.5 w-3.5" />
@@ -525,7 +525,7 @@ export default function EmployeesPage() {
               />
             </div>
             <div>
-              <Label>{lang === 'ar' ? 'البريد الإلكتروني' : 'Email'}</Label>
+              <Label>{t('email')}</Label>
               <Input
                 type="email"
                 value={editEmp.email}
@@ -533,21 +533,21 @@ export default function EmployeesPage() {
               />
             </div>
             <div>
-              <Label>{lang === 'ar' ? 'الهاتف' : 'Phone'}</Label>
+              <Label>{t('phone')}</Label>
               <Input
                 value={editEmp.phone}
                 onChange={e => setEditEmp(f => ({ ...f, phone: e.target.value }))}
               />
             </div>
             <div>
-              <Label>{lang === 'ar' ? 'المنصب' : 'Position'}</Label>
+              <Label>{t('position')}</Label>
               <Input
                 value={editEmp.position}
                 onChange={e => setEditEmp(f => ({ ...f, position: e.target.value }))}
               />
             </div>
             <div>
-              <Label>{lang === 'ar' ? 'تاريخ الالتحاق' : 'Join Date'}</Label>
+              <Label>{t('joinDate')}</Label>
               <Input
                 type="date"
                 value={editEmp.join_date}

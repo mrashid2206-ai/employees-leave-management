@@ -87,8 +87,8 @@ export function AttendanceTab({ empId }: AttendanceTabProps) {
 
   const loading = busy || checkAction.isPending
 
-  const currentTime = new Date().toLocaleTimeString(lang === 'ar' ? 'ar-OM' : 'en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
-  const currentDate = new Date().toLocaleDateString(lang === 'ar' ? 'ar-OM' : 'en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  const currentTime = new Date().toLocaleTimeString(t('enUs'), { hour: '2-digit', minute: '2-digit', hour12: true })
+  const currentDate = new Date().toLocaleDateString(t('enUs'), { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 
   async function handleCheckAction(action: 'check-in' | 'check-out') {
     if (!empId) return
@@ -134,14 +134,14 @@ export function AttendanceTab({ empId }: AttendanceTabProps) {
     const time = `${twoDigits(now.getHours())}:${twoDigits(now.getMinutes())}:00`
     try {
       await markReturn.mutateAsync({ id: activePermission.id, return_time: time })
-      toast.success(lang === 'ar' ? 'تم تسجيل العودة' : 'Return logged')
+      toast.success(t('returnLogged'))
     } catch { toast.error(t('error')) }
   }
 
   async function handleRequestPermission() {
     if (!empId) return
     if (!permissionReason.trim()) {
-      toast.error(lang === 'ar' ? 'يرجى إدخال السبب' : 'Please enter a reason')
+      toast.error(t('pleaseEnterAReason'))
       return
     }
     const now = new Date()
@@ -149,7 +149,7 @@ export function AttendanceTab({ empId }: AttendanceTabProps) {
     const date = `${now.getFullYear()}-${twoDigits(now.getMonth() + 1)}-${twoDigits(now.getDate())}`
     try {
       await requestPermission.mutateAsync({ date, leave_time: time, reason: permissionReason })
-      toast.success(lang === 'ar' ? 'تم تقديم الطلب — انتظر موافقة المدير' : 'Request submitted — waiting for admin approval')
+      toast.success(t('requestSubmittedWaitingForAdmin'))
       setShowPermission(false)
       setPermissionReason('')
     } catch { toast.error(t('error')) }
@@ -171,7 +171,7 @@ export function AttendanceTab({ empId }: AttendanceTabProps) {
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('todayStatus')}</p>
               {todayStatus.is_holiday_work && (
                 <Badge className="bg-purple-500/10 text-purple-500 border-0 text-[10px]">
-                  ⭐ {lang === 'ar' ? 'عمل في يوم عطلة' : 'Holiday Work'}
+                  ⭐ {t('holidayWork2')}
                 </Badge>
               )}
             </div>
@@ -185,7 +185,7 @@ export function AttendanceTab({ empId }: AttendanceTabProps) {
                 <p className="text-sm font-bold text-amber-500 font-mono">{todayStatus.check_out?.slice(0, 5) || '--:--'}</p>
               </div>
               <div className={`p-2 rounded-lg ${todayStatus.is_holiday_work ? 'bg-purple-500/10' : 'bg-blue-500/10'}`}>
-                <p className="text-[10px] text-muted-foreground">{todayStatus.is_holiday_work ? (lang === 'ar' ? 'إضافي' : 'OT') : t('workHours')}</p>
+                <p className="text-[10px] text-muted-foreground">{todayStatus.is_holiday_work ? (t('ot')) : t('workHours')}</p>
                 <p className={`text-sm font-bold font-mono ${todayStatus.is_holiday_work ? 'text-purple-500' : 'text-blue-500'}`}>{formatHours(todayStatus.work_hours)}</p>
               </div>
             </div>
@@ -222,15 +222,15 @@ export function AttendanceTab({ empId }: AttendanceTabProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold text-amber-500">
-                  {lang === 'ar' ? '🎫 إذن خروج نشط' : '🎫 Active Permission'}
+                  {t('activePermission')}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {lang === 'ar' ? 'غادرت الساعة' : 'Left at'} {activePermission.leave_time?.slice(0, 5)}
+                  {t('leftAt2')} {activePermission.leave_time?.slice(0, 5)}
                   {activePermission.reason && ` — ${activePermission.reason}`}
                 </p>
               </div>
               <Badge className={activePermission.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500 border-0' : 'bg-amber-500/10 text-amber-500 border-0'}>
-                {activePermission.status === 'approved' ? (lang === 'ar' ? 'موافق' : 'Approved') : (lang === 'ar' ? 'معلق' : 'Pending')}
+                {activePermission.status === 'approved' ? (t('approved2')) : (t('pending3'))}
               </Badge>
             </div>
             {activePermission.status === 'approved' && !activePermission.return_time && (
@@ -239,7 +239,7 @@ export function AttendanceTab({ empId }: AttendanceTabProps) {
                 disabled={markReturn.isPending}
                 onClick={handleMarkReturn}
               >
-                {lang === 'ar' ? '✅ أنا عدت' : '✅ I\'m Back'}
+                {t('iMBack')}
               </Button>
             )}
           </CardContent>
@@ -254,17 +254,17 @@ export function AttendanceTab({ empId }: AttendanceTabProps) {
             className="w-full"
             onClick={() => setShowPermission(!showPermission)}
           >
-            {lang === 'ar' ? '🎫 طلب إذن خروج مؤقت' : '🎫 Request Permission to Leave'}
+            {t('requestPermissionToLeave')}
           </Button>
 
           {showPermission && (
             <Card className="border-0 shadow-md">
               <CardContent className="p-4 space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  {lang === 'ar' ? 'طلب إذن للخروج مؤقتاً والعودة لاحقاً' : 'Request permission to leave temporarily and return later'}
+                  {t('requestPermissionToLeaveTemporarily')}
                 </p>
                 <Textarea
-                  placeholder={lang === 'ar' ? 'سبب الخروج (مثل: موعد بنك، مراجعة مستشفى)' : 'Reason (e.g., bank appointment, hospital visit)'}
+                  placeholder={t('reasonEGBankAppointment')}
                   value={permissionReason}
                   onChange={e => setPermissionReason(e.target.value)}
                   rows={2}
@@ -274,7 +274,7 @@ export function AttendanceTab({ empId }: AttendanceTabProps) {
                   disabled={requestPermission.isPending}
                   onClick={handleRequestPermission}
                 >
-                  {requestPermission.isPending ? '...' : (lang === 'ar' ? 'تقديم الطلب' : 'Submit Request')}
+                  {requestPermission.isPending ? '...' : (t('submitRequest'))}
                 </Button>
               </CardContent>
             </Card>

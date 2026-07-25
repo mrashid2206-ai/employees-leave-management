@@ -187,13 +187,13 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold">{t('dashboard')}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {new Date().toLocaleDateString(lang === 'ar' ? 'ar-OM' : 'en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            {new Date().toLocaleDateString(t('enUs'), { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </p>
         </div>
         {pendingLeaves.length > 0 && (
           <Button variant="outline" className="gap-2 border-amber-500/30 text-amber-500 hover:bg-amber-500/10" onClick={() => router.push('/leaves')}>
             <AlertTriangle className="h-4 w-4" />
-            {pendingLeaves.length} {lang === 'ar' ? 'طلب معلق' : 'pending'}
+            {pendingLeaves.length} {t('pending2')}
           </Button>
         )}
       </div>
@@ -208,7 +208,7 @@ export default function DashboardPage() {
             title: t('totalEmployees'), value: activeEmployees.length,
             icon: Users, gradient: 'from-blue-500/20 to-blue-600/5',
             iconBg: 'bg-blue-500/15', iconColor: 'text-blue-500', valueColor: 'text-blue-500',
-            sub: `${departments.length} ${lang === 'ar' ? 'أقسام' : 'depts'}`,
+            sub: `${departments.length} ${t('depts')}`,
           },
           {
             title: t('onLeaveToday'), value: onLeaveToday.length,
@@ -226,7 +226,7 @@ export default function DashboardPage() {
             title: t('monthTardiness'), value: formatMinutesToHHMM(totalTardMinutes),
             icon: Clock, gradient: 'from-rose-500/20 to-rose-600/5',
             iconBg: 'bg-rose-500/15', iconColor: 'text-rose-500', valueColor: 'text-rose-500',
-            sub: `${monthTardiness.length} ${lang === 'ar' ? 'سجل' : 'records'}`,
+            sub: `${monthTardiness.length} ${t('records')}`,
           },
         ].map((kpi) => {
           const Icon = kpi.icon
@@ -261,11 +261,11 @@ export default function DashboardPage() {
                 <Clock className="h-5 w-5 text-amber-500" />
               </div>
               <div>
-                <p className="text-sm font-semibold">{pendingPermissions} {lang === 'ar' ? 'طلب إذن معلق' : 'Pending Permission Requests'}</p>
-                <p className="text-xs text-muted-foreground">{lang === 'ar' ? 'بحاجة لموافقتك' : 'Needs your approval'}</p>
+                <p className="text-sm font-semibold">{pendingPermissions} {t('pendingPermissionRequests')}</p>
+                <p className="text-xs text-muted-foreground">{t('needsYourApproval')}</p>
               </div>
             </div>
-            <a href="/permissions" className="text-sm text-primary hover:underline">{lang === 'ar' ? 'عرض' : 'View'}</a>
+            <a href="/permissions" className="text-sm text-primary hover:underline">{t('view')}</a>
           </CardContent>
         </Card>
       )}
@@ -273,7 +273,7 @@ export default function DashboardPage() {
       {/* Who's In Today */}
       <Card className="border-0 shadow-lg">
         <CardHeader className="pb-2">
-          <CardTitle className="text-lg">{lang === 'ar' ? 'من في المكتب اليوم؟' : "Who's In Today?"}</CardTitle>
+          <CardTitle className="text-lg">{t('whoSInToday')}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -281,7 +281,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-xs font-medium text-emerald-500 mb-2 flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-                {lang === 'ar' ? 'حاضرون' : 'Checked In'} ({todayData.checkedIn.length})
+                {t('checkedIn')} ({todayData.checkedIn.length})
               </p>
               <div className="space-y-1 max-h-48 overflow-y-auto">
                 {todayData.checkedIn.filter(r => !r.check_out).map(r => (
@@ -296,7 +296,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-xs font-medium text-blue-500 mb-2 flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
-                {lang === 'ar' ? 'انصرفوا' : 'Checked Out'} ({todayData.checkedOut.length})
+                {t('checkedOut')} ({todayData.checkedOut.length})
               </p>
               <div className="space-y-1 max-h-48 overflow-y-auto">
                 {todayData.checkedOut.map(r => (
@@ -311,7 +311,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-xs font-medium text-rose-500 mb-2 flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
-                {lang === 'ar' ? 'لم يسجلوا حضور' : 'Not Checked In'} ({todayData.notCheckedIn.length})
+                {t('notCheckedIn2')} ({todayData.notCheckedIn.length})
               </p>
               <div className="space-y-1 max-h-48 overflow-y-auto">
                 {todayData.notCheckedIn.map(e => (
@@ -373,7 +373,7 @@ export default function DashboardPage() {
                 {t('tardinessRanking')}
               </CardTitle>
               <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => router.push('/tardiness')}>
-                {lang === 'ar' ? 'عرض الكل' : 'View all'} →
+                {t('viewAll')} →
               </Button>
             </div>
           </CardHeader>
@@ -416,14 +416,14 @@ export default function DashboardPage() {
                 })}
                 {/* Summary row */}
                 <div className="flex items-center justify-between pt-2 mt-2 border-t text-xs text-muted-foreground">
-                  <span>{lang === 'ar' ? 'إجمالي الشهر' : 'Month total'}</span>
+                  <span>{t('monthTotal')}</span>
                   <span className="font-mono font-semibold text-foreground">{formatMinutesToHHMM(totalTardMinutes)}</span>
                 </div>
               </div>
             ) : (
               <div className="h-[200px] flex flex-col items-center justify-center text-muted-foreground gap-2">
                 <UserCheck className="h-10 w-10 text-emerald-500/40" />
-                <p className="text-sm">{lang === 'ar' ? 'لا يوجد تأخير' : 'No tardiness'}</p>
+                <p className="text-sm">{t('noTardiness2')}</p>
               </div>
             )}
           </CardContent>
@@ -459,7 +459,7 @@ export default function DashboardPage() {
             ) : (
               <div className="h-[200px] flex flex-col items-center justify-center text-muted-foreground gap-2">
                 <UserCheck className="h-10 w-10 text-emerald-500/40" />
-                <p className="text-sm">{lang === 'ar' ? 'جميع الموظفين متواجدون' : 'All employees present'}</p>
+                <p className="text-sm">{t('allEmployeesPresent')}</p>
               </div>
             )}
           </CardContent>
@@ -480,11 +480,11 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-sm">{dept.name}</span>
-                      <Badge variant="outline" className="text-[10px] h-5">{dept.count} {lang === 'ar' ? 'موظف' : 'emp'}</Badge>
+                      <Badge variant="outline" className="text-[10px] h-5">{dept.count} {t('emp')}</Badge>
                     </div>
                     <div className="flex items-center gap-3 text-xs">
                       {dept.onLeave > 0 && (
-                        <span className="text-amber-500">{dept.onLeave} {lang === 'ar' ? 'في إجازة' : 'on leave'}</span>
+                        <span className="text-amber-500">{dept.onLeave} {t('onLeave2')}</span>
                       )}
                     </div>
                   </div>
@@ -505,7 +505,7 @@ export default function DashboardPage() {
                   <div className="space-y-1">
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="text-muted-foreground">{t('tardinessHHMM')}</span>
-                      <span className="font-medium">{dept.tardiness} {lang === 'ar' ? 'ساعة' : 'hrs'}</span>
+                      <span className="font-medium">{dept.tardiness} {t('hrs')}</span>
                     </div>
                     <div className="h-2 rounded-full bg-muted overflow-hidden">
                       <div
@@ -526,7 +526,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t('employeeLeaveSummary')}</CardTitle>
               <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => router.push('/employees')}>
-                {lang === 'ar' ? 'عرض الكل' : 'View all'} →
+                {t('viewAll')} →
               </Button>
             </div>
           </CardHeader>
@@ -569,7 +569,7 @@ export default function DashboardPage() {
         <Card className="border-0 shadow-lg lg:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              {lang === 'ar' ? 'آخر الإجازات' : 'Recent Leaves'}
+              {t('recentLeaves')}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -609,17 +609,17 @@ export default function DashboardPage() {
         <Card className="border-0 shadow-lg">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              {lang === 'ar' ? 'إحصائيات سريعة' : 'Quick Stats'}
+              {t('quickStats')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {[
-                { label: lang === 'ar' ? 'إجمالي أيام الإجازات' : 'Total Leave Days', value: totalLeaveDays, icon: CalendarDays, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-                { label: lang === 'ar' ? 'إجمالي سجلات التأخير' : 'Total Tardiness Records', value: tardiness.length, icon: Timer, color: 'text-rose-500', bg: 'bg-rose-500/10' },
-                { label: lang === 'ar' ? 'طلبات معلقة' : 'Pending Requests', value: pendingLeaves.length, icon: AlertTriangle, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-                { label: lang === 'ar' ? 'أقل رصيد' : 'Lowest Balance', value: employeeStats.length > 0 ? Math.min(...employeeStats.map(e => e.remaining)) : 0, icon: TrendingDown, color: 'text-rose-500', bg: 'bg-rose-500/10' },
-                { label: lang === 'ar' ? 'أعلى رصيد' : 'Highest Balance', value: employeeStats.length > 0 ? Math.max(...employeeStats.map(e => e.remaining)) : 0, icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+                { label: t('totalLeaveDays'), value: totalLeaveDays, icon: CalendarDays, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+                { label: t('totalTardinessRecords'), value: tardiness.length, icon: Timer, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+                { label: t('pendingRequests'), value: pendingLeaves.length, icon: AlertTriangle, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+                { label: t('lowestBalance'), value: employeeStats.length > 0 ? Math.min(...employeeStats.map(e => e.remaining)) : 0, icon: TrendingDown, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+                { label: t('highestBalance'), value: employeeStats.length > 0 ? Math.max(...employeeStats.map(e => e.remaining)) : 0, icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
               ].map((stat) => {
                 const Icon = stat.icon
                 return (

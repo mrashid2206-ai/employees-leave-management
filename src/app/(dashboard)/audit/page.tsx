@@ -19,7 +19,7 @@ interface AuditEntry {
 
 export default function AuditPage() {
   const t = useT()
-  const { lang, dir } = useLanguage()
+  const { dir } = useLanguage()
   const [actionFilter, setActionFilter] = useState<string>('all')
 
   const { data: logs = [] } = useQuery<AuditEntry[]>({
@@ -40,13 +40,13 @@ export default function AuditPage() {
   return (
     <div className="space-y-6" dir={dir}>
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <h1 className="text-2xl font-bold">{lang === 'ar' ? '\u0633\u062c\u0644 \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629' : 'Audit Log'}</h1>
+        <h1 className="text-2xl font-bold">{t('auditLog2')}</h1>
         <Select value={actionFilter} onValueChange={v => setActionFilter(v ?? 'all')}>
           <SelectTrigger className="w-48">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{lang === 'ar' ? '\u0643\u0644 \u0627\u0644\u0623\u062d\u062f\u0627\u062b' : 'All Actions'}</SelectItem>
+            <SelectItem value="all">{t('allActions')}</SelectItem>
             {actions.map(a => (
               <SelectItem key={a} value={a}>{a}</SelectItem>
             ))}
@@ -61,10 +61,10 @@ export default function AuditPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-center w-12">#</TableHead>
-                  <TableHead className="text-start">{lang === 'ar' ? '\u0627\u0644\u062d\u062f\u062b' : 'Action'}</TableHead>
-                  <TableHead className="text-center">{lang === 'ar' ? '\u0627\u0644\u0645\u0633\u062a\u062e\u062f\u0645' : 'User'}</TableHead>
-                  <TableHead className="text-center">{lang === 'ar' ? '\u0627\u0644\u062f\u0648\u0631' : 'Role'}</TableHead>
-                  <TableHead className="text-start">{lang === 'ar' ? '\u0627\u0644\u062a\u0641\u0627\u0635\u064a\u0644' : 'Details'}</TableHead>
+                  <TableHead className="text-start">{t('action')}</TableHead>
+                  <TableHead className="text-center">{t('user')}</TableHead>
+                  <TableHead className="text-center">{t('role')}</TableHead>
+                  <TableHead className="text-start">{t('details')}</TableHead>
                   <TableHead className="text-center">{t('date')}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -86,7 +86,7 @@ export default function AuditPage() {
                       </TableCell>
                       <TableCell className="text-sm max-w-[300px] truncate">{log.details}</TableCell>
                       <TableCell className="text-center text-xs text-muted-foreground">
-                        {new Date(log.created_at).toLocaleString(lang === 'ar' ? 'ar-OM' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}
+                        {new Date(log.created_at).toLocaleString(t('enUs'), { dateStyle: 'short', timeStyle: 'short' })}
                       </TableCell>
                     </TableRow>
                   ))
