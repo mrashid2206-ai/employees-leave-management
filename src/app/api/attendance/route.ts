@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
-import { ensureAttendanceLocationColumns } from '@/lib/ensure-schema'
 import { isOffDayFor, computeWorkHours, computeOvertime } from '@/lib/attendance-calc'
 import { resolveSchedule } from '@/lib/schedule'
 import { reverseAutoAbsenceLeave } from '@/lib/auto-absence'
@@ -16,7 +15,6 @@ export async function GET(request: Request) {
   // Employees may only read their own attendance; admins may filter by any employee.
   const employeeId = user.role === 'employee' ? String(user.id) : searchParams.get('employee_id')
 
-  await ensureAttendanceLocationColumns().catch(() => {})
 
   let query = `
     SELECT a.id, a.employee_id, a.date::text as date, a.check_in::text as check_in,

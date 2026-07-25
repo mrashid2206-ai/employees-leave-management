@@ -3,11 +3,6 @@ import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
 import { DEFAULT_EMPLOYEE_PASSWORD } from '@/lib/constants'
-import {
-  ensureEmployeeProfileColumns,
-  ensureEmployeeAuthColumns,
-  ensureHotIndexes,
-} from '@/lib/ensure-schema'
 
 export async function GET(request: Request) {
   // Admin only: the full roster exposes PII (email/phone/leave_balance) and every
@@ -15,8 +10,6 @@ export async function GET(request: Request) {
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
 
-  await ensureEmployeeProfileColumns().catch(() => {})
-  await ensureHotIndexes().catch(() => {})
 
   const { rows } = await pool.query(`
     SELECT e.id, e.name, e.department_id, e.leave_balance::float8 as leave_balance, e.is_active, e.username, e.join_date::text as join_date, e.email, e.phone, e.position, e.created_at, e.updated_at, json_build_object('id', d.id, 'name', d.name) as department
@@ -60,8 +53,6 @@ export async function POST(request: Request) {
   // New accounts get the shared default password and must change it on first login.
   const hashedPassword = await bcrypt.hash(DEFAULT_EMPLOYEE_PASSWORD, 10)
 
-  await ensureEmployeeProfileColumns().catch(() => {})
-  await ensureEmployeeAuthColumns().catch(() => {})
 
   const { rows } = await pool.query(`
     INSERT INTO employees (name, department_id, leave_balance, username, password_hash, must_change_password, join_date, email, phone, position)

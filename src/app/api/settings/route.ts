@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
-import { ensureSettingsColumns } from '@/lib/ensure-schema'
 
 const SELECT_COLS = `id, year_start::text as year_start, year_end::text as year_end, annual_leave_balance, deduction_per_hour, currency, currency_symbol, work_hours_per_day, max_absent_same_dept, work_start_time::text as work_start_time, work_days, office_lat, office_lng, office_radius, office_ip, block_offsite_checkin, deduct_permission_hours`
 
@@ -13,7 +12,6 @@ export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
 
-  await ensureSettingsColumns().catch(() => {})
 
   const { rows } = await pool.query(`SELECT ${SELECT_COLS} FROM settings ORDER BY id LIMIT 1`)
   if (!rows[0]) {

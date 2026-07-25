@@ -1,7 +1,6 @@
 import pool, { omanToday, omanYesterday } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { logger } from '@/lib/log'
-import { ensureFractionalLeaveColumns, ensureSettingsColumns, ensureTardinessPenaltyColumns } from '@/lib/ensure-schema'
 import { LEAVE_TYPE_ANNUAL, TARDINESS_GRACE_MINUTES, AUTO_ABSENCE_LEAVE_NOTE, TARDINESS_DEDUCTS_LEAVE, TARDINESS_PENALTY_GRACE_MINUTES } from '@/lib/constants'
 import { tardinessLeaveDeduction } from '@/lib/tardiness-penalty'
 import { notifyEmployee } from '@/lib/employee-notify'
@@ -31,10 +30,6 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
   // flag everyone absent.
   const processDate = date || omanYesterday()
   const dayIsComplete = processDate < omanToday()
-
-  await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_tardiness_unique ON tardiness_log (employee_id, date)').catch(() => {})
-  await ensureFractionalLeaveColumns().catch(() => {})
-  await ensureTardinessPenaltyColumns().catch(() => {})
 
   const { rows: annualType } = await pool.query(
     'SELECT id FROM leave_types WHERE name_en = $1 ORDER BY id LIMIT 1',
@@ -241,7 +236,6 @@ export type YearlyResult =
 // When not forced (cron), it only fires once the fiscal year has actually ended,
 // so it is safe to call daily — it no-ops every day until year_end passes.
 export async function runYearlyReset(actor: ActorType, opts: { force?: boolean } = {}): Promise<YearlyResult> {
-  await ensureSettingsColumns().catch(() => {})
 
   const client = await pool.connect()
   try {

@@ -4,7 +4,6 @@ import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
 import { getJwtSecret } from '@/lib/jwt'
 import { checkRateLimit, resetRateLimit } from '@/lib/rate-limit'
-import { ensureEmployeeAuthColumns } from '@/lib/ensure-schema'
 
 function clientIp(request: Request): string {
   return (
@@ -28,7 +27,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Too many login attempts. Try again in 15 minutes.' }, { status: 429 })
   }
 
-  await ensureEmployeeAuthColumns()
 
   const { rows } = await pool.query(
     'SELECT id, name, username, password_hash, department_id, must_change_password FROM employees WHERE username = $1 AND is_active = true',

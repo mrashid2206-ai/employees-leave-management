@@ -1,7 +1,6 @@
 import webpush from 'web-push'
 import pool from '@/lib/db'
 import { logger } from '@/lib/log'
-import { ensurePushSubscriptionsTable } from '@/lib/ensure-schema'
 
 // Web Push. Disabled (no-op) unless VAPID keys are configured, so the app runs fine
 // without them. Generate a key pair once with:  npx web-push generate-vapid-keys
@@ -41,7 +40,6 @@ export async function pushToEmployee(employeeId: number, payload: PushPayload): 
   if (!ensureConfigured()) return 0
   let sent = 0
   try {
-    await ensurePushSubscriptionsTable()
     const { rows } = await pool.query(
       'SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE employee_id = $1',
       [employeeId]

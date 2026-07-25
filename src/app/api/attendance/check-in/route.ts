@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import pool, { omanToday, omanTime } from '@/lib/db'
 import { verifyAnyAuth, unauthorized, forbidden } from '@/lib/api-auth'
-import { ensureAttendanceLocationColumns, ensureFractionalLeaveColumns } from '@/lib/ensure-schema'
 import { isOffDayFor, computeWorkHours, computeOvertime, evaluateLocation, permissionMinutesFor } from '@/lib/attendance-calc'
 import { resolveSchedule } from '@/lib/schedule'
 import { notifyEmployee } from '@/lib/employee-notify'
@@ -20,7 +19,6 @@ export async function POST(request: Request) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
 
-  await ensureAttendanceLocationColumns().catch(() => {})
 
   const body = await request.json()
   const valid = parseBody(checkInSchema, body)
@@ -55,7 +53,6 @@ export async function POST(request: Request) {
     }
 
     // Handle any approved leave covering today
-    await ensureFractionalLeaveColumns().catch(() => {})
     let leaveCancelled = false
     const { rows: todayLeaves } = await pool.query(
       "SELECT id, days_count, start_date::text as start_date, end_date::text as end_date, leave_type_id FROM leave_requests WHERE employee_id = $1 AND status = 'approved' AND start_date <= $2 AND end_date >= $2",

@@ -9,18 +9,6 @@ export async function GET(request: Request) {
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS admin_users (
-      id SERIAL PRIMARY KEY,
-      username VARCHAR(100) UNIQUE NOT NULL,
-      password_hash VARCHAR(255) NOT NULL,
-      name VARCHAR(200) NOT NULL,
-      role VARCHAR(20) DEFAULT 'admin',
-      is_active BOOLEAN DEFAULT TRUE,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `).catch(() => {})
-
   const { rows } = await pool.query(
     'SELECT id, username, name, role, is_active, created_at FROM admin_users ORDER BY id'
   )
@@ -39,18 +27,6 @@ export async function POST(request: Request) {
   if (password.length < MIN_PASSWORD_LENGTH) {
     return NextResponse.json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }, { status: 400 })
   }
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS admin_users (
-      id SERIAL PRIMARY KEY,
-      username VARCHAR(100) UNIQUE NOT NULL,
-      password_hash VARCHAR(255) NOT NULL,
-      name VARCHAR(200) NOT NULL,
-      role VARCHAR(20) DEFAULT 'admin',
-      is_active BOOLEAN DEFAULT TRUE,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `).catch(() => {})
 
   const hash = await bcrypt.hash(password, 10)
 

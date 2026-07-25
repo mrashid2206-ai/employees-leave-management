@@ -96,22 +96,28 @@ Required for cron: `CRON_SECRET` env on Railway **and** GitHub repo secrets `CRO
 ## 6. Infrastructure libs (`src/lib/`)
 
 `db.ts` (pool + Oman-TZ helpers `omanNow/omanToday/omanYesterday/omanTime`) ·
-`migrate.ts` + `db/migrations/*.sql` (versioned runner) · `ensure-schema.ts` (lazy
-self-heal, belt-and-suspenders) · `env.ts` (boot validation, fail-fast in prod) ·
-`log.ts` (JSON logging) · `rate-limit.ts` (Postgres-backed, survives deploys) · `jwt.ts` ·
-`audit.ts` · `email.ts` · `api.ts` (typed client) · `query-keys.ts` (`qk.*` factory).
+`migrate.ts` + `db/migrations/*.sql` (versioned runner) · `env.ts` (boot validation,
+fail-fast in prod) · `log.ts` (JSON logging) · `rate-limit.ts` (Postgres-backed, survives
+deploys) · `jwt.ts` · `audit.ts` · `email.ts` · `api.ts` (typed client) ·
+`query-keys.ts` (`qk.*` factory).
 
 Request validation: `src/server/schemas.ts` + `src/server/validation.ts` (zod at write boundaries).
 
 ## 7. Schema & migrations
 
-`db/migrations/0001_baseline.sql` is the **canonical, idempotent** schema; `0002_rate_limits.sql`
-adds the rate-limit table. Apply with **`npm run migrate`** (local/CI/deploy). Optionally apply
-at server boot via `RUN_MIGRATIONS_AT_BOOT=true` (default off).
+`db/migrations/0001_baseline.sql` is the **canonical, idempotent** schema; later numbered
+files add to it. Apply with **`npm run migrate`** (local/CI/deploy). Migrations also run
+**at server boot by default** — set `RUN_MIGRATIONS_AT_BOOT=false` to opt out.
 
-Historical/legacy SQL (`supabase/migrations/*`, `railway-migration.sql`) predates the runner;
-`db/migrations/` is the source of truth going forward. `ensure-schema.ts` still self-heals
-columns lazily so an un-migrated DB keeps working.
+`db/migrations/` is the **single source of truth** for schema. There used to be a second
+mechanism — `ensure-schema.ts` — that issued `CREATE TABLE`/`ALTER TABLE` lazily on request
+paths to self-heal un-migrated databases. It was removed (migration `0009`) because two
+sources of schema truth is exactly the drift problem the runner exists to solve, and the
+DDL ran on hot request paths. **Consequence: the schema must be migrated before the app
+serves traffic.** Boot migrations default to on so this holds automatically.
+
+Historical/legacy SQL (`supabase/migrations/*`, `railway-migration.sql`) predates the runner
+and is kept for reference only.
 
 ## 8. Local development
 
@@ -137,12 +143,12 @@ npx next build
 - **`ADMIN_PASSWORD`** — bootstrap `admin` login; only usable while `admin_users` is empty
 - `APP_URL` / `ALLOWED_ORIGINS` — cross-origin allowlist for `/api/*`
 - `CRON_SECRET` — enables the scheduled automation endpoints
-- `RUN_MIGRATIONS_AT_BOOT` — apply migrations on startup (default false)
+- `RUN_MIGRATIONS_AT_BOOT` — apply migrations on startup (**default true**; set `false` to opt out)
 - `SMTP_HOST/PORT/USER/PASS`, `NOTIFY_EMAIL` — optional email notifications
 
 ## 10. Deploy checklist (Railway)
 
-1. `npm run migrate` against the database (or set `RUN_MIGRATIONS_AT_BOOT=true`).
+1. `npm run migrate` against the database (or rely on boot migrations, which are on by default).
 2. Set env: `JWT_SECRET`, `ADMIN_PASSWORD`, `DATABASE_URL`, `CRON_SECRET` (+ `APP_URL`).
 3. GitHub repo secrets for the cron workflow: `CRON_SECRET` (same value) + `APP_URL`.
 4. First login as `admin` / `ADMIN_PASSWORD`, then create real admin users (Settings).

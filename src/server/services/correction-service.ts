@@ -1,7 +1,6 @@
 import pool from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { notifyEmployee } from '@/lib/employee-notify'
-import { ensureCorrectionsTable } from '@/lib/ensure-schema'
 import { isOffDayFor, computeWorkHours, computeOvertime } from '@/lib/attendance-calc'
 import { resolveSchedule } from '@/lib/schedule'
 import { ok, fail, type ServiceResult, type Actor, actorLabel } from '@/server/result'
@@ -25,7 +24,6 @@ export async function createCorrection(input: CorrectionInput, actor: Actor): Pr
     return fail(400, 'Provide a corrected check-in and/or check-out time')
   }
 
-  await ensureCorrectionsTable()
 
   // One open request per employee/day keeps the queue unambiguous.
   const { rows: dup } = await pool.query(
@@ -49,7 +47,6 @@ export async function reviewCorrection(
   status: 'approved' | 'rejected',
   actor: Actor
 ): Promise<ServiceResult<unknown>> {
-  await ensureCorrectionsTable()
 
   const client = await pool.connect()
   try {

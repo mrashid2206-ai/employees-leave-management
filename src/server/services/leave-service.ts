@@ -2,7 +2,6 @@ import pool, { omanToday } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { sendMail } from '@/lib/email'
 import { notifyEmployee } from '@/lib/employee-notify'
-import { ensureFractionalLeaveColumns } from '@/lib/ensure-schema'
 import { countLeaveDays } from '@/lib/leave-days'
 import {
   LEAVE_TYPE_EMERGENCY,
@@ -155,7 +154,6 @@ export async function createLeave(input: LeaveCreateInput, actor: Actor): Promis
     return fail(409, 'Employee already has a pending or approved leave for these dates')
   }
 
-  await ensureFractionalLeaveColumns().catch(() => {})
 
   try {
     const { rows } = await pool.query(
@@ -205,7 +203,6 @@ export async function changeLeaveStatus(
     return fail(400, 'Invalid status')
   }
 
-  await ensureFractionalLeaveColumns().catch(() => {})
 
   const client = await pool.connect()
   let rows: LeaveRecord[]
@@ -335,7 +332,6 @@ export async function editLeaveDates(
   if (!start_date || !end_date) return fail(400, 'Start and end date required')
   if (new Date(end_date) < new Date(start_date)) return fail(400, 'End date must be after start date')
 
-  await ensureFractionalLeaveColumns().catch(() => {})
 
   const client = await pool.connect()
   try {

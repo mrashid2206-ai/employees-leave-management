@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
-import { ensureTardinessPenaltyColumns } from '@/lib/ensure-schema'
 import { tardinessLeaveDeduction } from '@/lib/tardiness-penalty'
 import { TARDINESS_DEDUCTS_LEAVE, TARDINESS_PENALTY_GRACE_MINUTES } from '@/lib/constants'
 import { logger } from '@/lib/log'
@@ -14,7 +13,6 @@ export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
 
-  await ensureTardinessPenaltyColumns().catch(() => {})
 
   // Employees may only read their own tardiness; admins see all.
   const scoped = user.role === 'employee'
@@ -38,7 +36,6 @@ export async function POST(request: Request) {
   if (!valid.ok) return valid.response
   const records = Array.isArray(valid.data) ? valid.data : [valid.data]
 
-  await ensureTardinessPenaltyColumns().catch(() => {})
 
   // Insert each record and deduct the proportional leave penalty in one transaction so a
   // failure can't leave a tardiness row without its matching balance deduction (or vice
