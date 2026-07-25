@@ -15,7 +15,11 @@ export default defineConfig({
     include: ['tests/integration/**/*.itest.ts'],
     globalSetup: ['tests/integration/setup.ts'],
     // The service layer reads DATABASE_URL via src/lib/db.ts — point it at the test DB.
-    env: { DATABASE_URL: process.env.TEST_DATABASE_URL || '' },
+    // JWT_SECRET lets the authorization suite mint real tokens and call route handlers.
+    env: {
+      DATABASE_URL: process.env.TEST_DATABASE_URL || '',
+      JWT_SECRET: process.env.JWT_SECRET || 'integration-test-secret-at-least-32-chars',
+    },
     fileParallelism: false, // shared database: run suites sequentially
     testTimeout: 20000,
   },

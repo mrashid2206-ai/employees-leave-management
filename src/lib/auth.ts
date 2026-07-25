@@ -4,8 +4,9 @@ import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
 import { getJwtSecret } from '@/lib/jwt'
 
-async function signAdminToken(user: { username: string; role: string; name: string }) {
-  return new SignJWT({ username: user.username, role: user.role, name: user.name })
+async function signAdminToken(user: { username: string; role: string; name: string; token_version?: number }) {
+  // tv makes the session revocable (src/lib/token-version.ts).
+  return new SignJWT({ username: user.username, role: user.role, name: user.name, tv: user.token_version ?? 0 })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('24h')
     .setIssuedAt()
@@ -21,7 +22,7 @@ export async function authenticate(username: string, password: string) {
   // to a bootstrap login on a DB error, which previously re-enabled a backdoor during
   // transient outages.
   const { rows } = await pool.query(
-    'SELECT id, username, password_hash, name, role FROM admin_users WHERE username = $1 AND is_active = true',
+    'SELECT id, username, password_hash, name, role, token_version FROM admin_users WHERE username = $1 AND is_active = true',
     [trimmedUser]
   )
 
