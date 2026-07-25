@@ -36,10 +36,12 @@ const navItems: { href: string; labelKey: TranslationKey; icon: typeof LayoutDas
   { href: '/leaves', labelKey: 'leaves', icon: CalendarDays },
   { href: '/tardiness', labelKey: 'tardiness', icon: Clock },
   { href: '/permissions', labelKey: 'permissions', icon: Clock },
+  { href: '/corrections', labelKey: 'corrections', icon: ClipboardCheck },
   { href: '/calendar', labelKey: 'calendar', icon: Calendar },
   { href: '/leave-planner', labelKey: 'leavePlanner', icon: CalendarRange },
   // Reports
   { href: '/reports', labelKey: 'reports', icon: FileText },
+  { href: '/monthly-report', labelKey: 'monthlyReport', icon: FileText },
   { href: '/overtime-report', labelKey: 'overtimeReport', icon: Clock },
   { href: '/salary-report', labelKey: 'salaryReport', icon: Clock },
   { href: '/ranking', labelKey: 'ranking', icon: Trophy },
@@ -58,13 +60,15 @@ function NavContent({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
 
   return (
     <nav className="flex flex-col gap-1 p-3">
-      {navItems.map((item, index) => {
+      {navItems.map((item) => {
         const isActive = pathname === item.href ||
           (item.href !== '/' && pathname.startsWith(item.href))
         const Icon = item.icon
+        // Group separators keyed by href (not index) so adding a nav item can't shift them.
+        const startsGroup = item.href === '/reports' || item.href === '/settings'
         return (
           <div key={item.href}>
-            {(index === 8 || index === 12) && <div className="my-2 border-t" />}
+            {startsGroup && <div className="my-2 border-t" />}
             <Link
               href={item.href}
               onClick={onNavigate}

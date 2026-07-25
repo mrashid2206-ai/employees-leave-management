@@ -70,6 +70,30 @@ export function computeWorkHours(checkIn: string, checkOut: string): number | nu
   return hours
 }
 
+// Total minutes an employee was away on APPROVED, closed permissions for a date. Used
+// (opt-in via settings.deduct_permission_hours) to subtract personal mid-day absences
+// from the day's paid work hours. Returns 0 if the table is missing or times are open.
+export async function permissionMinutesFor(employeeId: number, date: string): Promise<number> {
+  try {
+    const { rows } = await pool.query(
+      `SELECT leave_time::text as leave_time, return_time::text as return_time
+         FROM permissions
+        WHERE employee_id = $1 AND date = $2 AND status = 'approved' AND return_time IS NOT NULL`,
+      [employeeId, date]
+    )
+    let total = 0
+    for (const r of rows) {
+      const [lh, lm] = String(r.leave_time).split(':').map(Number)
+      const [rh, rm] = String(r.return_time).split(':').map(Number)
+      const diff = rh * 60 + rm - (lh * 60 + lm)
+      if (diff > 0) total += diff
+    }
+    return total
+  } catch {
+    return 0
+  }
+}
+
 // On a holiday/off-day all hours are overtime; otherwise overtime is hours beyond normal.
 export function computeOvertime(workHours: number, normalHours: number, isHolidayWork: boolean): number {
   if (isHolidayWork) return workHours

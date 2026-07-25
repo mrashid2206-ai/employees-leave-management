@@ -70,7 +70,9 @@ export function ensureSettingsColumns(): Promise<void> {
       ADD COLUMN IF NOT EXISTS office_radius INT DEFAULT 200,
       ADD COLUMN IF NOT EXISTS office_ip VARCHAR(100),
       ADD COLUMN IF NOT EXISTS block_offsite_checkin BOOLEAN DEFAULT FALSE,
-      ADD COLUMN IF NOT EXISTS last_reset_year INT
+      ADD COLUMN IF NOT EXISTS last_reset_year INT,
+      ADD COLUMN IF NOT EXISTS last_reset_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS deduct_permission_hours BOOLEAN DEFAULT FALSE
   `)
 }
 
@@ -96,6 +98,41 @@ export function ensureEmployeeNotificationsTable(): Promise<void> {
       is_read BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
+  `)
+}
+
+const pushSubsRunner = once()
+export function ensurePushSubscriptionsTable(): Promise<void> {
+  return pushSubsRunner(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id SERIAL PRIMARY KEY,
+      employee_id INT NOT NULL REFERENCES employees(id),
+      endpoint TEXT NOT NULL UNIQUE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_push_employee ON push_subscriptions(employee_id);
+  `)
+}
+
+const correctionsRunner = once()
+export function ensureCorrectionsTable(): Promise<void> {
+  return correctionsRunner(`
+    CREATE TABLE IF NOT EXISTS attendance_corrections (
+      id SERIAL PRIMARY KEY,
+      employee_id INT NOT NULL REFERENCES employees(id),
+      date DATE NOT NULL,
+      requested_check_in TIME,
+      requested_check_out TIME,
+      reason TEXT NOT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      reviewed_by VARCHAR(100),
+      reviewed_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_corrections_status ON attendance_corrections(status);
+    CREATE INDEX IF NOT EXISTS idx_corrections_emp_date ON attendance_corrections(employee_id, date);
   `)
 }
 

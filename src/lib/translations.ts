@@ -4,6 +4,12 @@ export const translations = {
   // Data states
   loadError: { ar: 'تعذّر تحميل البيانات', en: 'Failed to load data' },
   retry: { ar: 'إعادة المحاولة', en: 'Retry' },
+  errorTitle: { ar: 'خطأ', en: 'Error' },
+  somethingWentWrong: { ar: 'حدث خطأ ما', en: 'Something went wrong' },
+  tryAgain: { ar: 'حاول مرة أخرى', en: 'Try Again' },
+  reload: { ar: 'إعادة التحميل', en: 'Reload' },
+  pageNotFound: { ar: 'الصفحة غير موجودة', en: 'Page not found' },
+  employeePortal: { ar: 'بوابة الموظف', en: 'Employee Portal' },
 
   // App
   appTitle: { ar: 'نظام إدارة الإجازات والتأخير', en: 'Leave & Tardiness Management System' },
@@ -60,6 +66,8 @@ export const translations = {
   // Status
   available: { ar: 'متاح', en: 'Available' },
   onLeave: { ar: 'في إجازة', en: 'On Leave' },
+  approve: { ar: 'موافقة', en: 'Approve' },
+  reject: { ar: 'رفض', en: 'Reject' },
   approved: { ar: 'موافق عليها', en: 'Approved' },
   rejected: { ar: 'مرفوضة', en: 'Rejected' },
   pending: { ar: 'معلقة', en: 'Pending' },
@@ -215,6 +223,8 @@ export const translations = {
   baseSalary: { ar: 'الراتب الأساسي', en: 'Base Salary' },
   totalDeduction: { ar: 'إجمالي الخصم', en: 'Total Deduction' },
   netImpact: { ar: 'صافي التأثير', en: 'Net Impact' },
+  monthlyReport: { ar: 'التقرير الشهري', en: 'Monthly Report' },
+  corrections: { ar: 'طلبات تصحيح الحضور', en: 'Attendance Corrections' },
   leavePlanner: { ar: 'مخطط الإجازات', en: 'Leave Planner' },
   planned: { ar: 'مخطط', en: 'Planned' },
   taken: { ar: 'مأخوذة', en: 'Taken' },

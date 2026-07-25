@@ -8,7 +8,7 @@ async function handle(request: Request) {
   if (!authorizeCron(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  const result = await runYearlyReset({ id: 'cron', role: 'system' }, { force: false })
+  const result = await runYearlyReset({ username: 'cron', role: 'system' }, { force: false })
   return NextResponse.json(result)
 }
 

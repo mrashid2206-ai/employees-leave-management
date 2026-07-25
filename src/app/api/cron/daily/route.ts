@@ -8,7 +8,7 @@ async function handle(request: Request) {
   if (!authorizeCron(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  const result = await runDailyAutomation(undefined, { id: 'cron', role: 'system' })
+  const result = await runDailyAutomation(undefined, { username: 'cron', role: 'system' })
   return NextResponse.json(result)
 }
 

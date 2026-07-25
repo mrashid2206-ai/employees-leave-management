@@ -224,6 +224,46 @@ export async function deleteTardinessRecord(id: number): Promise<void> {
   await fetch(`/api/tardiness/${id}`, { method: 'DELETE' })
 }
 
+// Attendance corrections
+export interface AttendanceCorrection {
+  id: number
+  employee_id: number
+  date: string
+  requested_check_in: string | null
+  requested_check_out: string | null
+  reason: string
+  status: string
+  reviewed_by: string | null
+  created_at: string
+  employee?: { id: number; name: string; department_id: number }
+}
+
+export async function getCorrections(): Promise<AttendanceCorrection[]> {
+  return fetchJSON('/api/corrections')
+}
+
+export async function createCorrectionRequest(input: {
+  employee_id: number
+  date: string
+  requested_check_in?: string | null
+  requested_check_out?: string | null
+  reason: string
+}): Promise<AttendanceCorrection> {
+  return fetchJSON('/api/corrections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}
+
+export async function reviewCorrectionRequest(id: number, status: 'approved' | 'rejected'): Promise<AttendanceCorrection> {
+  return fetchJSON(`/api/corrections/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  })
+}
+
 // Conflict Detection
 export async function checkLeaveConflict(
   employeeId: number,

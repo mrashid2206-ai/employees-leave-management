@@ -6,6 +6,8 @@ import { tardinessLeaveDeduction } from '@/lib/tardiness-penalty'
 import { TARDINESS_DEDUCTS_LEAVE, TARDINESS_PENALTY_GRACE_MINUTES } from '@/lib/constants'
 import { logger } from '@/lib/log'
 import { notifyEmployee } from '@/lib/employee-notify'
+import { parseBody } from '@/server/validation'
+import { tardinessCreateSchema } from '@/server/schemas'
 
 export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
@@ -30,16 +32,10 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
-  const body = await request.json()
-
-  // Support bulk insert (array of records)
-  const records = Array.isArray(body) ? body : [body]
-
-  for (const r of records) {
-    if (!r.employee_id || !r.date || !r.time || !r.minutes_late || r.minutes_late <= 0) {
-      return NextResponse.json({ error: 'Invalid tardiness record' }, { status: 400 })
-    }
-  }
+  // Supports bulk insert (array of records) or a single record.
+  const valid = parseBody(tardinessCreateSchema, await request.json())
+  if (!valid.ok) return valid.response
+  const records = Array.isArray(valid.data) ? valid.data : [valid.data]
 
   // Resolve the workday length once to convert late minutes into a leave-day penalty.
   let workHoursPerDay = 8

@@ -16,6 +16,8 @@ import { AnimatedCounter } from '@/components/animated-counter'
 import { useLanguage, useT } from '@/lib/language-context'
 import type { Employee } from '@/lib/types'
 
+import { PendingApprovals } from './_components/pending-approvals'
+
 const LeaveByTypeChart = dynamic(() => import('./_components/leave-by-type-chart'), { ssr: false })
 
 interface AttendanceRecord {
@@ -195,6 +197,9 @@ export default function DashboardPage() {
           </Button>
         )}
       </div>
+
+      {/* Approve/reject waiting requests without leaving the dashboard */}
+      <PendingApprovals />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
