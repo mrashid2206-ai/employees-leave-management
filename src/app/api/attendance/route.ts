@@ -18,7 +18,9 @@ export async function GET(request: Request) {
 
   let query = `
     SELECT a.id, a.employee_id, a.date::text as date, a.check_in::text as check_in,
-      a.check_out::text as check_out, a.work_hours, a.overtime_hours, a.status, a.notes, a.is_holiday_work, a.excused_tardiness, a.is_offsite, a.check_in_ip,
+      a.check_out::text as check_out, a.work_hours, a.overtime_hours, a.status, a.notes, a.is_holiday_work, a.excused_tardiness,
+      a.is_offsite, a.is_offsite_checkout, a.check_in_ip, a.check_out_ip,
+      a.check_in_lat, a.check_in_lng, a.check_out_lat, a.check_out_lng,
       json_build_object('id', e.id, 'name', e.name, 'department_id', e.department_id) as employee
     FROM attendance a
     LEFT JOIN employees e ON a.employee_id = e.id

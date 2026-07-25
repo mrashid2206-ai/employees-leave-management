@@ -8,7 +8,7 @@ export async function resetDb(): Promise<{ employeeId: number; annualTypeId: num
   await pool.query(`
     TRUNCATE attendance_corrections, push_subscriptions, employee_notifications,
              audit_log, permissions, tardiness_log, attendance, leave_requests,
-             employees, leave_types, departments, settings
+             employees, leave_types, departments, settings, holidays
     RESTART IDENTITY CASCADE
   `)
 

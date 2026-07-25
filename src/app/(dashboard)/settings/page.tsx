@@ -62,6 +62,7 @@ export default function SettingsPage() {
   const [holidayForm, setHolidayForm] = useState({ name: '', date: '' })
   const [editHoliday, setEditHoliday] = useState<{ id: number; name: string; date: string } | null>(null)
   const [holidayYear, setHolidayYear] = useState(String(new Date().getFullYear()))
+  const [seedYear, setSeedYear] = useState(String(new Date().getFullYear()))
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; type: string; id: number; name: string }>({ open: false, type: '', id: 0, name: '' })
   const [ltForm, setLtForm] = useState({ name_ar: '', name_en: '', color: '#4CAF50' })
   const [editLt, setEditLt] = useState<{ id: number; name_ar: string; name_en: string; color: string } | null>(null)
@@ -88,6 +89,31 @@ export default function SettingsPage() {
   const createHolidayMutation = useMutation({ mutationFn: createHoliday, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['holidays'] }); setHolidayForm({ name: '', date: '' }); toast.success(t('addedSuccess')) } })
   const updateHolidayMutation = useMutation({ mutationFn: ({ id, data }: { id: number; data: { name: string; date: string } }) => updateHoliday(id, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['holidays'] }); setEditHoliday(null); toast.success(t('updatedSuccess')) } })
   const deleteHolidayMutation = useMutation({ mutationFn: deleteHoliday, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['holidays'] }); toast.success(t('deletedSuccess')) } })
+  const seedHolidaysMutation = useMutation({
+    mutationFn: async (year: number) => {
+      const res = await fetch('/api/holidays/seed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year, lang }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Seed failed')
+      return res.json() as Promise<{ year: number; addedCount: number; skippedCount: number; estimatedCount: number }>
+    },
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ['holidays'] })
+      setHolidayYear(String(r.year))
+      if (r.addedCount === 0) {
+        toast.info(lang === 'ar' ? `عطلات ${r.year} مضافة بالفعل` : `${r.year} holidays are already set up`)
+      } else {
+        toast.success(
+          lang === 'ar'
+            ? `تمت إضافة ${r.addedCount} عطلة لسنة ${r.year} (${r.estimatedCount} تقديرية تحتاج تأكيد)`
+            : `Added ${r.addedCount} holidays for ${r.year} (${r.estimatedCount} estimated — confirm them)`
+        )
+      }
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
   const createLtMutation = useMutation({ mutationFn: createLeaveType, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['leaveTypes'] }); setLtForm({ name_ar: '', name_en: '', color: '#4CAF50' }); toast.success(t('addedSuccess')) } })
   const updateLtMutation = useMutation({ mutationFn: ({ id, data }: { id: number; data: { name_ar: string; name_en: string; color: string } }) => updateLeaveType(id, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['leaveTypes'] }); setEditLt(null); toast.success(t('updatedSuccess')) } })
   const deleteLtMutation = useMutation({ mutationFn: deleteLeaveType, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['leaveTypes'] }); toast.success(t('deletedSuccess')) }, onError: (err: Error) => toast.error(err.message) })
@@ -466,6 +492,31 @@ export default function SettingsPage() {
                     <Input type="date" value={holidayForm.date} onChange={e => setHolidayForm(f => ({ ...f, date: e.target.value }))} className="w-44" />
                     <Button size="sm" onClick={() => holidayForm.name && holidayForm.date && createHolidayMutation.mutate(holidayForm)} disabled={!holidayForm.name || !holidayForm.date}>
                       <Plus className="h-4 w-4 ml-1" />{t('add')}
+                    </Button>
+                  </div>
+
+                  {/* Seed a whole year of Oman public holidays as a draft */}
+                  <div className="flex gap-2 flex-wrap items-center p-4 rounded-xl border border-dashed">
+                    <div className="flex-1 min-w-[220px]">
+                      <p className="text-sm font-medium">{t('seedOmanHolidays')}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{t('seedEstimateNote')}</p>
+                    </div>
+                    <Input
+                      type="number"
+                      min={2000}
+                      max={2100}
+                      value={seedYear}
+                      onChange={e => setSeedYear(e.target.value)}
+                      className="w-28"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => seedHolidaysMutation.mutate(parseInt(seedYear))}
+                      disabled={seedHolidaysMutation.isPending || !/^\d{4}$/.test(seedYear)}
+                    >
+                      <Plus className="h-4 w-4 ml-1" />
+                      {seedHolidaysMutation.isPending ? t('loading') : t('add')}
                     </Button>
                   </div>
 

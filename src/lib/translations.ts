@@ -482,6 +482,26 @@ export const translations = {
   noLeavesThisMonth: { ar: 'لا توجد إجازات هذا الشهر', en: 'No leaves this month' },
   cancelRequest: { ar: 'إلغاء الطلب', en: 'Cancel Request' },
   afterLoginYouCan: { ar: 'بعد تسجيل الدخول يمكنك:', en: 'After login you can:' },
+
+  // ---- Off-site report ----
+  offsiteReport: { ar: 'تقرير خارج الموقع', en: 'Off-Site Report' },
+  offsiteReportHint: { ar: 'تسجيلات الحضور والانصراف التي تمت خارج نطاق المكتب', en: 'Check-ins and check-outs recorded outside the office area' },
+  offsiteCheckIns: { ar: 'حضور خارج الموقع', en: 'Off-site check-ins' },
+  offsiteCheckOuts: { ar: 'انصراف خارج الموقع', en: 'Off-site check-outs' },
+  employeesAffected: { ar: 'عدد الموظفين', en: 'Employees involved' },
+  offsiteRate: { ar: 'نسبة الحضور خارج الموقع', en: 'Off-site rate' },
+  noOffsiteActivity: { ar: 'لا يوجد نشاط خارج الموقع', en: 'No off-site activity' },
+  eventType: { ar: 'نوع الحركة', en: 'Type' },
+  ipAddress: { ar: 'عنوان IP', en: 'IP address' },
+  location: { ar: 'الموقع', en: 'Location' },
+  coordinates: { ar: 'الإحداثيات', en: 'Coordinates' },
+  allTypes: { ar: 'كل الأنواع', en: 'All types' },
+  viewOnMap: { ar: 'عرض على الخريطة', en: 'View on map' },
+  noGpsFix: { ar: 'بدون إحداثيات', en: 'No GPS fix' },
+
+  // ---- Holiday seeding ----
+  seedOmanHolidays: { ar: 'إضافة عطلات سلطنة عُمان لسنة كاملة', en: 'Add a full year of Oman public holidays' },
+  seedEstimateNote: { ar: 'التواريخ الهجرية تقديرية — يرجى تأكيدها بعد الإعلان الرسمي. لن يتم تعديل أي عطلة مضافة مسبقاً.', en: 'Islamic dates are estimates — confirm them against the official announcement. Holidays you already added are never changed.' },
 } as const
 
 export type TranslationKey = keyof typeof translations

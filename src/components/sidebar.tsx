@@ -16,6 +16,7 @@ import {
   Settings,
   Shield,
   CalendarRange,
+  MapPin,
   ChevronRight,
   ChevronLeft,
   Menu,
@@ -44,6 +45,7 @@ const navItems: { href: string; labelKey: TranslationKey; icon: typeof LayoutDas
   { href: '/monthly-report', labelKey: 'monthlyReport', icon: FileText },
   { href: '/overtime-report', labelKey: 'overtimeReport', icon: Clock },
   { href: '/salary-report', labelKey: 'salaryReport', icon: Clock },
+  { href: '/offsite-report', labelKey: 'offsiteReport', icon: MapPin },
   { href: '/ranking', labelKey: 'ranking', icon: Trophy },
   // System
   { href: '/settings', labelKey: 'settings', icon: Settings },
