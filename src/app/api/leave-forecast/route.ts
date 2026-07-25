@@ -12,11 +12,18 @@ export async function GET(request: Request) {
   if (!user) return unauthorized()
 
   const requested = new URL(request.url).searchParams.get('employee_id')
+
+  // Check the REQUESTED id, before it gets coerced to the caller's own. Comparing after
+  // coercion made this guard unreachable: an employee asking for a colleague's forecast
+  // quietly received their own with a 200 instead of being refused.
+  if (user.role === 'employee' && requested && Number(requested) !== Number(user.id)) {
+    return forbidden()
+  }
+
   const employeeId = user.role === 'employee' ? Number(user.id) : Number(requested || user.id)
   if (!Number.isInteger(employeeId) || employeeId <= 0) {
     return NextResponse.json({ error: 'employee_id is required' }, { status: 400 })
   }
-  if (user.role === 'employee' && employeeId !== Number(user.id)) return forbidden()
 
   const { rows: empRows } = await pool.query(
     'SELECT id, name, leave_balance FROM employees WHERE id = $1',

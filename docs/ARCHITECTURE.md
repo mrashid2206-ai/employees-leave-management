@@ -26,6 +26,23 @@ Auth is verified **per API route** via `src/lib/api-auth.ts`
 (`verifyAdmin` / `verifyEmployee` / `verifyAnyAuth`). Route protection + redirects live in
 `src/proxy.ts` (Next 16's renamed middleware — it is NOT called `middleware.ts`).
 
+**A valid signature is not enough.** Tokens carry a `tv` (token version) claim checked
+against the database on every authenticated request (`src/lib/token-version.ts`). Bumping
+`token_version` instantly invalidates every token issued before it, which is what makes
+password resets and deactivation actually end sessions — previously an offboarded employee
+kept access for up to 12h until the JWT expired. Deactivated or deleted identities are
+rejected immediately, and the check **fails closed** if the DB is unreachable.
+
+The one exception is the **bootstrap admin**: `authenticate()` issues a token for username
+`admin` backed by `ADMIN_PASSWORD` when `admin_users` is still empty, so there is no row to
+version-check. That case is allowed explicitly (and only for that username, and only while
+`ADMIN_PASSWORD` is set) — otherwise an admin would be locked out of a fresh deployment.
+Covered by `tests/integration/authorization.itest.ts`.
+
+**Health:** `GET /api/health` is unauthenticated and checks Postgres, returning 503 when
+the database is unreachable and reporting the applied `schemaVersion` — useful for
+confirming a deploy actually migrated. Point an uptime monitor at it.
+
 ## 3. Domain model (tables)
 
 `settings` (singleton, fiscal year + work schedule + geofence) · `departments` ·
@@ -173,6 +190,7 @@ Recent migrations worth knowing about:
 | `0010_drop_money_columns` | Drops the dead payroll columns |
 | `0011_audit_log_indexes` | Indexes `audit_log` by `created_at` / `action` for server-side filtering |
 | `0012_automation_journal` | `automation_runs` + `automation_effects` (undo), and `error_log` |
+| `0013_token_revocation` | `token_version` on `employees` / `admin_users` — makes sessions revocable |
 
 Historical/legacy SQL (`supabase/migrations/*`, `railway-migration.sql`) predates the runner
 and is kept for reference only.

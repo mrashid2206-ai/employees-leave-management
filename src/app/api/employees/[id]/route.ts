@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAnyAuth, verifyAdmin, unauthorized, forbidden } from '@/lib/api-auth'
 import { logAudit } from '@/lib/audit'
+import { bumpTokenVersion } from '@/lib/token-version'
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await verifyAnyAuth(request)
@@ -28,7 +29,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!admin) return unauthorized()
   const { id } = await params
   const body = await request.json()
-  const allowedFields = ['name', 'department_id', 'leave_balance', 'is_active', 'username', 'password_hash', 'email', 'phone', 'position', 'join_date', 'work_start_time', 'work_days', 'work_hours_per_day']
+  // password_hash is deliberately NOT updatable here. Passwords go through
+  // /api/employees/[id]/reset-password, which hashes properly, enforces the length policy
+  // and revokes existing sessions. Allowing a raw write here meant a plaintext value could
+  // be stored as if it were a hash, silently locking the account out of every future login.
+  const allowedFields = ['name', 'department_id', 'leave_balance', 'is_active', 'username', 'email', 'phone', 'position', 'join_date', 'work_start_time', 'work_days', 'work_hours_per_day']
   const fields = Object.keys(body).filter(k => allowedFields.includes(k))
   if (fields.length === 0) return NextResponse.json({ error: 'No fields' }, { status: 400 })
 
@@ -45,6 +50,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     `UPDATE employees SET ${sets}, updated_at = NOW() WHERE id = $1 RETURNING *`,
     values
   )
+
+  // Deactivating from the edit form must end sessions too, exactly like DELETE does.
+  if (body.is_active === false) await bumpTokenVersion('employee', Number(id))
+
   return NextResponse.json(rows[0])
 }
 
@@ -61,6 +70,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   // Cancel pending leave requests
   await pool.query("UPDATE leave_requests SET status = 'cancelled', updated_at = NOW() WHERE employee_id = $1 AND status = 'pending'", [id])
+
+  // Offboarding must actually end access, not wait up to 12h for the JWT to expire.
+  await bumpTokenVersion('employee', Number(id))
 
   await logAudit('employee_deactivated', admin.username, 'admin', `Deactivated employee ${id}`)
 

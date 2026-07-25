@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
 
   const { rows } = await pool.query(
-    'SELECT id, name, username, password_hash, department_id, must_change_password FROM employees WHERE username = $1 AND is_active = true',
+    'SELECT id, name, username, password_hash, department_id, must_change_password, token_version FROM employees WHERE username = $1 AND is_active = true',
     [username]
   )
 
@@ -48,6 +48,8 @@ export async function POST(request: Request) {
     role: 'employee',
     department_id: emp.department_id,
     must_change_password: !!emp.must_change_password,
+    // Stamped so the session can be revoked later (see src/lib/token-version.ts).
+    tv: emp.token_version ?? 0,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('12h')
