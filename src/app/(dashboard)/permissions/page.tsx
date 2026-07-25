@@ -26,7 +26,7 @@ interface Permission {
 
 export default function PermissionsPage() {
   const t = useT()
-  const { lang, dir } = useLanguage()
+  const { dir } = useLanguage()
   const queryClient = useQueryClient()
   const [deptFilter, setDeptFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -90,7 +90,7 @@ export default function PermissionsPage() {
         <div>
           <h1 className="text-2xl font-bold">{t('permissions')}</h1>
           {pendingCount > 0 && (
-            <p className="text-sm text-amber-500 mt-1">{pendingCount} {lang === 'ar' ? 'طلب معلق' : 'pending requests'}</p>
+            <p className="text-sm text-amber-500 mt-1">{pendingCount} {t('pendingRequests2')}</p>
           )}
         </div>
         <div className="flex gap-3">
@@ -99,7 +99,7 @@ export default function PermissionsPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">{lang === 'ar' ? 'كل الحالات' : 'All Status'}</SelectItem>
+              <SelectItem value="all">{t('allStatus')}</SelectItem>
               <SelectItem value="pending">{t('pending')}</SelectItem>
               <SelectItem value="approved">{t('approved')}</SelectItem>
               <SelectItem value="rejected">{t('rejected')}</SelectItem>
@@ -123,7 +123,7 @@ export default function PermissionsPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="border-0 shadow-md">
           <CardContent className="p-4 text-center">
-            <p className="text-xs text-muted-foreground">{lang === 'ar' ? 'اليوم' : 'Today'}</p>
+            <p className="text-xs text-muted-foreground">{t('today')}</p>
             <p className="text-2xl font-bold">{todayCount}</p>
           </CardContent>
         </Card>
@@ -141,7 +141,7 @@ export default function PermissionsPage() {
         </Card>
         <Card className="border-0 shadow-md">
           <CardContent className="p-4 text-center">
-            <p className="text-xs text-muted-foreground">{lang === 'ar' ? 'لم يعودوا' : 'Not Returned'}</p>
+            <p className="text-xs text-muted-foreground">{t('notReturned')}</p>
             <p className="text-2xl font-bold text-rose-500">{permissions.filter((p) => p.status === 'approved' && !p.return_time).length}</p>
           </CardContent>
         </Card>
@@ -156,10 +156,10 @@ export default function PermissionsPage() {
                 <TableRow>
                   <TableHead className="text-start">{t('name')}</TableHead>
                   <TableHead className="text-center">{t('date')}</TableHead>
-                  <TableHead className="text-center">{lang === 'ar' ? 'وقت الخروج' : 'Left At'}</TableHead>
-                  <TableHead className="text-center">{lang === 'ar' ? 'وقت العودة' : 'Returned'}</TableHead>
-                  <TableHead className="text-center">{lang === 'ar' ? 'المدة' : 'Duration'}</TableHead>
-                  <TableHead className="text-start">{lang === 'ar' ? 'السبب' : 'Reason'}</TableHead>
+                  <TableHead className="text-center">{t('leftAt')}</TableHead>
+                  <TableHead className="text-center">{t('returned')}</TableHead>
+                  <TableHead className="text-center">{t('duration')}</TableHead>
+                  <TableHead className="text-start">{t('reason')}</TableHead>
                   <TableHead className="text-center">{t('status')}</TableHead>
                   <TableHead className="text-center">{t('actions')}</TableHead>
                 </TableRow>
@@ -177,7 +177,7 @@ export default function PermissionsPage() {
                       <TableCell className="text-center font-mono text-sm">{p.leave_time?.slice(0, 5)}</TableCell>
                       <TableCell className="text-center font-mono text-sm">
                         {p.return_time ? p.return_time.slice(0, 5) : (
-                          <span className="text-rose-500 text-xs">{lang === 'ar' ? 'لم يعد' : 'Not yet'}</span>
+                          <span className="text-rose-500 text-xs">{t('notYet')}</span>
                         )}
                       </TableCell>
                       <TableCell className="text-center text-sm">{calcAbsentHours(p.leave_time, p.return_time)}</TableCell>

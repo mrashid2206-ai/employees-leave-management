@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Download, Printer } from 'lucide-react'
 import { getEmployees, getTardinessRecords, getDepartments } from '@/lib/api'
-import { useLanguage, useT } from '@/lib/language-context'
+import { useT } from '@/lib/language-context'
 import { exportToExcel } from '@/lib/excel'
 
 function formatMinutesToHHMM(minutes: number): string {
@@ -19,7 +19,6 @@ function formatMinutesToHHMM(minutes: number): string {
 
 export default function TardinessSummaryPage() {
   const t = useT()
-  const { lang } = useLanguage()
   const [deptFilter, setDeptFilter] = useState<string>('all')
 
   const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
@@ -53,10 +52,10 @@ export default function TardinessSummaryPage() {
       [t('name')]: r.name,
       [t('department')]: r.department,
       [t('lateCount')]: r.tardCount,
-      [lang === 'ar' ? 'إجمالي الدقائق' : 'Total Minutes']: r.totalMinutes,
+      [t('totalMinutes')]: r.totalMinutes,
       [t('tardinessHHMM')]: formatMinutesToHHMM(r.totalMinutes),
     }))
-    exportToExcel(data, 'tardiness_summary', lang === 'ar' ? 'ملخص التأخير' : 'Tardiness Summary')
+    exportToExcel(data, 'tardiness_summary', t('salaryReport'))
   }
 
   return (
@@ -90,7 +89,7 @@ export default function TardinessSummaryPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="border-0 shadow-lg">
           <CardContent className="p-5">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">{lang === 'ar' ? 'إجمالي التأخير' : 'Total Late'}</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider">{t('totalLate')}</p>
             <p className="text-2xl font-bold text-amber-500 mt-1">{formatMinutesToHHMM(totalMinutes)}</p>
           </CardContent>
         </Card>
@@ -102,7 +101,7 @@ export default function TardinessSummaryPage() {
         </Card>
         <Card className="border-0 shadow-lg">
           <CardContent className="p-5">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">{lang === 'ar' ? 'الموظفين المتأثرين' : 'Affected Employees'}</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider">{t('affectedEmployees')}</p>
             <p className="text-2xl font-bold text-rose-500 mt-1">{affected}</p>
           </CardContent>
         </Card>
@@ -119,7 +118,7 @@ export default function TardinessSummaryPage() {
                   <TableHead className="text-start">{t('name')}</TableHead>
                   <TableHead className="text-center">{t('department')}</TableHead>
                   <TableHead className="text-center">{t('lateCount')}</TableHead>
-                  <TableHead className="text-center">{lang === 'ar' ? 'الدقائق' : 'Minutes'}</TableHead>
+                  <TableHead className="text-center">{t('minutes2')}</TableHead>
                   <TableHead className="text-center">{t('tardinessHHMM')}</TableHead>
                 </TableRow>
               </TableHeader>

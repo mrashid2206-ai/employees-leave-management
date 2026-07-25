@@ -78,9 +78,9 @@ export default function EmployeeCardPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employee', id] })
       setEditProfileOpen(false)
-      toast.success(lang === 'ar' ? 'تم تحديث الملف الشخصي' : 'Profile updated')
+      toast.success(t('profileUpdated'))
     },
-    onError: () => toast.error(lang === 'ar' ? 'خطأ' : 'Error'),
+    onError: () => toast.error(t('errorTitle')),
   })
 
   function openEditProfile() {
@@ -98,7 +98,7 @@ export default function EmployeeCardPage() {
 
   function handleSaveProfile() {
     if (!editForm.name || !editForm.department_id) {
-      toast.error(lang === 'ar' ? 'الاسم والقسم مطلوبان' : 'Name and department are required')
+      toast.error(t('nameAndDepartmentAreRequired'))
       return
     }
     editMutation.mutate({
@@ -177,15 +177,15 @@ export default function EmployeeCardPage() {
                 )}
               </div>
               <p className="text-muted-foreground">{t('department')}: {employee.department?.name}</p>
-              {employee.position && <p className="text-sm text-muted-foreground">{lang === 'ar' ? 'المنصب' : 'Position'}: {employee.position}</p>}
+              {employee.position && <p className="text-sm text-muted-foreground">{t('position')}: {employee.position}</p>}
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                {employee.email && <span>{lang === 'ar' ? 'البريد' : 'Email'}: {employee.email}</span>}
-                {employee.phone && <span>{lang === 'ar' ? 'الهاتف' : 'Phone'}: {employee.phone}</span>}
-                {employee.join_date && <span>{lang === 'ar' ? 'تاريخ الالتحاق' : 'Joined'}: {employee.join_date}</span>}
+                {employee.email && <span>{t('email2')}: {employee.email}</span>}
+                {employee.phone && <span>{t('phone')}: {employee.phone}</span>}
+                {employee.join_date && <span>{t('joined')}: {employee.join_date}</span>}
               </div>
               <Button variant="outline" size="sm" onClick={openEditProfile} className="no-print mt-1">
                 <Pencil className="h-3.5 w-3.5 ml-1" />
-                {lang === 'ar' ? 'تعديل الملف الشخصي' : 'Edit Profile'}
+                {t('editProfile')}
               </Button>
             </div>
 
@@ -237,10 +237,10 @@ export default function EmployeeCardPage() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ password: '123456' }),
                   })
-                  toast.success(lang === 'ar' ? 'تم إعادة تعيين كلمة المرور إلى 123456' : 'Password reset to 123456')
+                  toast.success(t('passwordResetTo123456'))
                 }}
               >
-                {lang === 'ar' ? 'إعادة تعيين كلمة المرور' : 'Reset Password'}
+                {t('resetPassword')}
               </Button>
             </div>
           </div>
@@ -253,7 +253,7 @@ export default function EmployeeCardPage() {
         <Card className="border-0 shadow-lg">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              {lang === 'ar' ? 'التأخير الشهري' : 'Monthly Tardiness'}
+              {t('monthlyTardiness')}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -268,7 +268,7 @@ export default function EmployeeCardPage() {
                 .map(([month, minutes]) => ({ month: month.slice(5), minutes }))
 
               return chartData.length > 0 ? (
-                <TardinessBarChart data={chartData} minLabel={lang === 'ar' ? 'دقيقة' : 'min'} />
+                <TardinessBarChart data={chartData} minLabel={t('min')} />
               ) : (
                 <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">{t('noTardiness')}</div>
               )
@@ -280,7 +280,7 @@ export default function EmployeeCardPage() {
         <Card className="border-0 shadow-lg">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              {lang === 'ar' ? 'استخدام الإجازات' : 'Leave Usage'}
+              {t('leaveUsage')}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -426,7 +426,7 @@ export default function EmployeeCardPage() {
       <Dialog open={editProfileOpen} onOpenChange={setEditProfileOpen}>
         <DialogContent className="max-w-md" dir={dir}>
           <DialogHeader>
-            <DialogTitle>{lang === 'ar' ? 'تعديل الملف الشخصي' : 'Edit Profile'}</DialogTitle>
+            <DialogTitle>{t('editProfile')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -434,15 +434,15 @@ export default function EmployeeCardPage() {
               <Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} />
             </div>
             <div>
-              <Label>{lang === 'ar' ? 'البريد الإلكتروني' : 'Email'}</Label>
+              <Label>{t('email')}</Label>
               <Input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} />
             </div>
             <div>
-              <Label>{lang === 'ar' ? 'الهاتف' : 'Phone'}</Label>
+              <Label>{t('phone')}</Label>
               <Input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} />
             </div>
             <div>
-              <Label>{lang === 'ar' ? 'المنصب' : 'Position'}</Label>
+              <Label>{t('position')}</Label>
               <Input value={editForm.position} onChange={e => setEditForm(f => ({ ...f, position: e.target.value }))} />
             </div>
             <div>
@@ -457,7 +457,7 @@ export default function EmployeeCardPage() {
               </Select>
             </div>
             <div>
-              <Label>{lang === 'ar' ? 'تاريخ الالتحاق' : 'Join Date'}</Label>
+              <Label>{t('joinDate')}</Label>
               <Input type="date" value={editForm.join_date} onChange={e => setEditForm(f => ({ ...f, join_date: e.target.value }))} />
             </div>
           </div>
@@ -473,7 +473,7 @@ export default function EmployeeCardPage() {
       {activity.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">{lang === 'ar' ? 'سجل النشاط' : 'Activity Log'}</CardTitle>
+            <CardTitle className="text-lg">{t('activityLog')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 max-h-48 overflow-y-auto">

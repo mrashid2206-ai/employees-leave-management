@@ -4,7 +4,6 @@ import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
 import { logAudit } from '@/lib/audit'
 import { DEFAULT_EMPLOYEE_PASSWORD, MIN_PASSWORD_LENGTH } from '@/lib/constants'
-import { ensureEmployeeAuthColumns } from '@/lib/ensure-schema'
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await verifyAdmin(request)
@@ -21,7 +20,6 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   const newPassword = await bcrypt.hash(pwd, 10)
 
-  await ensureEmployeeAuthColumns().catch(() => {})
   await pool.query(
     'UPDATE employees SET password_hash = $1, must_change_password = $2, updated_at = NOW() WHERE id = $3',
     [newPassword, usingDefault, id]

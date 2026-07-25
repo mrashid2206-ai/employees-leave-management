@@ -317,7 +317,7 @@ export default function LeavesPage() {
                     disabled={form.start_date !== form.end_date}
                   />
                   <Label htmlFor="half-day" className="text-sm">
-                    {lang === 'ar' ? 'نصف يوم' : 'Half Day'}
+                    {t('halfDay')}
                   </Label>
                 </div>
               )}
@@ -326,14 +326,14 @@ export default function LeavesPage() {
                   <p className="text-sm text-muted-foreground">
                     {t('daysCount')}: <strong>{form.is_half_day && form.start_date === form.end_date ? 0.5 : (workingDays ?? daysCount)}</strong>
                     {workingDays !== null && workingDays < daysCount && (
-                      <span className="text-xs ml-1">({lang === 'ar' ? 'أيام عمل فقط' : 'working days only'})</span>
+                      <span className="text-xs ml-1">({t('workingDaysOnly')})</span>
                     )}
                   </p>
                   {selectedEmpBalance !== null && (
                     <p className={`text-sm ${(workingDays ?? daysCount) > selectedEmpBalance ? 'text-rose-500 font-semibold' : 'text-muted-foreground'}`}>
                       {t('leaveBalance')}: <strong>{selectedEmpBalance}</strong> {t('days')}
                       {(workingDays ?? daysCount) > selectedEmpBalance && (
-                        <span className="ml-1">⚠️ {lang === 'ar' ? 'رصيد غير كافي' : 'Insufficient balance'}</span>
+                        <span className="ml-1">⚠️ {t('insufficientBalance')}</span>
                       )}
                     </p>
                   )}
@@ -374,10 +374,10 @@ export default function LeavesPage() {
       <div className="flex flex-wrap gap-3">
         <Select value={filterYear} onValueChange={v => { setFilterYear(v ?? 'all'); setSelectedIds([]) }}>
           <SelectTrigger className="w-32">
-            <SelectValue placeholder={lang === 'ar' ? 'السنة' : 'Year'} />
+            <SelectValue placeholder={t('year')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{lang === 'ar' ? 'كل السنوات' : 'All Years'}</SelectItem>
+            <SelectItem value="all">{t('allYears')}</SelectItem>
             {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map(y => (
               <SelectItem key={y} value={String(y)}>{y}</SelectItem>
             ))}
@@ -385,10 +385,10 @@ export default function LeavesPage() {
         </Select>
         <Select value={filterMonth} onValueChange={v => { setFilterMonth(v ?? 'all'); setSelectedIds([]) }}>
           <SelectTrigger className="w-40">
-            <SelectValue placeholder={lang === 'ar' ? 'الشهر' : 'Month'} />
+            <SelectValue placeholder={t('month')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{lang === 'ar' ? 'كل الشهور' : 'All Months'}</SelectItem>
+            <SelectItem value="all">{t('allMonths')}</SelectItem>
             {monthNames.map((m, i) => (
               <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
             ))}
@@ -400,7 +400,7 @@ export default function LeavesPage() {
       {selectedIds.length > 0 && (
         <Card className="border-[#1976D2]/30 bg-[#1976D2]/5">
           <CardContent className="p-3 flex items-center justify-between">
-            <span className="text-sm font-medium">{selectedIds.length} {lang === 'ar' ? 'محدد' : 'selected'}</span>
+            <span className="text-sm font-medium">{selectedIds.length} {t('selected')}</span>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" className="text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/10" onClick={() => {
                 if (confirm(lang === 'ar' ? `هل تريد الموافقة على ${selectedIds.length} طلب؟` : `Approve ${selectedIds.length} requests?`)) {
@@ -556,7 +556,7 @@ export default function LeavesPage() {
         <Dialog open={!!editLeave} onOpenChange={() => setEditLeave(null)}>
           <DialogContent className="max-w-sm" dir={dir}>
             <DialogHeader>
-              <DialogTitle>{lang === 'ar' ? 'تعديل الإجازة' : 'Edit Leave'}</DialogTitle>
+              <DialogTitle>{t('editLeave')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div>
@@ -568,7 +568,7 @@ export default function LeavesPage() {
                 <Input type="date" value={editLeave.end_date} onChange={e => setEditLeave(prev => prev ? { ...prev, end_date: e.target.value } : null)} />
               </div>
               <p className="text-xs text-muted-foreground">
-                {lang === 'ar' ? '💡 سيتم إعادة حساب أيام العمل والرصيد تلقائياً' : '💡 Working days and balance will be recalculated automatically'}
+                {t('workingDaysAndBalanceWill')}
               </p>
             </div>
             <DialogFooter>

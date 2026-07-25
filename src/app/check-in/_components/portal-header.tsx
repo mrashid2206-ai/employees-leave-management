@@ -58,10 +58,10 @@ export function PortalHeader({ empUser, onLogout }: PortalHeaderProps) {
           {showNotifs && (
             <div className="absolute top-10 end-0 w-72 bg-card border rounded-xl shadow-xl z-50 max-h-64 overflow-y-auto">
               <div className="p-3 border-b">
-                <p className="text-sm font-semibold">{lang === 'ar' ? 'الإشعارات' : 'Notifications'}</p>
+                <p className="text-sm font-semibold">{t('notifications2')}</p>
               </div>
               {notifications.length === 0 ? (
-                <p className="p-4 text-sm text-muted-foreground text-center">{lang === 'ar' ? 'لا توجد إشعارات' : 'No notifications'}</p>
+                <p className="p-4 text-sm text-muted-foreground text-center">{t('noNotifications2')}</p>
               ) : (
                 notifications.map(n => (
                   <div

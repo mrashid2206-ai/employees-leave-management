@@ -90,15 +90,15 @@ export default function OvertimeReportPage() {
 
   function handleExport() {
     const data = reportData.map(r => ({
-      [lang === 'ar' ? 'الاسم' : 'Name']: r.name,
-      [lang === 'ar' ? 'القسم' : 'Department']: r.department,
-      [lang === 'ar' ? 'أيام العمل' : 'Days Worked']: r.daysWorked,
-      [lang === 'ar' ? 'ساعات العمل' : 'Work Hours']: r.totalWorkHours,
-      [lang === 'ar' ? 'ساعات إضافية' : 'Overtime Hours']: r.totalOvertime,
-      [lang === 'ar' ? 'إضافي عطلة' : 'Holiday OT']: r.holidayOvertime,
-      [lang === 'ar' ? 'المعدل اليومي' : 'Avg Daily Hours']: r.avgWorkHours,
+      [t('name')]: r.name,
+      [t('department')]: r.department,
+      [t('daysWorked')]: r.daysWorked,
+      [t('workHours')]: r.totalWorkHours,
+      [t('overtimeHours')]: r.totalOvertime,
+      [t('holidayOt')]: r.holidayOvertime,
+      [t('avgDailyHours')]: r.avgWorkHours,
     }))
-    exportToExcel(data, `overtime-report-${monthKey}`, lang === 'ar' ? 'تقرير الإضافي' : 'Overtime Report')
+    exportToExcel(data, `overtime-report-${monthKey}`, t('overtimeReport'))
   }
 
   function handlePrint() {
@@ -109,7 +109,7 @@ export default function OvertimeReportPage() {
     <div className="space-y-6" dir={dir}>
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <h1 className="text-2xl font-bold">{lang === 'ar' ? 'تقرير ساعات العمل والإضافي' : 'Work Hours & Overtime Report'}</h1>
+        <h1 className="text-2xl font-bold">{t('workHoursOvertimeReport')}</h1>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleExport}>
             <Download className="h-4 w-4 mr-1.5" />
@@ -149,7 +149,7 @@ export default function OvertimeReportPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{lang === 'ar' ? 'كل الأيام' : 'All Days'}</SelectItem>
+            <SelectItem value="all">{t('allDays')}</SelectItem>
             {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => (
               <SelectItem key={d} value={String(d)}>{d}</SelectItem>
             ))}
@@ -174,7 +174,7 @@ export default function OvertimeReportPage() {
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 rounded-lg bg-blue-500/10"><Clock className="h-4 w-4 text-blue-500" /></div>
             <div>
-              <p className="text-xs text-muted-foreground">{lang === 'ar' ? 'إجمالي ساعات العمل' : 'Total Work Hours'}</p>
+              <p className="text-xs text-muted-foreground">{t('totalWorkHours')}</p>
               <p className="text-xl font-bold">{Math.round(grandTotalWork * 10) / 10}h</p>
             </div>
           </CardContent>
@@ -183,7 +183,7 @@ export default function OvertimeReportPage() {
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 rounded-lg bg-amber-500/10"><TrendingUp className="h-4 w-4 text-amber-500" /></div>
             <div>
-              <p className="text-xs text-muted-foreground">{lang === 'ar' ? 'إجمالي الإضافي' : 'Total Overtime'}</p>
+              <p className="text-xs text-muted-foreground">{t('totalOvertime')}</p>
               <p className="text-xl font-bold text-amber-500">{Math.round(grandTotalOT * 10) / 10}h</p>
             </div>
           </CardContent>
@@ -192,7 +192,7 @@ export default function OvertimeReportPage() {
           <CardContent className="p-4 flex items-center gap-3">
             <div className="p-2 rounded-lg bg-emerald-500/10"><Users className="h-4 w-4 text-emerald-500" /></div>
             <div>
-              <p className="text-xs text-muted-foreground">{lang === 'ar' ? 'موظفين لديهم إضافي' : 'Employees with OT'}</p>
+              <p className="text-xs text-muted-foreground">{t('employeesWithOt')}</p>
               <p className="text-xl font-bold text-emerald-500">{employeesWithOT}</p>
             </div>
           </CardContent>
@@ -208,11 +208,11 @@ export default function OvertimeReportPage() {
                 <TableRow>
                   <TableHead className="text-start">{t('name')}</TableHead>
                   <TableHead className="text-center">{t('department')}</TableHead>
-                  <TableHead className="text-center">{lang === 'ar' ? 'أيام العمل' : 'Days'}</TableHead>
+                  <TableHead className="text-center">{t('days2')}</TableHead>
                   <TableHead className="text-center">{t('workHours')}</TableHead>
                   <TableHead className="text-center">{t('overtime')}</TableHead>
-                  <TableHead className="text-center">{lang === 'ar' ? 'إضافي عطلة' : 'Holiday OT'}</TableHead>
-                  <TableHead className="text-center">{lang === 'ar' ? 'المعدل اليومي' : 'Avg/Day'}</TableHead>
+                  <TableHead className="text-center">{t('holidayOt')}</TableHead>
+                  <TableHead className="text-center">{t('avgDay')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

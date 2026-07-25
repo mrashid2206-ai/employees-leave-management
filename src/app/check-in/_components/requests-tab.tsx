@@ -38,7 +38,7 @@ export function RequestsTab({ empId }: RequestsTabProps) {
   async function handleCancel(id: number) {
     try {
       await cancelLeave.mutateAsync(id)
-      toast.success(lang === 'ar' ? 'تم إلغاء الطلب' : 'Request cancelled')
+      toast.success(t('requestCancelled'))
     } catch { toast.error(t('error')) }
   }
 
@@ -56,7 +56,7 @@ export function RequestsTab({ empId }: RequestsTabProps) {
       {/* Calendar toggle */}
       <Button variant="outline" size="sm" className="w-full" onClick={() => setShowCalendar(!showCalendar)}>
         <Calendar className="h-3.5 w-3.5 mr-1.5" />
-        {lang === 'ar' ? 'من في إجازة هذا الشهر؟' : "Who's on Leave?"}
+        {t('whoSOnLeave')}
       </Button>
 
       {showCalendar && (
@@ -64,7 +64,7 @@ export function RequestsTab({ empId }: RequestsTabProps) {
           {/* Holidays this month */}
           {monthHolidays.length > 0 && (
             <>
-              <h3 className="text-sm font-semibold text-purple-500 mt-2">{lang === 'ar' ? 'العطلات الرسمية' : 'Public Holidays'}</h3>
+              <h3 className="text-sm font-semibold text-purple-500 mt-2">{t('holidays')}</h3>
               {monthHolidays.map(h => (
                 <Card key={h.id} className="border-0 shadow-md border-l-4 border-l-purple-500">
                   <CardContent className="p-3 flex items-center justify-between">
@@ -79,7 +79,7 @@ export function RequestsTab({ empId }: RequestsTabProps) {
             <Card className="border-0 shadow-md">
               <CardContent className="p-8 text-center text-muted-foreground text-sm">
                 <CalendarDays className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                {lang === 'ar' ? 'لا توجد إجازات هذا الشهر' : 'No leaves this month'}
+                {t('noLeavesThisMonth')}
               </CardContent>
             </Card>
           ) : (
@@ -144,7 +144,7 @@ export function RequestsTab({ empId }: RequestsTabProps) {
                     disabled={cancelLeave.isPending}
                     onClick={() => handleCancel(req.id)}
                   >
-                    {lang === 'ar' ? 'إلغاء الطلب' : 'Cancel Request'}
+                    {t('cancelRequest')}
                   </Button>
                 )}
               </CardContent>

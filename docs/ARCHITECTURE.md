@@ -34,8 +34,16 @@ Auth is verified **per API route** via `src/lib/api-auth.ts`
 `permissions` (temporary mid-day exit) · `admin_users` · `audit_log` ·
 `employee_notifications` · `rate_limits` · `schema_migrations`.
 
-TypeScript shapes: `src/lib/types.ts`. Money columns (`deduction_per_hour`, `currency*`)
-still exist but are **unused** — monetary deduction was removed by product decision.
+TypeScript shapes: `src/lib/types.ts`. There are **no money columns** — payroll was removed
+by product decision and the leftover `deduction_per_hour` / `currency` / `currency_symbol`
+columns were dropped in migration `0010` (along with `tardiness_log.hours_late_decimal`,
+which merely duplicated `minutes_late / 60`).
+
+Work schedules resolve **employee → department → global `settings`**: `departments` and
+`employees` both carry nullable `work_start_time` / `work_days` / `work_hours_per_day`, and
+NULL means "inherit". `src/lib/schedule.ts` (`resolveSchedule`, `resolveScheduleMap`) is the
+single place that chain is applied — important because tardiness costs annual leave, so
+measuring someone against the wrong start time now costs them real days.
 
 ## 4. Core business rules (where they live)
 
@@ -64,6 +72,17 @@ Tunable constants: **`src/lib/constants.ts`**.
   Toggle the whole penalty with `TARDINESS_DEDUCTS_LEAVE` in `constants.ts`. (No monetary
   deduction — money was removed.)
 - **Permissions** — temporary exits, admin-approved, auto-closed at day end.
+- **Leave forecast** — `src/lib/leave-forecast.ts` + `/api/leave-forecast`, surfaced on the
+  employee portal's apply-leave tab. Projects the balance to year end: pending requests are
+  subtracted (not yet deducted), approved leave is **not** (approval already deducted it),
+  and the tardiness burn rate is extrapolated across the remaining year. Because the reset
+  is a clean slate, it states how many days **expire** if unused.
+- **Public holidays** — `src/lib/oman-holidays.ts` + `/api/holidays/seed` seeds a year from
+  Settings. Fixed Gregorian dates (Accession, Renaissance, National Day) are exact; the lunar
+  ones (Eid al-Fitr/Adha, Arafah, Islamic New Year, Mawlid, Isra & Mi'raj) are computed from
+  the Umm al-Qura calendar and flagged `estimated`, because the real dates come from official
+  moon sighting. Seeding **never overwrites an existing date**, so it is safe to re-run after
+  the official announcement to fill gaps without losing corrections.
 - **Automation** — `src/lib/automation.ts`:
   - `runDailyAutomation` processes the **previous completed day** (`omanYesterday()`), and
     only marks absent for days strictly before today. It marks no-shows absent, auto-deducts
@@ -96,22 +115,48 @@ Required for cron: `CRON_SECRET` env on Railway **and** GitHub repo secrets `CRO
 ## 6. Infrastructure libs (`src/lib/`)
 
 `db.ts` (pool + Oman-TZ helpers `omanNow/omanToday/omanYesterday/omanTime`) ·
-`migrate.ts` + `db/migrations/*.sql` (versioned runner) · `ensure-schema.ts` (lazy
-self-heal, belt-and-suspenders) · `env.ts` (boot validation, fail-fast in prod) ·
-`log.ts` (JSON logging) · `rate-limit.ts` (Postgres-backed, survives deploys) · `jwt.ts` ·
-`audit.ts` · `email.ts` · `api.ts` (typed client) · `query-keys.ts` (`qk.*` factory).
+`migrate.ts` + `db/migrations/*.sql` (versioned runner) · `env.ts` (boot validation,
+fail-fast in prod) · `log.ts` (JSON logging) · `rate-limit.ts` (Postgres-backed, survives
+deploys) · `jwt.ts` · `audit.ts` · `email.ts` · `api.ts` (typed client) ·
+`query-keys.ts` (`qk.*` factory) · `schedule.ts` (employee→department→global work schedule) ·
+`leave-forecast.ts` · `oman-holidays.ts` · `tardiness-penalty.ts`.
 
-Request validation: `src/server/schemas.ts` + `src/server/validation.ts` (zod at write boundaries).
+Request validation: `src/server/schemas.ts` + `src/server/validation.ts` (zod at write
+boundaries). Business logic that mutates balances lives in `src/server/services/*`
+(`leave-service`, `correction-service`, `holiday-service`) and returns a `ServiceResult`,
+which routes hand to `respond()` — so the same logic is callable from tests without HTTP.
+
+### Translations
+
+All UI strings live in `src/lib/translations.ts` and are read via `useT()` → `t('key')`.
+Do **not** add new `lang === 'ar' ? '…' : '…'` ternaries — 261 of them were migrated into
+keys. The ~50 that remain inline are the ones that interpolate values, plus a few that are
+not translations at all (text direction, the language toggle's own label).
 
 ## 7. Schema & migrations
 
-`db/migrations/0001_baseline.sql` is the **canonical, idempotent** schema; `0002_rate_limits.sql`
-adds the rate-limit table. Apply with **`npm run migrate`** (local/CI/deploy). Optionally apply
-at server boot via `RUN_MIGRATIONS_AT_BOOT=true` (default off).
+`db/migrations/0001_baseline.sql` is the **canonical, idempotent** schema; later numbered
+files add to it. Apply with **`npm run migrate`** (local/CI/deploy). Migrations also run
+**at server boot by default** — set `RUN_MIGRATIONS_AT_BOOT=false` to opt out.
 
-Historical/legacy SQL (`supabase/migrations/*`, `railway-migration.sql`) predates the runner;
-`db/migrations/` is the source of truth going forward. `ensure-schema.ts` still self-heals
-columns lazily so an un-migrated DB keeps working.
+`db/migrations/` is the **single source of truth** for schema. There used to be a second
+mechanism — `ensure-schema.ts` — that issued `CREATE TABLE`/`ALTER TABLE` lazily on request
+paths to self-heal un-migrated databases. It was removed (migration `0009`) because two
+sources of schema truth is exactly the drift problem the runner exists to solve, and the
+DDL ran on hot request paths. **Consequence: the schema must be migrated before the app
+serves traffic.** Boot migrations default to on so this holds automatically.
+
+Recent migrations worth knowing about:
+
+| Migration | What it does |
+| --- | --- |
+| `0008_per_entity_schedules` | Nullable schedule columns on `departments` / `employees` |
+| `0009_uniqueness_guards` | Adopts the last indexes the self-heal owned. **Dedupes first** — and refunds the leave charged by duplicate `tardiness_log` rows before removing them |
+| `0010_drop_money_columns` | Drops the dead payroll columns |
+| `0011_audit_log_indexes` | Indexes `audit_log` by `created_at` / `action` for server-side filtering |
+
+Historical/legacy SQL (`supabase/migrations/*`, `railway-migration.sql`) predates the runner
+and is kept for reference only.
 
 ## 8. Local development
 
@@ -126,7 +171,8 @@ Quality gates (also enforced in CI):
 ```bash
 npm run lint
 npx tsc --noEmit
-npm test            # vitest — unit tests for the money/leave/geo math
+npm test                  # vitest — pure logic: leave, tardiness penalty, geo, forecast, holidays
+npm run test:integration  # vitest against a REAL Postgres; skipped unless TEST_DATABASE_URL is set
 npx next build
 ```
 
@@ -137,12 +183,15 @@ npx next build
 - **`ADMIN_PASSWORD`** — bootstrap `admin` login; only usable while `admin_users` is empty
 - `APP_URL` / `ALLOWED_ORIGINS` — cross-origin allowlist for `/api/*`
 - `CRON_SECRET` — enables the scheduled automation endpoints
-- `RUN_MIGRATIONS_AT_BOOT` — apply migrations on startup (default false)
+- `RUN_MIGRATIONS_AT_BOOT` — apply migrations on startup (**default true**; set `false` to opt out)
 - `SMTP_HOST/PORT/USER/PASS`, `NOTIFY_EMAIL` — optional email notifications
 
 ## 10. Deploy checklist (Railway)
 
-1. `npm run migrate` against the database (or set `RUN_MIGRATIONS_AT_BOOT=true`).
+1. `npm run migrate` against the database (or rely on boot migrations, which are on by
+   default). This is **no longer optional** — there is no per-request self-heal to paper over
+   a schema that was never migrated. If `RUN_MIGRATIONS_AT_BOOT=false` is set in the
+   environment, run the migration step yourself before the new code serves traffic.
 2. Set env: `JWT_SECRET`, `ADMIN_PASSWORD`, `DATABASE_URL`, `CRON_SECRET` (+ `APP_URL`).
 3. GitHub repo secrets for the cron workflow: `CRON_SECRET` (same value) + `APP_URL`.
 4. First login as `admin` / `ADMIN_PASSWORD`, then create real admin users (Settings).

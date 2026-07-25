@@ -16,21 +16,10 @@ export async function authenticate(username: string, password: string) {
   const trimmedUser = username.trim().toLowerCase()
   const trimmedPass = password.trim()
 
-  // Ensure admin_users table exists. If the DB is unreachable this THROWS and the
-  // caller fails closed (401/500) — we never fall through to a bootstrap login on
-  // a DB error, which previously re-enabled a backdoor during transient outages.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS admin_users (
-      id SERIAL PRIMARY KEY,
-      username VARCHAR(100) UNIQUE NOT NULL,
-      password_hash VARCHAR(255) NOT NULL,
-      name VARCHAR(200) NOT NULL,
-      role VARCHAR(20) DEFAULT 'admin',
-      is_active BOOLEAN DEFAULT TRUE,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `)
-
+  // admin_users is created by db/migrations/0001_baseline.sql. If the DB is unreachable
+  // the SELECT below THROWS and the caller fails closed (401/500) — we never fall through
+  // to a bootstrap login on a DB error, which previously re-enabled a backdoor during
+  // transient outages.
   const { rows } = await pool.query(
     'SELECT id, username, password_hash, name, role FROM admin_users WHERE username = $1 AND is_active = true',
     [trimmedUser]

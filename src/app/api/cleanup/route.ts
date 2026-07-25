@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
-import { ensureUniqueConstraints } from '@/lib/ensure-schema'
 import { LEAVE_TYPE_ANNUAL } from '@/lib/constants'
 
 export async function POST(request: Request) {
@@ -67,7 +66,6 @@ export async function POST(request: Request) {
     await client.query('COMMIT')
 
     // 5. Lock in uniqueness now that duplicates are gone (best-effort, outside the txn).
-    await ensureUniqueConstraints().catch(() => {})
 
     const { rows: finalTypes } = await pool.query('SELECT COUNT(*) as cnt FROM leave_types')
     const { rows: finalHols } = await pool.query('SELECT COUNT(*) as cnt FROM holidays')

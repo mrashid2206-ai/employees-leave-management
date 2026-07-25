@@ -15,7 +15,7 @@ import { QueryError } from '@/components/query-error'
 // requested times to the attendance record (hours/overtime recomputed server-side).
 export default function CorrectionsPage() {
   const t = useT()
-  const { lang, dir } = useLanguage()
+  const { dir } = useLanguage()
   const queryClient = useQueryClient()
 
   const { data: corrections = [], isError, refetch } = useQuery({ queryKey: ['corrections'], queryFn: getCorrections })
@@ -60,7 +60,7 @@ export default function CorrectionsPage() {
                   <TableHead className="text-center">{t('date')}</TableHead>
                   <TableHead className="text-center">{t('checkIn')}</TableHead>
                   <TableHead className="text-center">{t('checkOut')}</TableHead>
-                  <TableHead className="text-start">{lang === 'ar' ? 'السبب' : 'Reason'}</TableHead>
+                  <TableHead className="text-start">{t('reason')}</TableHead>
                   <TableHead className="text-center">{t('status')}</TableHead>
                   <TableHead className="text-center w-32">{t('actions')}</TableHead>
                 </TableRow>

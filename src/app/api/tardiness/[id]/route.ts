@@ -1,14 +1,12 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
-import { ensureTardinessPenaltyColumns } from '@/lib/ensure-schema'
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
   const { id } = await params
 
-  await ensureTardinessPenaltyColumns().catch(() => {})
 
   // Refund the leave that this tardiness deducted (if any), atomically with the delete.
   const client = await pool.connect()

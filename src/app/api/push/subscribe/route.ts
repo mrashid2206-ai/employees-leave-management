@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyEmployee, unauthorized } from '@/lib/api-auth'
-import { ensurePushSubscriptionsTable } from '@/lib/ensure-schema'
 import { pushPublicKey } from '@/lib/push'
 
 // The browser needs the VAPID public key to subscribe; it is not a secret.
@@ -22,7 +21,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid subscription' }, { status: 400 })
   }
 
-  await ensurePushSubscriptionsTable()
   await pool.query(
     `INSERT INTO push_subscriptions (employee_id, endpoint, p256dh, auth)
      VALUES ($1, $2, $3, $4)

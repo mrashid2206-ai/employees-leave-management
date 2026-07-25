@@ -158,7 +158,7 @@ export default function ReportsPage() {
               [t('remaining')]: emp.remaining,
               [t('tardinessHHMM') + ' (' + t('minutes') + ')']: emp.tardMinutes,
             }))
-            exportToExcel(data, 'leave_report', lang === 'ar' ? 'تقرير الإجازات' : 'Leave Report')
+            exportToExcel(data, 'leave_report', t('leaveReport'))
           }}>
             <FileSpreadsheet className="h-4 w-4 ml-2" />
             {t('exportExcel')}

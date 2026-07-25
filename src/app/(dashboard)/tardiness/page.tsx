@@ -70,12 +70,22 @@ export default function TardinessPage() {
 
   const createMutation = useMutation({
     mutationFn: createBulkTardiness,
-    onSuccess: () => {
+    onSuccess: (records, submitted) => {
       queryClient.invalidateQueries({ queryKey: ['tardiness'] })
+      queryClient.invalidateQueries({ queryKey: ['employees'] }) // lateness costs leave
       setOpen(false)
       setSelectedEmployees([])
       setForm({ date: '', time: defaultArrivalTime, notes: '' })
-      toast.success(t('addedSuccess'))
+      // The server recomputes lateness per employee's own schedule, so some of the
+      // selected people may turn out to have been on time.
+      const skipped = submitted.length - (records?.length ?? 0)
+      if (skipped > 0) {
+        toast.success(lang === 'ar'
+          ? `تم التسجيل — تم تجاهل ${skipped} (لم يتأخروا حسب دوامهم)`
+          : `Recorded — ${skipped} skipped (on time for their own schedule)`)
+      } else {
+        toast.success(t('addedSuccess'))
+      }
     },
     onError: () => toast.error(t('error')),
   })
@@ -192,10 +202,10 @@ export default function TardinessPage() {
       <div className="flex flex-wrap gap-3">
         <Select value={filterYear} onValueChange={v => { setFilterYear(v ?? 'all'); setFilterDay('all') }}>
           <SelectTrigger className="w-32">
-            <SelectValue placeholder={lang === 'ar' ? 'السنة' : 'Year'} />
+            <SelectValue placeholder={t('year')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{lang === 'ar' ? 'كل السنوات' : 'All Years'}</SelectItem>
+            <SelectItem value="all">{t('allYears')}</SelectItem>
             {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(y => (
               <SelectItem key={y} value={String(y)}>{y}</SelectItem>
             ))}
@@ -203,10 +213,10 @@ export default function TardinessPage() {
         </Select>
         <Select value={filterMonth} onValueChange={v => { setFilterMonth(v ?? 'all'); setFilterDay('all') }}>
           <SelectTrigger className="w-40">
-            <SelectValue placeholder={lang === 'ar' ? 'الشهر' : 'Month'} />
+            <SelectValue placeholder={t('month')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{lang === 'ar' ? 'كل الشهور' : 'All Months'}</SelectItem>
+            <SelectItem value="all">{t('allMonths')}</SelectItem>
             {monthNames.map((m, i) => (
               <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
             ))}
@@ -214,10 +224,10 @@ export default function TardinessPage() {
         </Select>
         <Select value={filterDay} onValueChange={v => setFilterDay(v ?? 'all')}>
           <SelectTrigger className="w-32">
-            <SelectValue placeholder={lang === 'ar' ? 'اليوم' : 'Day'} />
+            <SelectValue placeholder={t('day')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{lang === 'ar' ? 'كل الأيام' : 'All Days'}</SelectItem>
+            <SelectItem value="all">{t('allDays')}</SelectItem>
             {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => (
               <SelectItem key={d} value={String(d)}>{d}</SelectItem>
             ))}
@@ -236,7 +246,7 @@ export default function TardinessPage() {
                   <TableHead className="text-center">{t('date')}</TableHead>
                   <TableHead className="text-center">{t('arrivalTime')}</TableHead>
                   <TableHead className="text-center">{t('lateMinutes')}</TableHead>
-                  <TableHead className="text-center">{lang === 'ar' ? 'خصم الإجازة' : 'Leave Deducted'}</TableHead>
+                  <TableHead className="text-center">{t('leaveDeducted2')}</TableHead>
                   <TableHead className="text-start">{t('notes')}</TableHead>
                   <TableHead className="text-center w-16">{t('delete')}</TableHead>
                 </TableRow>

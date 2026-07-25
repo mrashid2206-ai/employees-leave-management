@@ -50,7 +50,7 @@ interface CorrectionDialogProps {
  */
 function CorrectionDialog({ empId, record, onClose }: CorrectionDialogProps) {
   const t = useT()
-  const { lang, dir } = useLanguage()
+  const { dir } = useLanguage()
   const [checkIn, setCheckIn] = useState('')
   const [checkOut, setCheckOut] = useState('')
   const [reason, setReason] = useState('')
@@ -58,11 +58,11 @@ function CorrectionDialog({ empId, record, onClose }: CorrectionDialogProps) {
 
   async function handleSubmit() {
     if (!reason.trim()) {
-      toast.error(lang === 'ar' ? 'يرجى إدخال سبب التصحيح' : 'Please enter a reason for the correction')
+      toast.error(t('pleaseEnterAReasonFor'))
       return
     }
     if (!checkIn && !checkOut) {
-      toast.error(lang === 'ar' ? 'أدخل وقت الحضور أو الانصراف المصحّح' : 'Enter a corrected check-in or check-out time')
+      toast.error(t('enterACorrectedCheckIn'))
       return
     }
     try {
@@ -72,7 +72,7 @@ function CorrectionDialog({ empId, record, onClose }: CorrectionDialogProps) {
         requested_check_out: checkOut || null,
         reason: reason.trim(),
       })
-      toast.success(lang === 'ar' ? 'تم إرسال طلب التصحيح — بانتظار موافقة المدير' : 'Correction request sent — waiting for admin approval')
+      toast.success(t('correctionRequestSentWaitingFor'))
       onClose()
     } catch (err) {
       toast.error(apiErrorPayload(err).error || t('error'))
@@ -83,11 +83,11 @@ function CorrectionDialog({ empId, record, onClose }: CorrectionDialogProps) {
     <Dialog open onOpenChange={open => { if (!open) onClose() }}>
       <DialogContent className="max-w-sm" dir={dir}>
         <DialogHeader>
-          <DialogTitle>{lang === 'ar' ? 'طلب تصحيح الحضور' : 'Request Attendance Correction'}</DialogTitle>
+          <DialogTitle>{t('requestAttendanceCorrection')}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            {lang === 'ar' ? 'المسجّل حالياً بتاريخ' : 'Currently recorded on'}{' '}
+            {t('currentlyRecordedOn')}{' '}
             <span className="font-mono">{record.date}</span>:{' '}
             <span className="font-mono">{record.check_in?.slice(0, 5) || '--:--'}</span>
             {' → '}
@@ -95,28 +95,28 @@ function CorrectionDialog({ empId, record, onClose }: CorrectionDialogProps) {
           </p>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-xs">{lang === 'ar' ? 'الحضور المصحّح' : 'Corrected check-in'}</Label>
+              <Label className="text-xs">{t('correctedCheckIn')}</Label>
               <Input type="time" value={checkIn} onChange={e => setCheckIn(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">{lang === 'ar' ? 'الانصراف المصحّح' : 'Corrected check-out'}</Label>
+              <Label className="text-xs">{t('correctedCheckOut')}</Label>
               <Input type="time" value={checkOut} onChange={e => setCheckOut(e.target.value)} />
             </div>
           </div>
           <div>
-            <Label className="text-xs">{lang === 'ar' ? 'السبب' : 'Reason'} *</Label>
+            <Label className="text-xs">{t('reason')} *</Label>
             <Textarea
               value={reason}
               onChange={e => setReason(e.target.value)}
-              placeholder={lang === 'ar' ? 'مثال: نسيت تسجيل الانصراف' : 'e.g. I forgot to check out'}
+              placeholder={t('eGIForgotTo')}
               rows={3}
             />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>{lang === 'ar' ? 'إلغاء' : 'Cancel'}</Button>
+          <Button variant="outline" onClick={onClose}>{t('cancel')}</Button>
           <Button onClick={handleSubmit} disabled={createCorrection.isPending}>
-            {createCorrection.isPending ? '...' : (lang === 'ar' ? 'إرسال الطلب' : 'Send Request')}
+            {createCorrection.isPending ? '...' : (t('sendRequest'))}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -130,7 +130,6 @@ function CorrectionDialog({ empId, record, onClose }: CorrectionDialogProps) {
 
 export function ProfileTab({ empId }: ProfileTabProps) {
   const t = useT()
-  const { lang } = useLanguage()
 
   const [recordsSubTab, setRecordsSubTab] = useState<RecordsSubTab>('attendance')
   const [correctionRecord, setCorrectionRecord] = useState<AttendanceRecord | null>(null)
@@ -149,14 +148,14 @@ export function ProfileTab({ empId }: ProfileTabProps) {
       toast.error(t('fillRequired')); return
     }
     if (pwForm.new_password !== pwForm.confirm_password) {
-      toast.error(lang === 'ar' ? 'كلمة المرور غير متطابقة' : 'Passwords do not match'); return
+      toast.error(t('passwordsDoNotMatch')); return
     }
     if (pwForm.new_password.length < 6) {
-      toast.error(lang === 'ar' ? 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' : 'Password must be at least 6 characters'); return
+      toast.error(t('passwordMustBeAtLeast')); return
     }
     try {
       await changePassword.mutateAsync({ current_password: pwForm.current_password, new_password: pwForm.new_password })
-      toast.success(lang === 'ar' ? 'تم تغيير كلمة المرور بنجاح' : 'Password changed successfully')
+      toast.success(t('passwordChangedSuccessfully'))
       setPwForm({ current_password: '', new_password: '', confirm_password: '' })
     } catch (err) {
       toast.error(apiErrorPayload(err).error || t('error'))
@@ -249,7 +248,7 @@ export function ProfileTab({ empId }: ProfileTabProps) {
           onClick={() => setRecordsSubTab('permissions')}
           className="flex-1"
         >
-          {lang === 'ar' ? 'الأذونات' : 'Permissions'}
+          {t('permissions2')}
         </Button>
       </div>
 
@@ -273,7 +272,7 @@ export function ProfileTab({ empId }: ProfileTabProps) {
                     <div className="flex items-center gap-2">
                       {rec.is_holiday_work && (
                         <Badge className="bg-purple-500/10 text-purple-500 border-0 text-[10px]">
-                          {lang === 'ar' ? 'عمل في عطلة' : 'Holiday'}
+                          {t('holiday3')}
                         </Badge>
                       )}
                       <Button
@@ -283,7 +282,7 @@ export function ProfileTab({ empId }: ProfileTabProps) {
                         onClick={() => setCorrectionRecord(rec)}
                       >
                         <PencilLine className="h-3 w-3 me-1" />
-                        {lang === 'ar' ? 'طلب تصحيح' : 'Request correction'}
+                        {t('requestCorrection')}
                       </Button>
                     </div>
                   </div>
@@ -315,7 +314,7 @@ export function ProfileTab({ empId }: ProfileTabProps) {
           {totalDeducted > 0 && (
             <Card className="border-0 shadow-md ring-1 ring-amber-500/30">
               <CardContent className="p-3 flex items-center justify-between text-sm">
-                <span>{lang === 'ar' ? 'إجمالي المخصوم من رصيد إجازتك بسبب التأخير' : 'Total leave deducted for lateness'}</span>
+                <span>{t('totalLeaveDeductedForLateness')}</span>
                 <Badge className="bg-amber-500/10 text-amber-600 border-0 font-mono">
                   -{totalDeducted.toFixed(3)} {t('days')}
                 </Badge>
@@ -346,7 +345,7 @@ export function ProfileTab({ empId }: ProfileTabProps) {
                       </Badge>
                       {(rec.leave_deducted || 0) > 0 && (
                         <p className="text-[11px] font-mono text-amber-600">
-                          -{(rec.leave_deducted || 0).toFixed(3)} {lang === 'ar' ? 'يوم إجازة' : 'leave day'}
+                          -{(rec.leave_deducted || 0).toFixed(3)} {t('leaveDay')}
                         </p>
                       )}
                     </div>
@@ -364,11 +363,11 @@ export function ProfileTab({ empId }: ProfileTabProps) {
       {/* Permissions Records */}
       {recordsSubTab === 'permissions' && (
         <div className="space-y-3">
-          <h2 className="font-bold text-lg">{lang === 'ar' ? 'أذونات الخروج' : 'My Permissions'} ({myPermissions.length})</h2>
+          <h2 className="font-bold text-lg">{t('myPermissions')} ({myPermissions.length})</h2>
           {myPermissions.length === 0 ? (
             <Card className="border-0 shadow-md">
               <CardContent className="p-8 text-center text-muted-foreground text-sm">
-                {lang === 'ar' ? 'لا توجد أذونات' : 'No permissions'}
+                {t('noPermissions')}
               </CardContent>
             </Card>
           ) : (
@@ -387,15 +386,15 @@ export function ProfileTab({ empId }: ProfileTabProps) {
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center">
                     <div className="p-1.5 rounded bg-amber-500/10">
-                      <p className="text-[10px] text-muted-foreground">{lang === 'ar' ? 'خروج' : 'Left'}</p>
+                      <p className="text-[10px] text-muted-foreground">{t('left')}</p>
                       <p className="text-xs font-bold text-amber-500 font-mono">{p.leave_time?.slice(0, 5)}</p>
                     </div>
                     <div className="p-1.5 rounded bg-emerald-500/10">
-                      <p className="text-[10px] text-muted-foreground">{lang === 'ar' ? 'عودة' : 'Return'}</p>
+                      <p className="text-[10px] text-muted-foreground">{t('return')}</p>
                       <p className="text-xs font-bold text-emerald-500 font-mono">{p.return_time?.slice(0, 5) || '--:--'}</p>
                     </div>
                     <div className="p-1.5 rounded bg-blue-500/10">
-                      <p className="text-[10px] text-muted-foreground">{lang === 'ar' ? 'المدة' : 'Duration'}</p>
+                      <p className="text-[10px] text-muted-foreground">{t('duration')}</p>
                       <p className="text-xs font-bold text-blue-500 font-mono">
                         {p.return_time && p.leave_time ? (() => {
                           const [lh, lm] = p.leave_time.split(':').map(Number)
@@ -419,28 +418,28 @@ export function ProfileTab({ empId }: ProfileTabProps) {
       {/* Change Password Card */}
       <Card className="border-0 shadow-md">
         <CardContent className="p-5">
-          <h2 className="font-bold text-lg mb-4">{lang === 'ar' ? 'تغيير كلمة المرور' : 'Change Password'}</h2>
+          <h2 className="font-bold text-lg mb-4">{t('changePassword')}</h2>
           <div className="space-y-3">
             <Input
               type="password"
-              placeholder={lang === 'ar' ? 'كلمة المرور الحالية' : 'Current password'}
+              placeholder={t('currentPassword')}
               value={pwForm.current_password}
               onChange={e => setPwForm(f => ({ ...f, current_password: e.target.value }))}
             />
             <Input
               type="password"
-              placeholder={lang === 'ar' ? 'كلمة المرور الجديدة' : 'New password'}
+              placeholder={t('newPassword')}
               value={pwForm.new_password}
               onChange={e => setPwForm(f => ({ ...f, new_password: e.target.value }))}
             />
             <Input
               type="password"
-              placeholder={lang === 'ar' ? 'تأكيد كلمة المرور' : 'Confirm password'}
+              placeholder={t('confirmPassword')}
               value={pwForm.confirm_password}
               onChange={e => setPwForm(f => ({ ...f, confirm_password: e.target.value }))}
             />
             <Button className="w-full" disabled={changePassword.isPending} onClick={handleChangePassword}>
-              {changePassword.isPending ? '...' : (lang === 'ar' ? 'تغيير كلمة المرور' : 'Change Password')}
+              {changePassword.isPending ? '...' : (t('changePassword'))}
             </Button>
           </div>
         </CardContent>

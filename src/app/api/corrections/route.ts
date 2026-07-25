@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAnyAuth, unauthorized } from '@/lib/api-auth'
-import { ensureCorrectionsTable } from '@/lib/ensure-schema'
 import { parseBody } from '@/server/validation'
 import { correctionCreateSchema } from '@/server/schemas'
 import { respond } from '@/server/result'
@@ -11,7 +10,6 @@ export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
 
-  await ensureCorrectionsTable().catch(() => {})
 
   // Employees only ever see their own requests; admins see the whole queue.
   const scoped = user.role === 'employee'

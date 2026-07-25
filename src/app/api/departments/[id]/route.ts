@@ -6,10 +6,25 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
   const { id } = await params
-  const { name } = await request.json()
+  const body = await request.json()
+
+  // Name plus the optional per-department work schedule. A NULL schedule field means
+  // "inherit the global setting", which is why empty values are stored as NULL.
+  const allowed = ['name', 'work_start_time', 'work_days', 'work_hours_per_day']
+  const fields = Object.keys(body).filter(k => allowed.includes(k))
+  if (fields.length === 0) return NextResponse.json({ error: 'No valid fields' }, { status: 400 })
+
+  const sets = fields.map((f, i) => `${f} = $${i + 2}`).join(', ')
+  const values = fields.map(f => {
+    const v = body[f]
+    if (f === 'name') return v
+    return v === '' || v === undefined ? null : v
+  })
+
   const { rows } = await pool.query(
-    'UPDATE departments SET name = $1 WHERE id = $2 RETURNING *',
-    [name, id]
+    `UPDATE departments SET ${sets} WHERE id = $1
+     RETURNING id, name, created_at, work_start_time::text AS work_start_time, work_days, work_hours_per_day`,
+    [id, ...values]
   )
   if (rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json(rows[0])

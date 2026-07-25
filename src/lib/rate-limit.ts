@@ -1,5 +1,4 @@
 import pool from '@/lib/db'
-import { ensureRateLimitTable } from '@/lib/ensure-schema'
 import { logger } from '@/lib/log'
 
 // Persistent, cross-instance rate limiting backed by Postgres so counters survive
@@ -25,7 +24,6 @@ export async function checkRateLimit(
   windowMs: number = 900000
 ): Promise<{ allowed: boolean; remaining: number }> {
   try {
-    await ensureRateLimitTable()
     const { rows } = await pool.query(
       `INSERT INTO rate_limits (key, count, reset_at)
        VALUES ($1, 1, NOW() + ($2::bigint || ' milliseconds')::interval)

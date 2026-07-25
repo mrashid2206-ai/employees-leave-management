@@ -5,7 +5,11 @@ import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
-  const { rows } = await pool.query('SELECT * FROM departments ORDER BY id')
+  const { rows } = await pool.query(
+    `SELECT id, name, created_at, work_start_time::text AS work_start_time,
+            work_days, work_hours_per_day
+       FROM departments ORDER BY id`
+  )
   return NextResponse.json(rows)
 }
 

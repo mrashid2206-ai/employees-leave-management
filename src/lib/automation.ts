@@ -1,12 +1,12 @@
 import pool, { omanToday, omanYesterday } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { logger } from '@/lib/log'
-import { ensureFractionalLeaveColumns, ensureSettingsColumns, ensureTardinessPenaltyColumns } from '@/lib/ensure-schema'
 import { LEAVE_TYPE_ANNUAL, TARDINESS_GRACE_MINUTES, AUTO_ABSENCE_LEAVE_NOTE, TARDINESS_DEDUCTS_LEAVE, TARDINESS_PENALTY_GRACE_MINUTES } from '@/lib/constants'
 import { tardinessLeaveDeduction } from '@/lib/tardiness-penalty'
 import { notifyEmployee } from '@/lib/employee-notify'
 import { actorLabel, type Actor as ActorType } from '@/server/result'
-import { computeWorkHours, computeOvertime } from '@/lib/attendance-calc'
+import { computeWorkHours, computeOvertime, isNonWorkingWeekday } from '@/lib/attendance-calc'
+import { resolveScheduleMap, globalSchedule, scheduleEndTime } from '@/lib/schedule'
 
 // Single shared Actor shape (see src/server/result.ts) so services, routes and the
 // automation jobs all describe "who did this" the same way.
@@ -30,10 +30,6 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
   // flag everyone absent.
   const processDate = date || omanYesterday()
   const dayIsComplete = processDate < omanToday()
-
-  await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_tardiness_unique ON tardiness_log (employee_id, date)').catch(() => {})
-  await ensureFractionalLeaveColumns().catch(() => {})
-  await ensureTardinessPenaltyColumns().catch(() => {})
 
   const { rows: annualType } = await pool.query(
     'SELECT id FROM leave_types WHERE name_en = $1 ORDER BY id LIMIT 1',
@@ -67,22 +63,21 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
   const { rows: holidays } = await pool.query('SELECT id FROM holidays WHERE date = $1', [processDate])
   const isHoliday = holidays.length > 0
 
-  const { rows: settingsRows } = await pool.query('SELECT work_days, work_start_time::text as work_start_time, work_hours_per_day FROM settings ORDER BY id LIMIT 1')
-  const workDays = settingsRows[0]?.work_days?.split(',').map(Number) || [0, 1, 2, 3, 4]
-  const workStartTime = settingsRows[0]?.work_start_time || '08:00'
-  const [startH, startM] = workStartTime.split(':').map(Number)
-  const workStartMinutes = startH * 60 + startM
-  const workHoursDay = settingsRows[0]?.work_hours_per_day || 8
-  // Official end of day = start + work hours (previously hardcoded a :30 end minute,
-  // which was only correct for a 07:30 start).
-  const endTotalMinutes = workStartMinutes + workHoursDay * 60
-  const workEndTime = `${String(Math.floor(endTotalMinutes / 60) % 24).padStart(2, '0')}:${String(endTotalMinutes % 60).padStart(2, '0')}:00`
+  // Each employee's effective schedule (employee -> department -> global). Working days,
+  // start time and day length can all differ, so every per-person decision below —
+  // "is this their weekend?", "were they late?", "when does their day end?" — uses theirs.
+  const schedules = await resolveScheduleMap()
+  const fallbackSchedule = await globalSchedule()
+  const scheduleFor = (id: number) => schedules.get(id) ?? fallbackSchedule
 
-  const dayOfWeek = new Date(`${processDate}T00:00:00Z`).getUTCDay()
-  const isWeekend = !workDays.includes(dayOfWeek)
-
-  if (!isHoliday && !isWeekend) {
+  if (!isHoliday) {
     for (const emp of employees) {
+      const schedule = scheduleFor(emp.id)
+      const workStartMinutes = schedule.workStartMinutes
+      const workHoursDay = schedule.workHoursPerDay
+      // Not a working day for THIS employee — nothing to mark or charge.
+      if (isNonWorkingWeekday(schedule.workDays, processDate)) continue
+
       if (attendedMap.has(emp.id) && attendedMap.get(emp.id)?.check_in) {
         // present — only tardiness below
       } else if (onLeaveIds.has(emp.id)) {
@@ -138,15 +133,14 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
               [emp.id, processDate]
             )
             if (existing.length === 0) {
-              const hoursDecimal = Math.round((minutesLate / 60) * 100000) / 100000
               const deduction = TARDINESS_DEDUCTS_LEAVE ? tardinessLeaveDeduction(minutesLate, workHoursDay, TARDINESS_PENALTY_GRACE_MINUTES) : 0
               const tc = await pool.connect()
               try {
                 await tc.query('BEGIN')
                 await tc.query(`
-                  INSERT INTO tardiness_log (employee_id, date, time, minutes_late, hours_late_decimal, notes, leave_deducted)
-                  VALUES ($1, $2, $3, $4, $5, 'Auto-generated from attendance', $6)
-                `, [emp.id, processDate, record.check_in, minutesLate, hoursDecimal, deduction])
+                  INSERT INTO tardiness_log (employee_id, date, time, minutes_late, notes, leave_deducted)
+                  VALUES ($1, $2, $3, $4, 'Auto-generated from attendance', $5)
+                `, [emp.id, processDate, record.check_in, minutesLate, deduction])
                 if (deduction > 0) {
                   await tc.query('UPDATE employees SET leave_balance = leave_balance - $1 WHERE id = $2', [deduction, emp.id])
                 }
@@ -182,19 +176,22 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
     [omanToday()]
   )
   for (const o of openCheckouts) {
-    const autoHours = computeWorkHours(o.check_in, workEndTime)
+    // Close at the end of THAT employee's working day, not a single global time.
+    const oSchedule = scheduleFor(o.employee_id)
+    const oEndTime = scheduleEndTime(oSchedule)
+    const autoHours = computeWorkHours(o.check_in, oEndTime)
     if (autoHours !== null) {
-      const autoOvertime = computeOvertime(autoHours, workHoursDay, !!o.is_holiday_work)
+      const autoOvertime = computeOvertime(autoHours, oSchedule.workHoursPerDay, !!o.is_holiday_work)
       await pool.query(
         `UPDATE attendance SET check_out = $1, work_hours = $2, overtime_hours = $3,
            notes = COALESCE(notes, '') || ' [Auto checkout]'
          WHERE employee_id = $4 AND date = $5 AND check_out IS NULL`,
-        [workEndTime, autoHours, autoOvertime, o.employee_id, o.date]
+        [oEndTime, autoHours, autoOvertime, o.employee_id, o.date]
       )
       await notifyEmployee(
         o.employee_id,
-        `You forgot to check out on ${o.date}; your check-out was auto-recorded at ${workEndTime.slice(0, 5)}. Contact admin if this is wrong.`,
-        `نسيت تسجيل الانصراف بتاريخ ${o.date}؛ تم تسجيل انصرافك تلقائياً الساعة ${workEndTime.slice(0, 5)}. تواصل مع المدير إذا كان ذلك غير صحيح.`
+        `You forgot to check out on ${o.date}; your check-out was auto-recorded at ${oEndTime.slice(0, 5)}. Contact admin if this is wrong.`,
+        `نسيت تسجيل الانصراف بتاريخ ${o.date}؛ تم تسجيل انصرافك تلقائياً الساعة ${oEndTime.slice(0, 5)}. تواصل مع المدير إذا كان ذلك غير صحيح.`
       )
       results.missingCheckout++
     } else {
@@ -208,13 +205,21 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
     }
   }
 
+  // Close permissions the employee forgot to return from, at their own end-of-day.
   let permissionsClosed = 0
   try {
-    const { rowCount } = await pool.query(
-      `UPDATE permissions SET return_time = $2 WHERE date = $1 AND return_time IS NULL AND status = 'approved'`,
-      [processDate, workEndTime]
+    const { rows: openPerms } = await pool.query(
+      `SELECT id, employee_id FROM permissions
+        WHERE date = $1 AND return_time IS NULL AND status = 'approved'`,
+      [processDate]
     )
-    permissionsClosed = rowCount || 0
+    for (const p of openPerms) {
+      await pool.query('UPDATE permissions SET return_time = $1 WHERE id = $2', [
+        scheduleEndTime(scheduleFor(p.employee_id)),
+        p.id,
+      ])
+      permissionsClosed++
+    }
   } catch {} // Table might not exist yet
 
   await logAudit('daily_process', actorLabel(actor), actor.role, `Daily process (${processDate}): ${results.absentMarked} absent, ${results.tardinessCreated} tardiness, ${results.missingCheckout} missing checkout, ${permissionsClosed} permissions auto-closed`)
@@ -230,7 +235,6 @@ export type YearlyResult =
 // When not forced (cron), it only fires once the fiscal year has actually ended,
 // so it is safe to call daily — it no-ops every day until year_end passes.
 export async function runYearlyReset(actor: ActorType, opts: { force?: boolean } = {}): Promise<YearlyResult> {
-  await ensureSettingsColumns().catch(() => {})
 
   const client = await pool.connect()
   try {

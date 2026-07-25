@@ -6,21 +6,6 @@ export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
 
-  // Ensure table exists
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS permissions (
-      id SERIAL PRIMARY KEY,
-      employee_id INT NOT NULL REFERENCES employees(id),
-      date DATE NOT NULL,
-      leave_time TIME NOT NULL,
-      return_time TIME,
-      reason TEXT,
-      status VARCHAR(20) DEFAULT 'pending',
-      approved_by VARCHAR(100),
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `).catch(() => {})
-
   const { searchParams } = new URL(request.url)
   const employeeId = searchParams.get('employee_id')
   const date = searchParams.get('date')
@@ -63,21 +48,6 @@ export async function POST(request: Request) {
 
   // Employees can only create for themselves
   if (user.role === 'employee' && user.id !== employee_id) return forbidden()
-
-  // Ensure table exists
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS permissions (
-      id SERIAL PRIMARY KEY,
-      employee_id INT NOT NULL REFERENCES employees(id),
-      date DATE NOT NULL,
-      leave_time TIME NOT NULL,
-      return_time TIME,
-      reason TEXT,
-      status VARCHAR(20) DEFAULT 'pending',
-      approved_by VARCHAR(100),
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `).catch(() => {})
 
   const status = user.role === 'admin' ? 'approved' : 'pending'
 

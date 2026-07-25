@@ -7,18 +7,17 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { CalendarDays, CheckCircle, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage, useT } from '@/lib/language-context'
 import {
   apiErrorPayload,
-  useEmpInfo,
   useLeaveTypes,
   useSubmitLeave,
   useWorkingDays,
 } from '../_hooks/use-portal'
+import { LeaveForecastCard } from './leave-forecast-card'
 
 interface LeaveTabProps {
   empId?: number
@@ -49,7 +48,6 @@ export function LeaveTab({ empId, onGoToRequests }: LeaveTabProps) {
   const [leaveForm, setLeaveForm] = useState<LeaveForm>(EMPTY_FORM)
 
   const { data: leaveTypes = [] } = useLeaveTypes()
-  const { data: empInfo } = useEmpInfo(empId)
   const submitLeave = useSubmitLeave(empId)
 
   const leaveDays = calculateDaysCount(leaveForm.start_date, leaveForm.end_date)
@@ -99,17 +97,9 @@ export function LeaveTab({ empId, onGoToRequests }: LeaveTabProps) {
         </Card>
       ) : (
         <>
-          {/* Leave Balance Indicator */}
-          {!!empId && (
-            <Card className="border-0 shadow-md bg-primary/5">
-              <CardContent className="p-3 flex items-center justify-between">
-                <span className="text-sm">{lang === 'ar' ? 'رصيدك المتبقي' : 'Your Balance'}</span>
-                <Badge className="bg-primary/10 text-primary border-0 text-sm font-bold">
-                  {empInfo?.remaining ?? '...'} {t('days')}
-                </Badge>
-              </CardContent>
-            </Card>
-          )}
+          {/* Balance in context: what is left, what is committed, and what expires at
+              the yearly reset — shown right where leave is requested. */}
+          {!!empId && <LeaveForecastCard empId={empId} />}
           <Card className="border-0 shadow-md">
             <CardContent className="p-5">
               <h2 className="font-bold text-lg mb-4">{t('applyLeave')}</h2>
@@ -160,7 +150,7 @@ export function LeaveTab({ empId, onGoToRequests }: LeaveTabProps) {
                       onCheckedChange={(checked) => setLeaveForm(f => ({ ...f, is_half_day: !!checked }))}
                     />
                     <Label htmlFor="half-day-emp" className="text-sm">
-                      {lang === 'ar' ? 'نصف يوم' : 'Half Day'}
+                      {t('halfDay')}
                     </Label>
                   </div>
                 )}
@@ -171,7 +161,7 @@ export function LeaveTab({ empId, onGoToRequests }: LeaveTabProps) {
                       {isHalfDay ? 0.5 : (workingDaysInfo ? workingDaysInfo.workingDays : leaveDays)} {t('days')}
                       {workingDaysInfo && workingDaysInfo.workingDays < leaveDays && (
                         <span className="text-xs text-muted-foreground ml-1">
-                          ({lang === 'ar' ? 'أيام عمل فقط' : 'working days only'})
+                          ({t('workingDaysOnly')})
                         </span>
                       )}
                     </span>
