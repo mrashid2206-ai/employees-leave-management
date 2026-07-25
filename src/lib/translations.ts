@@ -121,8 +121,6 @@ export const translations = {
   yearEnd: { ar: 'نهاية السنة', en: 'Year End' },
   annualBalance: { ar: 'رصيد الإجازات السنوي', en: 'Annual Leave Balance' },
   deductionPerHour: { ar: 'الخصم لكل ساعة تأخير', en: 'Deduction Per Hour' },
-  currency: { ar: 'العملة', en: 'Currency' },
-  currencySymbol: { ar: 'رمز العملة', en: 'Currency Symbol' },
   workHoursPerDay: { ar: 'ساعات العمل في اليوم', en: 'Work Hours Per Day' },
   maxAbsent: { ar: 'الحد الأقصى للغياب في نفس القسم', en: 'Max Absent Same Dept' },
   saveSettings: { ar: 'حفظ الإعدادات', en: 'Save Settings' },

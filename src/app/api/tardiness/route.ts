@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   const scoped = user.role === 'employee'
   const { rows } = await pool.query(`
     SELECT t.id, t.employee_id, t.date::text as date, t.time::text as time,
-      t.minutes_late, t.hours_late_decimal, COALESCE(t.leave_deducted, 0)::float8 as leave_deducted, t.notes, t.created_at, t.updated_at,
+      t.minutes_late, COALESCE(t.leave_deducted, 0)::float8 as leave_deducted, t.notes, t.created_at, t.updated_at,
       json_build_object('id', e.id, 'name', e.name, 'department_id', e.department_id) as employee
     FROM tardiness_log t
     LEFT JOIN employees e ON t.employee_id = e.id
@@ -57,14 +57,13 @@ export async function POST(request: Request) {
         continue
       }
 
-      const hoursLateDecimal = Math.round((minutesLate / 60) * 100000) / 100000
       const deduction = TARDINESS_DEDUCTS_LEAVE
         ? tardinessLeaveDeduction(minutesLate, schedule.workHoursPerDay, TARDINESS_PENALTY_GRACE_MINUTES)
         : 0
       const { rows } = await client.query(
-        `INSERT INTO tardiness_log (employee_id, date, time, minutes_late, hours_late_decimal, notes, leave_deducted)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [r.employee_id, r.date, r.time, minutesLate, hoursLateDecimal, r.notes || null, deduction]
+        `INSERT INTO tardiness_log (employee_id, date, time, minutes_late, notes, leave_deducted)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [r.employee_id, r.date, r.time, minutesLate, r.notes || null, deduction]
       )
       if (deduction > 0) {
         // Allow negative balance (penalty is never lost) per policy.

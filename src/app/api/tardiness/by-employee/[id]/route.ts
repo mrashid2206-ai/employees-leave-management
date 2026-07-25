@@ -13,7 +13,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const { rows } = await pool.query(`
     SELECT id, employee_id, date::text as date, time::text as time,
-      minutes_late, hours_late_decimal, COALESCE(leave_deducted, 0)::float8 as leave_deducted,
+      minutes_late, COALESCE(leave_deducted, 0)::float8 as leave_deducted,
       notes, created_at, updated_at
     FROM tardiness_log WHERE employee_id = $1 ORDER BY date DESC
   `, [id])

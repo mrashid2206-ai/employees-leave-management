@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 
-const SELECT_COLS = `id, year_start::text as year_start, year_end::text as year_end, annual_leave_balance, deduction_per_hour, currency, currency_symbol, work_hours_per_day, max_absent_same_dept, work_start_time::text as work_start_time, work_days, office_lat, office_lng, office_radius, office_ip, block_offsite_checkin, deduct_permission_hours`
+const SELECT_COLS = `id, year_start::text as year_start, year_end::text as year_end, annual_leave_balance, work_hours_per_day, max_absent_same_dept, work_start_time::text as work_start_time, work_days, office_lat, office_lng, office_radius, office_ip, block_offsite_checkin, deduct_permission_hours`
 
 // Fields that must be positive numbers (guards report math against 0/NaN/divide-by-zero).
 const POSITIVE_INT_FIELDS = ['annual_leave_balance', 'work_hours_per_day', 'max_absent_same_dept']
-const NON_NEGATIVE_FIELDS = ['deduction_per_hour', 'office_radius']
+const NON_NEGATIVE_FIELDS = ['office_radius']
 
 export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
@@ -17,8 +17,8 @@ export async function GET(request: Request) {
   if (!rows[0]) {
     // Create the default singleton row (id forced to 1).
     const { rows: newSettings } = await pool.query(`
-      INSERT INTO settings (id, year_start, year_end, annual_leave_balance, deduction_per_hour, currency, currency_symbol, work_hours_per_day, max_absent_same_dept, work_start_time, work_days)
-      VALUES (1, '2026-03-01', '2027-02-28', 30, 0, 'OMR', 'ر.ع.', 8, 2, '07:30', '0,1,2,3,4')
+      INSERT INTO settings (id, year_start, year_end, annual_leave_balance, work_hours_per_day, max_absent_same_dept, work_start_time, work_days)
+      VALUES (1, '2026-03-01', '2027-02-28', 30, 8, 2, '07:30', '0,1,2,3,4')
       ON CONFLICT (id) DO NOTHING
       RETURNING ${SELECT_COLS}
     `)
@@ -35,7 +35,7 @@ export async function PUT(request: Request) {
   if (!admin) return unauthorized()
   const body = await request.json()
   const fields = Object.keys(body).filter(k => k !== 'id')
-  const allowedFields = ['year_start', 'year_end', 'annual_leave_balance', 'deduction_per_hour', 'currency', 'currency_symbol', 'work_hours_per_day', 'max_absent_same_dept', 'work_start_time', 'work_days', 'office_lat', 'office_lng', 'office_radius', 'office_ip', 'block_offsite_checkin', 'deduct_permission_hours']
+  const allowedFields = ['year_start', 'year_end', 'annual_leave_balance', 'work_hours_per_day', 'max_absent_same_dept', 'work_start_time', 'work_days', 'office_lat', 'office_lng', 'office_radius', 'office_ip', 'block_offsite_checkin', 'deduct_permission_hours']
   const safeFields = fields.filter(f => allowedFields.includes(f))
   if (safeFields.length === 0) return NextResponse.json({ error: 'No valid fields' }, { status: 400 })
 

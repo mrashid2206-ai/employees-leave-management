@@ -153,7 +153,6 @@ export const settingsUpdateSchema = z
     year_start: dateStr.optional(),
     year_end: dateStr.optional(),
     annual_leave_balance: z.coerce.number().int().positive().optional(),
-    deduction_per_hour: z.coerce.number().min(0).optional(),
     work_hours_per_day: z.coerce.number().int().positive().optional(),
     max_absent_same_dept: z.coerce.number().int().positive().optional(),
     work_start_time: z.string().optional(),

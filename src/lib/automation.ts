@@ -133,15 +133,14 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
               [emp.id, processDate]
             )
             if (existing.length === 0) {
-              const hoursDecimal = Math.round((minutesLate / 60) * 100000) / 100000
               const deduction = TARDINESS_DEDUCTS_LEAVE ? tardinessLeaveDeduction(minutesLate, workHoursDay, TARDINESS_PENALTY_GRACE_MINUTES) : 0
               const tc = await pool.connect()
               try {
                 await tc.query('BEGIN')
                 await tc.query(`
-                  INSERT INTO tardiness_log (employee_id, date, time, minutes_late, hours_late_decimal, notes, leave_deducted)
-                  VALUES ($1, $2, $3, $4, $5, 'Auto-generated from attendance', $6)
-                `, [emp.id, processDate, record.check_in, minutesLate, hoursDecimal, deduction])
+                  INSERT INTO tardiness_log (employee_id, date, time, minutes_late, notes, leave_deducted)
+                  VALUES ($1, $2, $3, $4, 'Auto-generated from attendance', $5)
+                `, [emp.id, processDate, record.check_in, minutesLate, deduction])
                 if (deduction > 0) {
                   await tc.query('UPDATE employees SET leave_balance = leave_balance - $1 WHERE id = $2', [deduction, emp.id])
                 }
