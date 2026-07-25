@@ -12,7 +12,10 @@ export async function GET(request: Request) {
 
 
   const { rows } = await pool.query(`
-    SELECT e.id, e.name, e.department_id, e.leave_balance::float8 as leave_balance, e.is_active, e.username, e.join_date::text as join_date, e.email, e.phone, e.position, e.created_at, e.updated_at, json_build_object('id', d.id, 'name', d.name) as department
+    SELECT e.id, e.name, e.department_id, e.leave_balance::float8 as leave_balance, e.is_active, e.username, e.join_date::text as join_date, e.email, e.phone, e.position, e.created_at, e.updated_at,
+      e.work_start_time::text as work_start_time, e.work_days, e.work_hours_per_day,
+      json_build_object('id', d.id, 'name', d.name,
+        'work_start_time', d.work_start_time::text, 'work_days', d.work_days, 'work_hours_per_day', d.work_hours_per_day) as department
     FROM employees e
     LEFT JOIN departments d ON e.department_id = d.id
     ORDER BY e.id

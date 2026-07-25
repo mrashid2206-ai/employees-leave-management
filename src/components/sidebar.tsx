@@ -44,7 +44,7 @@ const navItems: { href: string; labelKey: TranslationKey; icon: typeof LayoutDas
   { href: '/reports', labelKey: 'reports', icon: FileText },
   { href: '/monthly-report', labelKey: 'monthlyReport', icon: FileText },
   { href: '/overtime-report', labelKey: 'overtimeReport', icon: Clock },
-  { href: '/salary-report', labelKey: 'salaryReport', icon: Clock },
+  { href: '/tardiness-summary', labelKey: 'tardinessSummary', icon: Clock },
   { href: '/offsite-report', labelKey: 'offsiteReport', icon: MapPin },
   { href: '/ranking', labelKey: 'ranking', icon: Trophy },
   // System

@@ -11,7 +11,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
 
   const { rows } = await pool.query(`
-    SELECT e.id, e.name, e.department_id, e.leave_balance::float8 as leave_balance, e.is_active, e.username, e.join_date::text as join_date, e.email, e.phone, e.position, e.created_at, e.updated_at, json_build_object('id', d.id, 'name', d.name) as department
+    SELECT e.id, e.name, e.department_id, e.leave_balance::float8 as leave_balance, e.is_active, e.username, e.join_date::text as join_date, e.email, e.phone, e.position, e.created_at, e.updated_at,
+      e.work_start_time::text as work_start_time, e.work_days, e.work_hours_per_day,
+      json_build_object('id', d.id, 'name', d.name,
+        'work_start_time', d.work_start_time::text, 'work_days', d.work_days, 'work_hours_per_day', d.work_hours_per_day) as department
     FROM employees e
     LEFT JOIN departments d ON e.department_id = d.id
     WHERE e.id = $1
@@ -25,12 +28,18 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!admin) return unauthorized()
   const { id } = await params
   const body = await request.json()
-  const allowedFields = ['name', 'department_id', 'leave_balance', 'is_active', 'username', 'password_hash', 'email', 'phone', 'position', 'join_date']
+  const allowedFields = ['name', 'department_id', 'leave_balance', 'is_active', 'username', 'password_hash', 'email', 'phone', 'position', 'join_date', 'work_start_time', 'work_days', 'work_hours_per_day']
   const fields = Object.keys(body).filter(k => allowedFields.includes(k))
   if (fields.length === 0) return NextResponse.json({ error: 'No fields' }, { status: 400 })
 
+  // A cleared schedule field means "inherit the department/global schedule", i.e. NULL.
+  // An empty string would otherwise blow up on the TIME/INT columns.
+  const SCHEDULE_FIELDS = new Set(['work_start_time', 'work_days', 'work_hours_per_day'])
+  const normalise = (field: string, value: unknown) =>
+    SCHEDULE_FIELDS.has(field) && (value === '' || value === undefined) ? null : value
+
   const sets = fields.map((f, i) => `${f} = $${i + 2}`).join(', ')
-  const values = [id, ...fields.map(f => body[f])]
+  const values = [id, ...fields.map(f => normalise(f, body[f]))]
 
   const { rows } = await pool.query(
     `UPDATE employees SET ${sets}, updated_at = NOW() WHERE id = $1 RETURNING *`,

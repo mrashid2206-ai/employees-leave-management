@@ -44,6 +44,18 @@ export interface Employee {
   created_at: string
   updated_at: string
   department?: Department
+  // Optional per-employee work schedule. NULL means "inherit the department's schedule",
+  // which in turn falls back to the global setting. See src/lib/schedule.ts.
+  work_start_time?: string | null
+  work_days?: string | null
+  work_hours_per_day?: number | null
+}
+
+/** The three fields that make up an overridable work schedule. */
+export interface ScheduleOverride {
+  work_start_time?: string | null
+  work_days?: string | null
+  work_hours_per_day?: number | null
 }
 
 export interface LeaveType {
