@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import pool, { omanToday, omanTime } from '@/lib/db'
 import { verifyAnyAuth, unauthorized, forbidden } from '@/lib/api-auth'
 import { ensureAttendanceLocationColumns, ensureFractionalLeaveColumns } from '@/lib/ensure-schema'
-import { isOffDay, computeWorkHours, computeOvertime, evaluateLocation } from '@/lib/attendance-calc'
+import { isOffDay, computeWorkHours, computeOvertime, evaluateLocation, permissionMinutesFor } from '@/lib/attendance-calc'
 import { notifyEmployee } from '@/lib/employee-notify'
 import { parseBody } from '@/server/validation'
 import { checkInSchema } from '@/server/schemas'
@@ -145,18 +145,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'already_checked_out', time: existing[0].check_out }, { status: 409 })
     }
 
-    const workHours = computeWorkHours(existing[0].check_in, currentTime)
-    if (workHours === null) {
+    const rawHours = computeWorkHours(existing[0].check_in, currentTime)
+    if (rawHours === null) {
       // Non-positive or implausibly long (>16h) duration — reject rather than inflate hours.
       return NextResponse.json({ error: 'check_out_before_check_in' }, { status: 400 })
     }
 
-    // If holiday work, ALL hours are overtime. Otherwise, overtime = hours above work_hours_per_day
-    let normalHours = 8
-    if (!holidayWork) {
-      const { rows: settings } = await pool.query('SELECT work_hours_per_day FROM settings ORDER BY id LIMIT 1')
-      normalHours = settings[0]?.work_hours_per_day || 8
+    const { rows: settings } = await pool.query(
+      'SELECT work_hours_per_day, deduct_permission_hours FROM settings ORDER BY id LIMIT 1'
+    )
+    const normalHours = settings[0]?.work_hours_per_day || 8
+
+    // Optionally subtract approved mid-day permission time from the paid hours.
+    let workHours = rawHours
+    if (settings[0]?.deduct_permission_hours) {
+      const permMinutes = await permissionMinutesFor(employee_id, today)
+      if (permMinutes > 0) {
+        workHours = Math.max(0, Math.round((rawHours - permMinutes / 60) * 100) / 100)
+      }
     }
+
+    // If holiday work, ALL hours are overtime. Otherwise, overtime = hours above work_hours_per_day
     const overtime = computeOvertime(workHours, normalHours, holidayWork)
 
     const { rows } = await pool.query(`

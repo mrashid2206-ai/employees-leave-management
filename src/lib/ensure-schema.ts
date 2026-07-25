@@ -70,7 +70,8 @@ export function ensureSettingsColumns(): Promise<void> {
       ADD COLUMN IF NOT EXISTS office_radius INT DEFAULT 200,
       ADD COLUMN IF NOT EXISTS office_ip VARCHAR(100),
       ADD COLUMN IF NOT EXISTS block_offsite_checkin BOOLEAN DEFAULT FALSE,
-      ADD COLUMN IF NOT EXISTS last_reset_year INT
+      ADD COLUMN IF NOT EXISTS last_reset_year INT,
+      ADD COLUMN IF NOT EXISTS deduct_permission_hours BOOLEAN DEFAULT FALSE
   `)
 }
 

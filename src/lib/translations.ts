@@ -60,6 +60,8 @@ export const translations = {
   // Status
   available: { ar: 'متاح', en: 'Available' },
   onLeave: { ar: 'في إجازة', en: 'On Leave' },
+  approve: { ar: 'موافقة', en: 'Approve' },
+  reject: { ar: 'رفض', en: 'Reject' },
   approved: { ar: 'موافق عليها', en: 'Approved' },
   rejected: { ar: 'مرفوضة', en: 'Rejected' },
   pending: { ar: 'معلقة', en: 'Pending' },
@@ -215,6 +217,7 @@ export const translations = {
   baseSalary: { ar: 'الراتب الأساسي', en: 'Base Salary' },
   totalDeduction: { ar: 'إجمالي الخصم', en: 'Total Deduction' },
   netImpact: { ar: 'صافي التأثير', en: 'Net Impact' },
+  monthlyReport: { ar: 'التقرير الشهري', en: 'Monthly Report' },
   leavePlanner: { ar: 'مخطط الإجازات', en: 'Leave Planner' },
   planned: { ar: 'مخطط', en: 'Planned' },
   taken: { ar: 'مأخوذة', en: 'Taken' },

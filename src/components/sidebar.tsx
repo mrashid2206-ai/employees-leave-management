@@ -40,6 +40,7 @@ const navItems: { href: string; labelKey: TranslationKey; icon: typeof LayoutDas
   { href: '/leave-planner', labelKey: 'leavePlanner', icon: CalendarRange },
   // Reports
   { href: '/reports', labelKey: 'reports', icon: FileText },
+  { href: '/monthly-report', labelKey: 'monthlyReport', icon: FileText },
   { href: '/overtime-report', labelKey: 'overtimeReport', icon: Clock },
   { href: '/salary-report', labelKey: 'salaryReport', icon: Clock },
   { href: '/ranking', labelKey: 'ranking', icon: Trophy },
@@ -64,7 +65,7 @@ function NavContent({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
         const Icon = item.icon
         return (
           <div key={item.href}>
-            {(index === 8 || index === 12) && <div className="my-2 border-t" />}
+            {(index === 8 || index === 13) && <div className="my-2 border-t" />}
             <Link
               href={item.href}
               onClick={onNavigate}

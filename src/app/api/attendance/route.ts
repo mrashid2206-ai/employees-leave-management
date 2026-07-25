@@ -4,6 +4,8 @@ import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 import { ensureAttendanceLocationColumns } from '@/lib/ensure-schema'
 import { isOffDay, computeWorkHours, computeOvertime } from '@/lib/attendance-calc'
 import { reverseAutoAbsenceLeave } from '@/lib/auto-absence'
+import { parseBody } from '@/server/validation'
+import { attendanceUpsertSchema } from '@/server/schemas'
 
 export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
@@ -47,8 +49,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
-  const body = await request.json()
-  const records = Array.isArray(body) ? body : [body]
+  const valid = parseBody(attendanceUpsertSchema, await request.json())
+  if (!valid.ok) return valid.response
+  const records = Array.isArray(valid.data) ? valid.data : [valid.data]
 
   const { rows: settingsRows } = await pool.query('SELECT work_hours_per_day FROM settings ORDER BY id LIMIT 1')
   const normalHours = settingsRows[0]?.work_hours_per_day || 8
@@ -56,10 +59,8 @@ export async function POST(request: Request) {
   const allowedStatuses = new Set(['present', 'absent', 'leave', 'holiday'])
   const results = []
   for (const r of records) {
-    if (!r.employee_id || !r.date || !/^\d{4}-\d{2}-\d{2}$/.test(r.date)) {
-      return NextResponse.json({ error: 'Invalid attendance record (employee_id and YYYY-MM-DD date required)' }, { status: 400 })
-    }
-    const status = allowedStatuses.has(r.status) ? r.status : 'present'
+    // employee_id / date shape is guaranteed by the zod schema at the route boundary.
+    const status = r.status && allowedStatuses.has(r.status) ? r.status : 'present'
 
     // Same overnight/holiday-aware work-hours math as the self-service check-out path.
     const holidayWork = await isOffDay(r.date)

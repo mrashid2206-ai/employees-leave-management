@@ -23,6 +23,7 @@ import type { Settings, LeaveRequest } from '@/lib/types'
 // Settings include extra office fields managed via this form but not part of the shared Settings type.
 interface SettingsForm extends Partial<Settings> {
   block_offsite_checkin?: boolean
+  deduct_permission_hours?: boolean
 }
 
 // Result returned by the daily-process / yearly-reset automation endpoints.
@@ -218,6 +219,23 @@ export default function SettingsPage() {
                     <div>
                       <Label className="text-xs">{t('maxAbsent')}</Label>
                       <Input type="number" value={form.max_absent_same_dept || ''} onChange={e => setForm(f => ({ ...f, max_absent_same_dept: parseInt(e.target.value) }))} />
+                    </div>
+                    <div className="sm:col-span-2 flex items-start gap-2 pt-1">
+                      <Checkbox
+                        id="deduct-permission-hours"
+                        checked={!!form.deduct_permission_hours}
+                        onCheckedChange={(checked) => setForm(f => ({ ...f, deduct_permission_hours: !!checked }))}
+                      />
+                      <div>
+                        <Label htmlFor="deduct-permission-hours" className="text-sm">
+                          {lang === 'ar' ? 'خصم وقت أذونات الخروج من ساعات العمل' : 'Subtract permission (exit) time from work hours'}
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {lang === 'ar'
+                            ? 'عند التفعيل، تُخصم مدة الإذن المعتمد من ساعات عمل ذلك اليوم.'
+                            : 'When enabled, an approved exit permission’s duration is deducted from that day’s work hours.'}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
