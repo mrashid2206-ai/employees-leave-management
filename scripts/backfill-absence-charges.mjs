@@ -53,10 +53,37 @@ const UNCHARGED = `
    ORDER BY e.name, a.date`
 
 async function main() {
+  // Always say WHICH database this is and what is in it. Without this the script can
+  // report "nothing to do" simply because it was pointed at an empty or stale database,
+  // which reads exactly like "your data is fine" — the most dangerous possible output
+  // for a repair tool.
+  const { rows: where } = await pool.query(
+    'SELECT current_database() AS db, inet_server_addr()::text AS host'
+  )
+  const { rows: counts } = await pool.query(`
+    SELECT (SELECT COUNT(*)::int FROM attendance) AS attendance_rows,
+           (SELECT COUNT(*)::int FROM attendance WHERE status = 'absent') AS absent_rows,
+           (SELECT COUNT(*)::int FROM employees) AS employees`)
+  const c = counts[0]
+  console.log(
+    `Database: ${where[0].db} @ ${where[0].host || 'local socket'}\n` +
+    `Contents: ${c.employees} employees, ${c.attendance_rows} attendance rows, ${c.absent_rows} marked absent\n`
+  )
+
+  if (c.attendance_rows === 0) {
+    console.log('WARNING: this database has NO attendance records at all.')
+    console.log('If you expected absences here, you are pointed at the wrong database.')
+    console.log('Set DATABASE_URL to the production connection string and re-run.\n')
+  }
+
   const { rows } = await pool.query(UNCHARGED)
 
   if (rows.length === 0) {
-    console.log('No uncharged absences. Nothing to do.')
+    console.log(
+      c.absent_rows === 0
+        ? 'No absences recorded in this database, so nothing can be uncharged here.'
+        : `All ${c.absent_rows} absence(s) already have a matching leave deduction. Nothing to do.`
+    )
     return
   }
 
