@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
+import { parseBody } from '@/server/validation'
+import { departmentUpdateSchema } from '@/server/schemas'
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
   const { id } = await params
-  const body = await request.json()
+  const valid = parseBody(departmentUpdateSchema, await request.json())
+  if (!valid.ok) return valid.response
+  const body = valid.data
 
   // Name plus the optional per-department work schedule. A NULL schedule field means
   // "inherit the global setting", which is why empty values are stored as NULL.

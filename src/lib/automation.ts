@@ -288,7 +288,10 @@ export async function runYearlyReset(actor: ActorType, opts: { force?: boolean }
       await client.query('ROLLBACK')
       return { success: false, alreadyReset: true, message: `Fiscal year starting ${s.year_start} has already been reset.` }
     }
-    if (s.last_reset_day && s.last_reset_day === new Date().toISOString().split('T')[0]) {
+    // Compare in Oman time: last_reset_day comes from the database's own clock, and a UTC
+    // 'today' would disagree with it for the first four hours of every Oman day —
+    // re-opening the very double-reset window this guard exists to close.
+    if (s.last_reset_day && s.last_reset_day === omanToday()) {
       await client.query('ROLLBACK')
       return { success: false, alreadyReset: true, message: 'A yearly reset has already run today.' }
     }

@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
+import { omanToday } from '@/lib/oman-date'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
@@ -71,7 +72,7 @@ export default function PermissionsPage() {
 
   // Stats
   const pendingCount = permissions.filter((p) => p.status === 'pending').length
-  const todayCount = permissions.filter((p) => p.date === new Date().toISOString().split('T')[0]).length
+  const todayCount = permissions.filter((p) => p.date === omanToday()).length
 
   function calcAbsentHours(leaveTime: string, returnTime: string | null): string {
     if (!returnTime) return '-'

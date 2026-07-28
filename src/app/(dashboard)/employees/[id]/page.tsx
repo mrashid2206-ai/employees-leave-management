@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useState, useEffect } from 'react'
+import { omanToday } from '@/lib/oman-date'
 
 function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -132,7 +133,7 @@ export default function EmployeeCardPage() {
 
   if (!employee) return <div className="p-6">{t('loading')}</div>
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = omanToday()
   const approvedLeaves = leaves.filter(l => l.status === 'approved')
   const usedDays = approvedLeaves.reduce((sum, l) => sum + l.days_count, 0)
   const tardMinutes = tardiness.reduce((sum, t) => sum + t.minutes_late, 0)

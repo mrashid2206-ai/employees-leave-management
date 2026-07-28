@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
+import { omanToday } from '@/lib/oman-date'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
@@ -275,7 +276,7 @@ export default function AttendancePage() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={() => { setSelectedDay(new Date().toISOString().split('T')[0]); setDialogOpen(true); setEditRecord(null) }}>
+          <Button variant="outline" size="sm" onClick={() => { setSelectedDay(omanToday()); setDialogOpen(true); setEditRecord(null) }}>
             <Plus className="h-4 w-4 mr-1.5" />
             {t('manualRecord')}
           </Button>

@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useMemo, useRef } from 'react'
+import { omanToday } from '@/lib/oman-date'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -225,7 +226,7 @@ export default function EmployeesPage() {
     }
   }, [departments, settings, editEmp.department_id])
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = omanToday()
 
   const employeeRows = useMemo(() => {
     return employees.map((emp, idx) => {

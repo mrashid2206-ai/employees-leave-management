@@ -3,12 +3,16 @@ import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
 import { logAudit } from '@/lib/audit'
 import { reverseAutoAbsenceLeave, applyAutoAbsenceLeave } from '@/lib/auto-absence'
+import { parseBody } from '@/server/validation'
+import { attendanceUpdateSchema } from '@/server/schemas'
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
   const { id } = await params
-  const body = await request.json()
+  const valid = parseBody(attendanceUpdateSchema, await request.json())
+  if (!valid.ok) return valid.response
+  const body = valid.data as Record<string, unknown>
   const allowedFields = ['check_in', 'check_out', 'work_hours', 'overtime_hours', 'status', 'notes', 'is_holiday_work', 'excused_tardiness']
   const fields = Object.keys(body).filter(k => allowedFields.includes(k))
   if (fields.length === 0) return NextResponse.json({ error: 'No fields' }, { status: 400 })

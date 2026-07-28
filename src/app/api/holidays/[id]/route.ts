@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
+import { parseBody } from '@/server/validation'
+import { holidaySchema } from '@/server/schemas'
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
   const { id } = await params
-  const { name, date } = await request.json()
+  const valid = parseBody(holidaySchema, await request.json())
+  if (!valid.ok) return valid.response
+  const { name, date } = valid.data
   const { rows } = await pool.query(
     'UPDATE holidays SET name = $1, date = $2 WHERE id = $3 RETURNING id, name, date::text as date',
     [name, date, id]

@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createCorrectionRequest, type AttendanceCorrection, type Holiday } from '@/lib/api'
 import type { Employee, LeaveType, Settings } from '@/lib/types'
+import { omanToday } from '@/lib/oman-date'
 
 /* -------------------------------------------------------------------------- */
 /* Shapes                                                                      */
@@ -310,7 +311,9 @@ export function useMyPermissions(empId: EmpId) {
 
 /** Today's open permission (left the office, hasn't logged a return, not rejected). */
 export function activePermissionOf(permissions: PermissionRecord[]): PermissionRecord | null {
-  const today = new Date().toISOString().split('T')[0]
+  // Oman's today, not the device's UTC date — an employee opening the portal before
+  // 04:00 local time would otherwise be shown yesterday's permission.
+  const today = omanToday()
   return permissions.find(p => p.date === today && !p.return_time && p.status !== 'rejected') ?? null
 }
 

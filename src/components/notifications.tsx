@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Bell, AlertTriangle, Clock, CalendarOff } from 'lucide-react'
 import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
+import { omanToday } from '@/lib/oman-date'
 import {
   Popover,
   PopoverContent,
@@ -29,7 +30,7 @@ export function NotificationBell() {
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
 
   const notifications: Notification[] = []
-  const today = new Date().toISOString().split('T')[0]
+  const today = omanToday()
 
   if (settings) {
     // Low balance warnings
