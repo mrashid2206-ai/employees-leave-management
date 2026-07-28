@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest'
 import pool from '@/lib/db'
 import { runDailyAutomation, runYearlyReset } from '@/lib/automation'
+import { omanToday } from '@/lib/oman-date'
 import { HAS_TEST_DB, resetDb, balanceOf, closePool, ADMIN } from './helpers'
 
 // Cron safety depends entirely on these jobs being idempotent: the scheduler may retry,
@@ -54,8 +55,10 @@ describe.skipIf(!HAS_TEST_DB)('automation idempotency', () => {
   })
 
   it('never marks an in-progress (today) day absent', async () => {
-    const today = new Date().toISOString().split('T')[0]
-    const res = await runDailyAutomation(today, ADMIN)
+    // Must be Oman's today, not UTC's. Between 00:00 and 04:00 Oman time the UTC date is
+    // still yesterday — a COMPLETED day — so the automation would legitimately mark
+    // absences and this test would fail for four hours every night.
+    const res = await runDailyAutomation(omanToday(), ADMIN)
     expect(res.absentMarked).toBe(0)
     expect(await balanceOf(employeeId)).toBe(30)
   })
