@@ -52,7 +52,14 @@ export async function reviewCorrection(
   try {
     await client.query('BEGIN')
 
-    const { rows: cur } = await client.query('SELECT * FROM attendance_corrections WHERE id = $1 FOR UPDATE', [id])
+    // date::text — never let a DATE round-trip through a JS Date. Postgres returns it as
+    // local midnight, and toISOString() then converts to UTC, which rolls back a day in
+    // any timezone ahead of UTC. Oman is UTC+4, so approving a correction for the 10th
+    // was rewriting attendance for the 9th.
+    const { rows: cur } = await client.query(
+      'SELECT id, employee_id, date::text AS date, requested_check_in::text AS requested_check_in, requested_check_out::text AS requested_check_out, status FROM attendance_corrections WHERE id = $1 FOR UPDATE',
+      [id]
+    )
     if (cur.length === 0) {
       await client.query('ROLLBACK')
       return fail(404, 'Not found')
@@ -63,7 +70,8 @@ export async function reviewCorrection(
       return fail(400, `Request is already ${req.status}`)
     }
 
-    const dateStr = typeof req.date === 'string' ? req.date : new Date(req.date).toISOString().split('T')[0]
+    // Already a 'YYYY-MM-DD' string thanks to the date::text cast above.
+    const dateStr: string = req.date
 
     if (status === 'approved') {
       // Apply the requested times to the attendance row, recomputing hours/overtime.
