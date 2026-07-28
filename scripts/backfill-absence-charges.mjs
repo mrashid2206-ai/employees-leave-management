@@ -26,6 +26,15 @@ if (fs.existsSync(envPath)) {
 const APPLY = process.argv.includes('--apply')
 const AUTO_NOTE = 'Auto-deducted: absent without leave'
 
+// Dates to leave alone entirely, e.g. a company closure that was never entered as a
+// public holiday. Without this, a day when the office was shut looks identical to a day
+// when everyone individually failed to turn up.
+//   --exclude-dates=2026-06-18,2026-07-01
+const excludeArg = process.argv.find(a => a.startsWith('--exclude-dates='))
+const EXCLUDED = new Set(
+  excludeArg ? excludeArg.split('=')[1].split(',').map(s => s.trim()).filter(Boolean) : []
+)
+
 const pool = new Pool(
   process.env.DATABASE_URL
     ? { connectionString: process.env.DATABASE_URL }
@@ -39,16 +48,28 @@ const pool = new Pool(
 )
 
 // Absent days with no leave request covering them.
+//
+// Public holidays and non-working weekdays are excluded outright: the nightly automation
+// never marks those absent, so an 'absent' row on one can only have arrived by hand or by
+// import, and charging leave for a day nobody was expected to work would be wrong.
+// work_days is the settings default ('0,1,2,3,4' = Sun-Thu); a per-employee or
+// per-department override is respected via COALESCE, matching src/lib/schedule.ts.
 const UNCHARGED = `
   SELECT a.employee_id, e.name, a.date::text AS date, e.leave_balance::numeric AS balance
     FROM attendance a
     JOIN employees e ON e.id = a.employee_id
+    LEFT JOIN departments d ON d.id = e.department_id
+    CROSS JOIN LATERAL (SELECT work_days FROM settings ORDER BY id LIMIT 1) s
    WHERE a.status = 'absent'
      AND NOT EXISTS (
        SELECT 1 FROM leave_requests lr
         WHERE lr.employee_id = a.employee_id
           AND lr.start_date = a.date AND lr.end_date = a.date
           AND lr.status <> 'cancelled'
+     )
+     AND NOT EXISTS (SELECT 1 FROM holidays h WHERE h.date = a.date)
+     AND EXTRACT(DOW FROM a.date)::text = ANY (
+       string_to_array(COALESCE(e.work_days, d.work_days, s.work_days), ',')
      )
    ORDER BY e.name, a.date`
 
@@ -76,7 +97,12 @@ async function main() {
     console.log('Set DATABASE_URL to the production connection string and re-run.\n')
   }
 
-  const { rows } = await pool.query(UNCHARGED)
+  const all = await pool.query(UNCHARGED)
+  const rows = all.rows.filter(r => !EXCLUDED.has(r.date))
+  const excludedCount = all.rows.length - rows.length
+  if (EXCLUDED.size > 0) {
+    console.log(`Excluding ${[...EXCLUDED].join(', ')} — ${excludedCount} day(s) skipped by request.\n`)
+  }
 
   if (rows.length === 0) {
     console.log(
