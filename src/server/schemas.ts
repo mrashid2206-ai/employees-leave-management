@@ -17,7 +17,10 @@ export const leaveCreateSchema = z
     days_count: z.coerce.number().positive(),
     notes: z.string().nullish(),
     is_half_day: z.boolean().optional(),
-    status: z.string().optional(),
+    // Constrained, not a free string: an unrecognised value used to be stored verbatim
+    // (there was no CHECK constraint either), and any status other than these silently
+    // bypassed the balance accounting, which only understands these four.
+    status: z.enum(['pending', 'approved', 'rejected', 'cancelled']).optional(),
     force: z.boolean().optional(),
   })
   .passthrough()
