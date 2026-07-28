@@ -1,13 +1,14 @@
 import pool, { omanToday, omanYesterday } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { logger } from '@/lib/log'
-import { LEAVE_TYPE_ANNUAL, TARDINESS_GRACE_MINUTES, AUTO_ABSENCE_LEAVE_NOTE, TARDINESS_DEDUCTS_LEAVE, TARDINESS_PENALTY_GRACE_MINUTES } from '@/lib/constants'
+import { TARDINESS_GRACE_MINUTES, TARDINESS_DEDUCTS_LEAVE, TARDINESS_PENALTY_GRACE_MINUTES } from '@/lib/constants'
 import { tardinessLeaveDeduction } from '@/lib/tardiness-penalty'
 import { notifyEmployee } from '@/lib/employee-notify'
 import { actorLabel, type Actor as ActorType } from '@/server/result'
 import { computeWorkHours, computeOvertime, isNonWorkingWeekday } from '@/lib/attendance-calc'
 import { resolveScheduleMap, globalSchedule, scheduleEndTime } from '@/lib/schedule'
 import { startRun, recordEffect, finishRun } from '@/lib/automation-journal'
+import { applyAutoAbsenceLeave } from '@/lib/auto-absence'
 
 // Single shared Actor shape (see src/server/result.ts) so services, routes and the
 // automation jobs all describe "who did this" the same way.
@@ -34,12 +35,6 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
 
   // Journal every mutation so a misfiring run can be undone from the UI.
   const runId = await startRun('daily', processDate, actor)
-
-  const { rows: annualType } = await pool.query(
-    'SELECT id FROM leave_types WHERE name_en = $1 ORDER BY id LIMIT 1',
-    [LEAVE_TYPE_ANNUAL]
-  )
-  const annualLeaveTypeId = annualType[0]?.id || 1
 
   const results = {
     absentMarked: 0,
@@ -105,24 +100,17 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
         const client = await pool.connect()
         try {
           await client.query('BEGIN')
-          const { rows: empBalance } = await client.query('SELECT leave_balance FROM employees WHERE id = $1 FOR UPDATE', [emp.id])
-          const balance = parseFloat(empBalance[0]?.leave_balance ?? '0')
-          const inserted = await client.query(`
-            INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, days_count, notes, status)
-            SELECT $1, $2, $3, $3, 1, $5, 'approved'
-            WHERE $4 > 0
-              AND NOT EXISTS (SELECT 1 FROM leave_requests WHERE employee_id = $1 AND start_date = $3 AND end_date = $3)
-            RETURNING id
-          `, [emp.id, annualLeaveTypeId, processDate, balance, AUTO_ABSENCE_LEAVE_NOTE])
-          if ((inserted.rowCount || 0) > 0) {
-            await client.query('UPDATE employees SET leave_balance = leave_balance - 1 WHERE id = $1', [emp.id])
+          // Shared with the admin attendance routes so every path that marks a day
+          // 'absent' charges the day the same way (src/lib/auto-absence.ts).
+          const applied = await applyAutoAbsenceLeave(client, emp.id, processDate)
+          if (applied) {
             results.leaveDeducted++
             // Inside the same transaction as the deduction, so the journal can never
             // disagree with the balance it is meant to be able to refund.
-            await recordEffect(runId, 'absence_leave', emp.id, { leave_id: inserted.rows[0].id, days: 1 }, client)
+            await recordEffect(runId, 'absence_leave', emp.id, { leave_id: applied.leaveId, days: applied.days }, client)
           }
           await client.query('COMMIT')
-          if ((inserted.rowCount || 0) > 0) {
+          if (applied) {
             await notifyEmployee(
               emp.id,
               `You were marked absent on ${processDate}; 1 day was deducted from your leave balance.`,

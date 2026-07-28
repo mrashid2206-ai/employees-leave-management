@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
 import { logAudit } from '@/lib/audit'
-import { reverseAutoAbsenceLeave } from '@/lib/auto-absence'
+import { reverseAutoAbsenceLeave, applyAutoAbsenceLeave } from '@/lib/auto-absence'
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await verifyAdmin(request)
@@ -17,13 +17,20 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   try {
     await client.query('BEGIN')
 
-    // If this edit flips an 'absent' record to a non-absent status, refund the
-    // auto-deducted absence leave so the employee gets their day back.
+    // Flipping a day into or out of 'absent' must move the balance both ways. Only the
+    // refund existed before, so marking someone absent by hand cost them nothing.
     let refundedDays = 0
-    if (typeof body.status === 'string' && body.status !== 'absent') {
+    let chargedDays = 0
+    if (typeof body.status === 'string') {
       const { rows: cur } = await client.query('SELECT employee_id, date::text as date, status FROM attendance WHERE id = $1', [id])
-      if (cur[0] && cur[0].status === 'absent') {
-        refundedDays = await reverseAutoAbsenceLeave(client, cur[0].employee_id, cur[0].date)
+      if (cur[0]) {
+        const wasAbsent = cur[0].status === 'absent'
+        if (wasAbsent && body.status !== 'absent') {
+          refundedDays = await reverseAutoAbsenceLeave(client, cur[0].employee_id, cur[0].date)
+        } else if (!wasAbsent && body.status === 'absent') {
+          const applied = await applyAutoAbsenceLeave(client, cur[0].employee_id, cur[0].date)
+          chargedDays = applied?.days ?? 0
+        }
       }
     }
 
@@ -35,7 +42,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (refundedDays > 0) {
       await logAudit('absence_corrected', admin.username, 'admin', `Attendance #${id} set to ${body.status}; refunded ${refundedDays} auto-deducted leave day(s)`)
     }
-    return NextResponse.json({ ...rows[0], refundedDays })
+    if (chargedDays > 0) {
+      await logAudit('absence_charged', admin.username, 'admin', `Attendance #${id} set to absent; deducted ${chargedDays} leave day(s)`)
+    }
+    return NextResponse.json({ ...rows[0], refundedDays, chargedDays })
   } catch (err) {
     await client.query('ROLLBACK')
     throw err
