@@ -3,7 +3,7 @@ import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 import { isOffDayFor, computeWorkHours, computeOvertime } from '@/lib/attendance-calc'
 import { resolveSchedule } from '@/lib/schedule'
-import { reverseAutoAbsenceLeave } from '@/lib/auto-absence'
+import { reverseAutoAbsenceLeave, applyAutoAbsenceLeave } from '@/lib/auto-absence'
 import { parseBody } from '@/server/validation'
 import { attendanceUpsertSchema } from '@/server/schemas'
 
@@ -93,8 +93,12 @@ export async function POST(request: Request) {
         RETURNING *
       `, [r.employee_id, r.date, r.check_in || null, r.check_out || null, workHours, overtime, status, r.notes || null, holidayWork])
 
+      // Keep the charge and the refund symmetric. Previously only the refund existed here,
+      // so an admin marking someone absent recorded the absence and deducted nothing.
       if (wasAbsent && status !== 'absent') {
         await reverseAutoAbsenceLeave(client, r.employee_id, r.date)
+      } else if (!wasAbsent && status === 'absent') {
+        await applyAutoAbsenceLeave(client, r.employee_id, r.date)
       }
 
       await client.query('COMMIT')
