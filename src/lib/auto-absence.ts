@@ -24,8 +24,10 @@ export interface AppliedAbsence {
  * Idempotent and safe to call on every write that sets a day to 'absent':
  *  - does nothing if ANY leave request already covers that single day (including a
  *    previous auto-deduction, or a real request the employee filed);
- *  - does nothing when the balance is already exhausted, matching the long-standing
- *    automation behaviour — an absence never pushes the balance negative.
+ *  - does nothing when the balance is already at or below zero, matching the
+ *    long-standing automation behaviour. Note this is "don't charge someone with nothing
+ *    left", not "never go negative": a balance of 0.5 is still charged a full day and
+ *    lands at -0.5, exactly as the automation has always behaved.
  *
  * Returns the created leave and days charged, or null if nothing was charged.
  */
@@ -46,19 +48,23 @@ export async function applyAutoAbsenceLeave(
     [employeeId]
   )
   if (balanceRows.length === 0) return null
-  const balance = parseFloat(String(balanceRows[0].leave_balance ?? '0'))
 
+  // The balance is tested in SQL against the (already locked) row rather than passed back
+  // as a parameter. Passing it bound it into `$n > 0`, where the integer literal made
+  // Postgres infer the parameter as an integer — so any fractional balance ("25.4", which
+  // is most of them once tardiness has charged part-days) failed with
+  // "invalid input syntax for type integer".
   const { rows: inserted } = await client.query(
     `INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, days_count, notes, status)
-     SELECT $1, $2, $3, $3, 1, $5, 'approved'
-     WHERE $4 > 0
+     SELECT $1, $2, $3, $3, 1, $4, 'approved'
+     WHERE EXISTS (SELECT 1 FROM employees WHERE id = $1 AND leave_balance > 0)
        AND NOT EXISTS (
          SELECT 1 FROM leave_requests
           WHERE employee_id = $1 AND start_date = $3 AND end_date = $3
             AND status <> 'cancelled'
        )
      RETURNING id`,
-    [employeeId, annualTypeId, date, balance, AUTO_ABSENCE_LEAVE_NOTE]
+    [employeeId, annualTypeId, date, AUTO_ABSENCE_LEAVE_NOTE]
   )
   if (inserted.length === 0) return null
 

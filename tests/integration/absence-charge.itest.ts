@@ -81,13 +81,47 @@ describe.skipIf(!HAS_TEST_DB)('absence charges leave on every path', () => {
       expect(await balanceOf(empId)).toBe(before)
     })
 
-    it('does not push the balance negative when it is exhausted', async () => {
+    it('does not charge when the balance is exhausted', async () => {
       await pool.query('UPDATE employees SET leave_balance = 0 WHERE id = $1', [empId])
 
       const applied = await tx(c => applyAutoAbsenceLeave(c, empId, DATE))
 
       expect(applied).toBeNull()
       expect(await balanceOf(empId)).toBe(0)
+    })
+
+    // Regression: the balance used to be read back and bound into `$n > 0`. The integer
+    // literal made Postgres infer an integer parameter, so a fractional balance failed
+    // with 'invalid input syntax for type integer: "25.4"'. Almost every real balance is
+    // fractional once tardiness has charged part-days, so this broke for nearly everyone
+    // while every test — all using whole numbers — passed.
+    it.each([25.4, 26.8, 22.892, 9.99, 0.5])('charges correctly with a fractional balance of %s', async (start) => {
+      await pool.query('UPDATE employees SET leave_balance = $1 WHERE id = $2', [start, empId])
+
+      const applied = await tx(c => applyAutoAbsenceLeave(c, empId, DATE))
+
+      expect(applied?.days).toBe(1)
+      expect(await balanceOf(empId)).toBeCloseTo(start - 1, 3)
+    })
+
+    it('a balance under one day is still charged in full, landing negative', async () => {
+      // Documents the long-standing rule: the guard is "has anything left", not
+      // "cannot go negative".
+      await pool.query('UPDATE employees SET leave_balance = 0.25 WHERE id = $1', [empId])
+
+      const applied = await tx(c => applyAutoAbsenceLeave(c, empId, DATE))
+
+      expect(applied?.days).toBe(1)
+      expect(await balanceOf(empId)).toBeCloseTo(-0.75, 3)
+    })
+
+    it('a negative balance is not charged again', async () => {
+      await pool.query('UPDATE employees SET leave_balance = -2.5 WHERE id = $1', [empId])
+
+      const applied = await tx(c => applyAutoAbsenceLeave(c, empId, DATE))
+
+      expect(applied).toBeNull()
+      expect(await balanceOf(empId)).toBeCloseTo(-2.5, 3)
     })
 
     it('charge then reverse returns the balance exactly', async () => {
