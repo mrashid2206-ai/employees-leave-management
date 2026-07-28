@@ -146,25 +146,61 @@ export async function createLeave(input: LeaveCreateInput, actor: Actor): Promis
     return fail(409, `Employee has attendance records on: ${dates}. Cancel or delete those attendance records first.`)
   }
 
-  const { rows: existingLeaves } = await pool.query(
-    "SELECT id FROM leave_requests WHERE employee_id = $1 AND status IN ('pending', 'approved') AND start_date <= $2 AND end_date >= $3",
-    [employee_id, end_date, start_date]
-  )
-  if (existingLeaves.length > 0) {
-    return fail(409, 'Employee already has a pending or approved leave for these dates')
-  }
-
-
+  // The overlap check, the insert and — when the leave is created ALREADY APPROVED — the
+  // balance deduction all run in one transaction with the employee row locked.
+  //
+  // Two bugs lived in the old version of this block. The check and the insert were
+  // separate unlocked statements, so two concurrent submissions (a double-clicked button)
+  // could both pass the overlap check and both insert. And a leave created directly as
+  // 'approved' never deducted anything, because the deduction lived only in the status
+  // TRANSITION in changeLeaveStatus — so an admin recording an already-taken leave, or a
+  // bulk import, granted the days for free.
+  const finalStatus = status || 'pending'
+  const client = await pool.connect()
+  let createdLeave: LeaveRecord
   try {
-    const { rows } = await pool.query(
+    await client.query('BEGIN')
+    await client.query('SELECT id FROM employees WHERE id = $1 FOR UPDATE', [employee_id])
+
+    const { rows: existingLeaves } = await client.query(
+      "SELECT id FROM leave_requests WHERE employee_id = $1 AND status IN ('pending', 'approved') AND start_date <= $2 AND end_date >= $3",
+      [employee_id, end_date, start_date]
+    )
+    if (existingLeaves.length > 0) {
+      await client.query('ROLLBACK')
+      return fail(409, 'Employee already has a pending or approved leave for these dates')
+    }
+
+    const { rows } = await client.query(
       `INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, days_count, notes, status, is_half_day)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [employee_id, leave_type_id, start_date, end_date, finalDays, notes || null, status || 'pending', isHalfDay]
+      [employee_id, leave_type_id, start_date, end_date, finalDays, notes || null, finalStatus, isHalfDay]
     )
+    createdLeave = rows[0]
 
+    if (finalStatus === 'approved') {
+      await client.query(
+        'UPDATE employees SET leave_balance = leave_balance - $1, updated_at = NOW() WHERE id = $2',
+        [finalDays, employee_id]
+      )
+    }
+
+    await client.query('COMMIT')
+  } catch (err) {
+    await client.query('ROLLBACK')
+    const msg = err instanceof Error ? err.message : ''
+    if (msg.includes('Overlapping')) {
+      return fail(409, 'Overlapping leave request exists for this employee')
+    }
+    return fail(500, 'Failed to create leave request')
+  } finally {
+    client.release()
+  }
+
+  {
     // Alert the admin when a request lands PENDING so approvals aren't discovered by
     // chance. Fire-and-forget: email failure never blocks the request.
-    if (rows[0]?.status === 'pending') {
+    if (createdLeave?.status === 'pending') {
       const empName = empInfo[0]?.name || `Employee #${employee_id}`
       void sendMail({
         to: process.env.NOTIFY_EMAIL || process.env.SMTP_USER,
@@ -184,13 +220,7 @@ export async function createLeave(input: LeaveCreateInput, actor: Actor): Promis
       })
     }
 
-    return ok(rows[0])
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : ''
-    if (msg.includes('Overlapping')) {
-      return fail(409, 'Overlapping leave request exists for this employee')
-    }
-    return fail(500, 'Failed to create leave request')
+    return ok(createdLeave)
   }
 }
 

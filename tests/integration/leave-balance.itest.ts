@@ -40,6 +40,82 @@ describe.skipIf(!HAS_TEST_DB)('leave balance accounting', () => {
     expect(await balanceOf(employeeId)).toBe(30)
   })
 
+  // An admin recording an already-taken leave creates it directly as 'approved'. The
+  // deduction used to live ONLY in the status transition, so this granted the days for
+  // free — in production one employee had 29 approved days against a balance that had
+  // only moved by 20.
+  describe('a leave created already approved', () => {
+    const createApproved = (start: string, end: string) =>
+      createLeave(
+        {
+          employee_id: employeeId,
+          leave_type_id: annualTypeId,
+          start_date: start,
+          end_date: end,
+          status: 'approved',
+        },
+        ADMIN
+      )
+
+    it('deducts the balance immediately', async () => {
+      const res = await createApproved('2026-04-01', '2026-04-03') // 3 days
+      expect(res.ok).toBe(true)
+      expect(await balanceOf(employeeId)).toBe(27)
+    })
+
+    it('is deducted exactly once — not again when re-approved', async () => {
+      const res = await createApproved('2026-04-01', '2026-04-03')
+      expect(await balanceOf(employeeId)).toBe(27)
+
+      // Re-applying the same status must be a no-op, not a second charge.
+      const again = await changeLeaveStatus(String((res as { data: { id: number } }).data.id), 'approved', ADMIN)
+      expect(again.ok).toBe(false)
+      expect(await balanceOf(employeeId)).toBe(27)
+    })
+
+    it('is refunded when later rejected', async () => {
+      const res = await createApproved('2026-04-01', '2026-04-03')
+      const id = String((res as { data: { id: number } }).data.id)
+
+      await changeLeaveStatus(id, 'rejected', ADMIN)
+
+      expect(await balanceOf(employeeId)).toBe(30)
+    })
+
+    it('rejects an unknown status rather than storing it', async () => {
+      // Both the zod enum and the DB CHECK constraint guard this; the balance rules only
+      // understand the four known values, so anything else silently escapes accounting.
+      const res = await createLeave(
+        {
+          employee_id: employeeId,
+          leave_type_id: annualTypeId,
+          start_date: '2026-04-01',
+          end_date: '2026-04-01',
+          status: 'banana' as unknown as 'approved',
+        },
+        ADMIN
+      )
+      expect(res.ok).toBe(false)
+      expect(await balanceOf(employeeId)).toBe(30)
+    })
+  })
+
+  it('two concurrent submissions for the same dates cannot both succeed', async () => {
+    // The overlap check and the insert used to be separate unlocked statements, so a
+    // double-clicked button could create two overlapping requests.
+    const both = await Promise.all([
+      makeLeave('2026-05-01', '2026-05-03').then(() => 'ok').catch(() => 'rejected'),
+      makeLeave('2026-05-01', '2026-05-03').then(() => 'ok').catch(() => 'rejected'),
+    ])
+    expect(both.filter(r => r === 'ok')).toHaveLength(1)
+
+    const { rows } = await pool.query(
+      "SELECT COUNT(*)::int AS n FROM leave_requests WHERE employee_id = $1 AND status <> 'cancelled'",
+      [employeeId]
+    )
+    expect(rows[0].n).toBe(1)
+  })
+
   it('approve deducts exactly days_count, reject restores it', async () => {
     const leave = await makeLeave('2026-04-01', '2026-04-03') // 3 days
 
