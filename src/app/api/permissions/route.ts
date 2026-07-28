@@ -51,6 +51,29 @@ export async function POST(request: Request) {
   // Employees can only create for themselves
   if (user.role === 'employee' && user.id !== employee_id) return forbidden()
 
+  // Monthly cap. Employees are held to it; admins are not, consistent with every other
+  // limit in the system (the cap is guidance for an admin, not a wall). 0 = unlimited.
+  if (user.role === 'employee') {
+    const { rows: cfg } = await pool.query(
+      'SELECT max_permissions_per_month FROM settings ORDER BY id LIMIT 1'
+    )
+    const cap = cfg[0]?.max_permissions_per_month ?? 0
+    if (cap > 0) {
+      const { rows: used } = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM permissions
+          WHERE employee_id = $1 AND status <> 'rejected'
+            AND date_trunc('month', date) = date_trunc('month', $2::date)`,
+        [employee_id, date]
+      )
+      if (used[0].n >= cap) {
+        return NextResponse.json(
+          { error: `Monthly permission limit reached (${cap} per month) / تم بلوغ الحد الشهري للاستئذان` },
+          { status: 409 }
+        )
+      }
+    }
+  }
+
   const status = user.role === 'admin' ? 'approved' : 'pending'
 
   const { rows } = await pool.query(

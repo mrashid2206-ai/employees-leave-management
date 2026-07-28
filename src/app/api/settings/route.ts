@@ -4,7 +4,7 @@ import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 import { parseBody } from '@/server/validation'
 import { settingsUpdateSchema } from '@/server/schemas'
 
-const SELECT_COLS = `id, year_start::text as year_start, year_end::text as year_end, annual_leave_balance, work_hours_per_day, max_absent_same_dept, work_start_time::text as work_start_time, work_days, office_lat, office_lng, office_radius, office_ip, block_offsite_checkin, deduct_permission_hours`
+const SELECT_COLS = `id, year_start::text as year_start, year_end::text as year_end, annual_leave_balance, work_hours_per_day, max_absent_same_dept, work_start_time::text as work_start_time, work_days, office_lat, office_lng, office_radius, office_ip, block_offsite_checkin, deduct_permission_hours, max_permissions_per_month, max_permission_minutes`
 
 // Fields that must be positive numbers (guards report math against 0/NaN/divide-by-zero).
 const POSITIVE_INT_FIELDS = ['annual_leave_balance', 'work_hours_per_day', 'max_absent_same_dept']
@@ -39,7 +39,7 @@ export async function PUT(request: Request) {
   if (!valid.ok) return valid.response
   const body = valid.data as Record<string, unknown>
   const fields = Object.keys(body).filter(k => k !== 'id')
-  const allowedFields = ['year_start', 'year_end', 'annual_leave_balance', 'work_hours_per_day', 'max_absent_same_dept', 'work_start_time', 'work_days', 'office_lat', 'office_lng', 'office_radius', 'office_ip', 'block_offsite_checkin', 'deduct_permission_hours']
+  const allowedFields = ['year_start', 'year_end', 'annual_leave_balance', 'work_hours_per_day', 'max_absent_same_dept', 'work_start_time', 'work_days', 'office_lat', 'office_lng', 'office_radius', 'office_ip', 'block_offsite_checkin', 'deduct_permission_hours', 'max_permissions_per_month', 'max_permission_minutes']
   const safeFields = fields.filter(f => allowedFields.includes(f))
   if (safeFields.length === 0) return NextResponse.json({ error: 'No valid fields' }, { status: 400 })
 
