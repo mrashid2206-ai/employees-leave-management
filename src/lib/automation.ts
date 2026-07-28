@@ -273,7 +273,11 @@ export async function runYearlyReset(actor: ActorType, opts: { force?: boolean }
     await client.query('BEGIN')
 
     const { rows: settings } = await client.query(
-      "SELECT id, year_start::text as year_start, year_end::text as year_end, annual_leave_balance, last_reset_year, to_char(last_reset_at, 'YYYY-MM-DD') as last_reset_day FROM settings ORDER BY id LIMIT 1 FOR UPDATE"
+      // last_reset_at is rendered in OMAN time so it can be compared with omanToday().
+      // Without AT TIME ZONE it renders in the database's zone (UTC on Railway), which
+      // disagrees with the Oman date for the first four hours of every Oman day — the
+      // window in which the same-day guard below would silently stop working.
+      "SELECT id, year_start::text as year_start, year_end::text as year_end, annual_leave_balance, last_reset_year, to_char(last_reset_at AT TIME ZONE 'Asia/Muscat', 'YYYY-MM-DD') as last_reset_day FROM settings ORDER BY id LIMIT 1 FOR UPDATE"
     )
     if (settings.length === 0) {
       await client.query('ROLLBACK')
@@ -296,9 +300,8 @@ export async function runYearlyReset(actor: ActorType, opts: { force?: boolean }
       await client.query('ROLLBACK')
       return { success: false, alreadyReset: true, message: `Fiscal year starting ${s.year_start} has already been reset.` }
     }
-    // Compare in Oman time: last_reset_day comes from the database's own clock, and a UTC
-    // 'today' would disagree with it for the first four hours of every Oman day —
-    // re-opening the very double-reset window this guard exists to close.
+    // Both sides are Oman dates now (see the AT TIME ZONE cast above), so this compares
+    // like with like at every hour of the day.
     if (s.last_reset_day && s.last_reset_day === omanToday()) {
       await client.query('ROLLBACK')
       return { success: false, alreadyReset: true, message: 'A yearly reset has already run today.' }

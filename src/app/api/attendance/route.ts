@@ -1,11 +1,9 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
-import { isOffDayFor, computeWorkHours, computeOvertime } from '@/lib/attendance-calc'
-import { resolveSchedule } from '@/lib/schedule'
-import { reverseAutoAbsenceLeave, applyAutoAbsenceLeave } from '@/lib/auto-absence'
 import { parseBody } from '@/server/validation'
 import { attendanceUpsertSchema } from '@/server/schemas'
+import { upsertAttendance } from '@/server/services/attendance-service'
 
 export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
@@ -54,62 +52,7 @@ export async function POST(request: Request) {
   if (!valid.ok) return valid.response
   const records = Array.isArray(valid.data) ? valid.data : [valid.data]
 
-  const allowedStatuses = new Set(['present', 'absent', 'leave', 'holiday'])
-  const results = []
-  for (const r of records) {
-    // employee_id / date shape is guaranteed by the zod schema at the route boundary.
-    const status = r.status && allowedStatuses.has(r.status) ? r.status : 'present'
-
-    // Same overnight/holiday-aware work-hours math as the self-service check-out path,
-    // measured against this employee's own schedule.
-    const holidayWork = await isOffDayFor(r.employee_id, r.date)
-    const normalHours = (await resolveSchedule(r.employee_id)).workHoursPerDay
-    let workHours = 0
-    if (r.check_in && r.check_out) {
-      workHours = computeWorkHours(r.check_in, r.check_out) ?? 0
-    }
-    const overtime = computeOvertime(workHours, normalHours, holidayWork)
-
-    const client = await pool.connect()
-    try {
-      await client.query('BEGIN')
-
-      // If this record currently exists as 'absent' and is being changed to a non-absent
-      // status, refund the auto-deducted absence leave so the day isn't lost.
-      const { rows: prev } = await client.query('SELECT status FROM attendance WHERE employee_id = $1 AND date = $2', [r.employee_id, r.date])
-      const wasAbsent = prev[0]?.status === 'absent'
-
-      const { rows } = await client.query(`
-        INSERT INTO attendance (employee_id, date, check_in, check_out, work_hours, overtime_hours, status, notes, is_holiday_work)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        ON CONFLICT (employee_id, date) DO UPDATE SET
-          check_in = COALESCE($3, attendance.check_in),
-          check_out = COALESCE($4, attendance.check_out),
-          work_hours = $5,
-          overtime_hours = $6,
-          status = $7,
-          notes = $8,
-          is_holiday_work = $9
-        RETURNING *
-      `, [r.employee_id, r.date, r.check_in || null, r.check_out || null, workHours, overtime, status, r.notes || null, holidayWork])
-
-      // Keep the charge and the refund symmetric. Previously only the refund existed here,
-      // so an admin marking someone absent recorded the absence and deducted nothing.
-      if (wasAbsent && status !== 'absent') {
-        await reverseAutoAbsenceLeave(client, r.employee_id, r.date)
-      } else if (!wasAbsent && status === 'absent') {
-        await applyAutoAbsenceLeave(client, r.employee_id, r.date)
-      }
-
-      await client.query('COMMIT')
-      results.push(rows[0])
-    } catch (err) {
-      await client.query('ROLLBACK')
-      throw err
-    } finally {
-      client.release()
-    }
-  }
-
-  return NextResponse.json(results)
+  const result = await upsertAttendance(records)
+  if (!result.ok) return NextResponse.json(result.body, { status: result.status })
+  return NextResponse.json(result.data)
 }

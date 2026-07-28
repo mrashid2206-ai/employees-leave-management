@@ -152,9 +152,20 @@ server-error hook; it persists every captured error to `error_log`, viewable at
 invisible unless someone happened to be tailing Railway logs at that moment.
 
 Request validation: `src/server/schemas.ts` + `src/server/validation.ts` (zod at write
-boundaries). Business logic that mutates balances lives in `src/server/services/*`
-(`leave-service`, `correction-service`, `holiday-service`) and returns a `ServiceResult`,
-which routes hand to `respond()` — so the same logic is callable from tests without HTTP.
+boundaries).
+
+### Where logic belongs
+
+**Anything that mutates a leave balance lives in `src/server/services/*`** — `leave-service`,
+`attendance-service`, `correction-service`, `holiday-service` — returns a `ServiceResult`,
+and is called by a thin route that only authenticates, validates and responds. The point is
+testability: those functions are exercised directly by the integration suite without going
+through HTTP, which is how the balance invariants are pinned.
+
+Routes that only read, or write data with no balance consequence, still hold their SQL
+inline. That is deliberate rather than unfinished: converting them would be churn with no
+behavioural gain. **The rule for new work is the boundary, not the file count — if it can
+move a balance, it goes in a service.**
 
 ### Translations
 
