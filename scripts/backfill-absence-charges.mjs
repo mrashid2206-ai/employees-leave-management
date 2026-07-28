@@ -162,22 +162,21 @@ async function main() {
 
     for (const [id, e] of byEmp) {
       for (const date of e.dates) {
-        // Re-check inside the transaction: same guards as the live code path.
-        const { rows: locked } = await client.query(
-          'SELECT leave_balance FROM employees WHERE id = $1 FOR UPDATE',
-          [id]
-        )
-        const balance = parseFloat(locked[0]?.leave_balance ?? '0')
+        // Re-check inside the transaction: same guards as the live code path
+        // (src/lib/auto-absence.ts). The balance is tested in SQL against the locked row,
+        // not passed as a parameter — binding it into `$n > 0` made Postgres infer an
+        // integer and reject any fractional balance such as "25.4".
+        await client.query('SELECT leave_balance FROM employees WHERE id = $1 FOR UPDATE', [id])
         const { rows: ins } = await client.query(
           `INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, days_count, notes, status)
-           SELECT $1, $2, $3, $3, 1, $5, 'approved'
-           WHERE $4 > 0
+           SELECT $1, $2, $3, $3, 1, $4, 'approved'
+           WHERE EXISTS (SELECT 1 FROM employees WHERE id = $1 AND leave_balance > 0)
              AND NOT EXISTS (
                SELECT 1 FROM leave_requests
                 WHERE employee_id = $1 AND start_date = $3 AND end_date = $3 AND status <> 'cancelled'
              )
            RETURNING id`,
-          [id, annualTypeId, date, balance, AUTO_NOTE]
+          [id, annualTypeId, date, AUTO_NOTE]
         )
         if (ins.length > 0) {
           await client.query(
