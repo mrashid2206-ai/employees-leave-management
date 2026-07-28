@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
+import { parseBody } from '@/server/validation'
+import { holidaySchema } from '@/server/schemas'
 
 export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
@@ -12,8 +14,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
-  const { name, date } = await request.json()
-  if (!name || !date) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+  const valid = parseBody(holidaySchema, await request.json())
+  if (!valid.ok) return valid.response
+  const { name, date } = valid.data
 
   const { rows } = await pool.query(
     'INSERT INTO holidays (name, date) VALUES ($1, $2) RETURNING *',

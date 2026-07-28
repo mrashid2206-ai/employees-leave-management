@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAnyAuth, verifyAdmin, unauthorized } from '@/lib/api-auth'
+import { parseBody } from '@/server/validation'
+import { permissionUpdateSchema } from '@/server/schemas'
 
 // Update permission (mark return time, or approve)
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
   const { id } = await params
-  const body = await request.json()
+  const valid = parseBody(permissionUpdateSchema, await request.json())
+  if (!valid.ok) return valid.response
+  const body = valid.data
 
   if (body.return_time) {
     // Employee marking their return — must own the permission record (admins may edit any).

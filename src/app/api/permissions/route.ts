@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAnyAuth, unauthorized, forbidden } from '@/lib/api-auth'
+import { parseBody } from '@/server/validation'
+import { permissionCreateSchema } from '@/server/schemas'
 
 export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
@@ -40,11 +42,11 @@ export async function POST(request: Request) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
 
-  const { employee_id, date, leave_time, reason } = await request.json()
+  const valid = parseBody(permissionCreateSchema, await request.json())
+  if (!valid.ok) return valid.response
+  const { employee_id, date, leave_time, reason } = valid.data
 
-  if (!employee_id || !date || !leave_time) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
-  }
+  // Required fields and their formats are enforced by permissionCreateSchema above.
 
   // Employees can only create for themselves
   if (user.role === 'employee' && user.id !== employee_id) return forbidden()

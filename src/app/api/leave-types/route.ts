@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
+import { parseBody } from '@/server/validation'
+import { leaveTypeSchema } from '@/server/schemas'
 
 export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
@@ -12,10 +14,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
-  const { name_ar, name_en, color } = await request.json()
-  if (!name_ar || !name_en || !color) {
-    return NextResponse.json({ error: 'All fields required' }, { status: 400 })
-  }
+  const valid = parseBody(leaveTypeSchema, await request.json())
+  if (!valid.ok) return valid.response
+  const { name_ar, name_en, color } = valid.data
   const { rows: existing } = await pool.query(
     'SELECT id FROM leave_types WHERE name_en = $1 OR name_ar = $2',
     [name_en, name_ar]

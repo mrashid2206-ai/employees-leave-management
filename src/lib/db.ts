@@ -24,25 +24,13 @@ const pool = new Pool(
 
 export default pool
 
-// Oman timezone (GMT+4)
+// Oman timezone (GMT+4).
+//
+// The implementations live in src/lib/oman-date.ts so CLIENT components can use the same
+// ones — this module opens a pg Pool and cannot be bundled for the browser. Re-exported
+// here so every existing server import keeps working.
+export { omanToday, omanYesterday, omanTime, addDays } from '@/lib/oman-date'
+
 export function omanNow(): Date {
   return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Muscat' }))
-}
-
-export function omanToday(): string {
-  const d = omanNow()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-// The previous calendar day in Oman time. The daily automation processes this (the
-// last COMPLETED day) so it never marks an in-progress day's employees absent.
-export function omanYesterday(): string {
-  const d = omanNow()
-  d.setDate(d.getDate() - 1)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-export function omanTime(): string {
-  const d = omanNow()
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:00`
 }

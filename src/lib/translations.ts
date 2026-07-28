@@ -338,7 +338,10 @@ export const translations = {
   leaveUsage: { ar: 'استخدام الإجازات', en: 'Leave Usage' },
   activityLog: { ar: 'سجل النشاط', en: 'Activity Log' },
   halfDay: { ar: 'نصف يوم', en: 'Half Day' },
-  workingDaysOnly: { ar: 'أيام عمل فقط', en: 'working days only' },
+  // The figure is calendar days minus public holidays — weekends ARE charged, by company
+  // policy. It was labelled "working days only", which promised something different and
+  // would eventually be argued about with an employee.
+  workingDaysOnly: { ar: 'باستثناء العطل الرسمية', en: 'public holidays excluded' },
   insufficientBalance: { ar: 'رصيد غير كافي', en: 'Insufficient balance' },
   year: { ar: 'السنة', en: 'Year' },
   allYears: { ar: 'كل السنوات', en: 'All Years' },

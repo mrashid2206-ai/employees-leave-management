@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
+import { parseBody } from '@/server/validation'
+import { departmentSchema } from '@/server/schemas'
 
 export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
@@ -16,8 +18,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
-  const { name } = await request.json()
-  if (!name) return NextResponse.json({ error: 'Name required' }, { status: 400 })
+  const valid = parseBody(departmentSchema, await request.json())
+  if (!valid.ok) return valid.response
+  const { name } = valid.data
 
   const { rows } = await pool.query(
     'INSERT INTO departments (name) VALUES ($1) RETURNING *',

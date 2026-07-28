@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
+import { parseBody } from '@/server/validation'
+import { leaveTypeSchema } from '@/server/schemas'
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
   const { id } = await params
-  const { name_ar, name_en, color } = await request.json()
+  const valid = parseBody(leaveTypeSchema, await request.json())
+  if (!valid.ok) return valid.response
+  const { name_ar, name_en, color } = valid.data
   const { rows } = await pool.query(
     'UPDATE leave_types SET name_ar = $1, name_en = $2, color = $3 WHERE id = $4 RETURNING *',
     [name_ar, name_en, color, id]

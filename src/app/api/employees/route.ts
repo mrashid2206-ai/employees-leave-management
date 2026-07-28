@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
 import { DEFAULT_EMPLOYEE_PASSWORD } from '@/lib/constants'
+import { parseBody } from '@/server/validation'
+import { employeeCreateSchema } from '@/server/schemas'
 
 export async function GET(request: Request) {
   // Admin only: the full roster exposes PII (email/phone/leave_balance) and every
@@ -26,7 +28,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
-  const body = await request.json()
+  const valid = parseBody(employeeCreateSchema, await request.json())
+  if (!valid.ok) return valid.response
+  const body = valid.data
   const { name, department_id, leave_balance, join_date, email, phone, position } = body
 
   if (!name || !department_id) {

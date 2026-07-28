@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
+import { omanToday } from '@/lib/oman-date'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -68,7 +69,7 @@ export default function SettingsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; type: string; id: number; name: string }>({ open: false, type: '', id: 0, name: '' })
   const [ltForm, setLtForm] = useState({ name_ar: '', name_en: '', color: '#4CAF50' })
   const [editLt, setEditLt] = useState<{ id: number; name_ar: string; name_en: string; color: string } | null>(null)
-  const [processDate, setProcessDate] = useState(new Date().toISOString().split('T')[0])
+  const [processDate, setProcessDate] = useState(omanToday())
   const [processResult, setProcessResult] = useState<ProcessResult | null>(null)
   const [processing, setProcessing] = useState(false)
   const [resetConfirm, setResetConfirm] = useState(false)

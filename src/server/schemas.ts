@@ -138,6 +138,17 @@ export const employeeCreateSchema = z
 
 export const departmentSchema = z.object({ name: z.string().min(1) }).passthrough()
 
+// Updates are partial on purpose: the schedule editor saves only the work_* fields and
+// never sends a name, so requiring one here would break it.
+export const departmentUpdateSchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    work_start_time: timeStr.nullish(),
+    work_days: z.string().nullish(),
+    work_hours_per_day: z.coerce.number().int().positive().nullish(),
+  })
+  .passthrough()
+
 export const holidaySchema = z
   .object({ name: z.string().min(1), date: dateStr })
   .passthrough()
