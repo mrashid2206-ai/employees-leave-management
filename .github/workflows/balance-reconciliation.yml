@@ -1,0 +1,48 @@
+name: Balance reconciliation
+
+# Checks that every employee's stored leave balance still agrees with their records
+# (allowance - approved leave - tardiness charged). Two separate bugs have let balances
+# drift silently, and both were found by accident rather than by looking — this makes
+# drift something that reports itself.
+#
+# Uses the same repo secrets as the daily automation:
+#   APP_URL      e.g. https://your-app.up.railway.app
+#   CRON_SECRET  same value as the app's CRON_SECRET env var
+#
+# The endpoint returns 409 when anything drifts, so `curl -f` fails and this job goes red.
+# A red scheduled job emails the repo owner; a green one means the books balance.
+on:
+  schedule:
+    # 03:00 UTC on the 1st of each month = 07:00 Asia/Muscat.
+    - cron: '0 3 1 * *'
+  workflow_dispatch: {}
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check leave balances against records
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -o pipefail
+          # Tolerate rounding below a tenth of a day; anything larger is worth a look.
+          response=$(curl -sS -w '\n%{http_code}' --retry 3 \
+            "$APP_URL/api/cron/reconcile?threshold=0.1" \
+            -H "Authorization: Bearer $CRON_SECRET")
+          body=$(echo "$response" | head -n -1)
+          code=$(echo "$response" | tail -n 1)
+
+          echo "$body"
+
+          if [ "$code" = "200" ]; then
+            echo "All balances reconcile."
+          elif [ "$code" = "409" ]; then
+            echo "::error::Leave balances drift from the records — investigate before correcting."
+            echo "Run scripts/reconcile-balances.mjs locally for the full breakdown."
+            exit 1
+          else
+            echo "::error::Reconciliation check failed (HTTP $code)"
+            exit 1
+          fi
