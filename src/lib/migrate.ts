@@ -49,6 +49,8 @@ export async function runMigrations(): Promise<{ applied: string[] }> {
     }
     return { applied }
   } finally {
+    // Safe to ignore: releasing the connection below drops the session and with it any
+    // session-scoped advisory lock, so a failed explicit unlock cannot strand it.
     await client.query('SELECT pg_advisory_unlock($1)', [LOCK_KEY]).catch(() => {})
     client.release()
   }

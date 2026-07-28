@@ -251,6 +251,16 @@ export default function SettingsPage() {
                       <Label className="text-xs">{t('maxAbsent')}</Label>
                       <Input type="number" value={form.max_absent_same_dept || ''} onChange={e => setForm(f => ({ ...f, max_absent_same_dept: parseInt(e.target.value) }))} />
                     </div>
+                    <div>
+                      <Label className="text-xs">{t('maxPermissionsPerMonth')}</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={form.max_permissions_per_month ?? ''}
+                        onChange={e => setForm(f => ({ ...f, max_permissions_per_month: parseInt(e.target.value) || 0 }))}
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">{t('zeroMeansUnlimited')}</p>
+                    </div>
                     <div className="sm:col-span-2 flex items-start gap-2 pt-1">
                       <Checkbox
                         id="deduct-permission-hours"
@@ -824,7 +834,10 @@ function AdminUsersSection({ lang }: { lang: string }) {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    fetch('/api/admin-users').then(r => r.ok ? r.json() : []).then(setAdmins).catch(() => {})
+    fetch('/api/admin-users')
+      .then(r => (r.ok ? r.json() : []))
+      .then(setAdmins)
+      .catch(err => console.error('failed to load admin users', err))
   }, [])
 
   async function handleAdd() {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import pool, { omanToday, omanTime } from '@/lib/db'
+import { logger } from '@/lib/log'
 import { verifyAnyAuth, unauthorized, forbidden } from '@/lib/api-auth'
 import { isOffDayFor, computeWorkHours, computeOvertime, evaluateLocation, permissionMinutesFor } from '@/lib/attendance-calc'
 import { resolveSchedule } from '@/lib/schedule'
@@ -173,11 +174,19 @@ export async function POST(request: Request) {
       RETURNING id, date::text as date, check_in::text as check_in, check_out::text as check_out, work_hours, overtime_hours, is_holiday_work
     `, [currentTime, workHours, overtime, employee_id, today, latitude || null, longitude || null, clientIp, coOffsite])
 
-    // Auto-close any open permission (employee forgot to click "I'm Back")
-    await pool.query(
-      "UPDATE permissions SET return_time = $1 WHERE employee_id = $2 AND date = $3 AND return_time IS NULL AND status = 'approved'",
-      [currentTime, employee_id, today]
-    ).catch(() => {}) // Table might not exist yet
+    // Auto-close any open permission (employee forgot to click "I'm Back").
+    // Reported, not swallowed: the check-out above has already been written, so failing
+    // the whole request here would be worse — but a silent failure leaves a permission
+    // open forever with nothing to show why. (The old comment claimed the table might not
+    // exist; it has been in 0001_baseline since the self-heal was removed.)
+    try {
+      await pool.query(
+        "UPDATE permissions SET return_time = $1 WHERE employee_id = $2 AND date = $3 AND return_time IS NULL AND status = 'approved'",
+        [currentTime, employee_id, today]
+      )
+    } catch (err) {
+      logger.error('failed to auto-close open permission on check-out', err, { employee_id, date: today })
+    }
 
     // Record-only policy: not blocked, but the employee is told it was flagged off-site.
     if (coOffsite) {

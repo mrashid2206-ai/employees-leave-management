@@ -172,5 +172,8 @@ export const settingsUpdateSchema = z
     work_start_time: z.string().optional(),
     work_days: z.string().optional(),
     office_radius: z.coerce.number().min(0).nullish(),
+    // 0 = unlimited, so the cap can be switched off without a code change.
+    max_permissions_per_month: z.coerce.number().int().min(0).optional(),
+    max_permission_minutes: z.coerce.number().int().min(0).optional(),
   })
   .passthrough()

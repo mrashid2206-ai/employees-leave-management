@@ -54,7 +54,9 @@ export async function pushToEmployee(employeeId: number, payload: PushPayload): 
       } catch (e) {
         const status = (e as { statusCode?: number }).statusCode
         if (status === 404 || status === 410) {
-          await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [s.endpoint]).catch(() => {})
+          await pool
+            .query('DELETE FROM push_subscriptions WHERE endpoint = $1', [s.endpoint])
+            .catch(err => logger.error('failed to prune expired push subscription', err))
         } else {
           logger.warn('push send failed', { employeeId, status })
         }

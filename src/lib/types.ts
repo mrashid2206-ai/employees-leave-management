@@ -11,6 +11,8 @@ export interface Settings {
   office_lng?: number
   office_radius?: number
   office_ip?: string
+  max_permissions_per_month?: number
+  max_permission_minutes?: number
 }
 
 export interface Department {

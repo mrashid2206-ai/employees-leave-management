@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyEmployee, unauthorized } from '@/lib/api-auth'
 import { pushPublicKey } from '@/lib/push'
+import { logger } from '@/lib/log'
 
 // The browser needs the VAPID public key to subscribe; it is not a secret.
 export async function GET() {
@@ -36,6 +37,10 @@ export async function DELETE(request: Request) {
   if (!user) return unauthorized()
   const body = await request.json().catch(() => null)
   if (!body?.endpoint) return NextResponse.json({ error: 'Invalid subscription' }, { status: 400 })
-  await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [body.endpoint]).catch(() => {})
+  // Non-fatal: unsubscribing is best-effort, but a persistent failure means dead
+  // subscriptions accumulate, so it is logged rather than discarded.
+  await pool
+    .query('DELETE FROM push_subscriptions WHERE endpoint = $1', [body.endpoint])
+    .catch(err => logger.error('failed to delete push subscription', err))
   return NextResponse.json({ success: true })
 }

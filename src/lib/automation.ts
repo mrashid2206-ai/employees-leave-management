@@ -62,6 +62,15 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
   const { rows: holidays } = await pool.query('SELECT id FROM holidays WHERE date = $1', [processDate])
   const isHoliday = holidays.length > 0
 
+  // Everyone who already has a tardiness row for this date, fetched once instead of one
+  // SELECT per employee inside the loop below. Written to as rows are created so the
+  // guard stays correct within a single run.
+  const { rows: loggedTardiness } = await pool.query(
+    'SELECT employee_id FROM tardiness_log WHERE date = $1',
+    [processDate]
+  )
+  const tardinessAlreadyLogged = new Set<number>(loggedTardiness.map(r => r.employee_id))
+
   // Each employee's effective schedule (employee -> department -> global). Working days,
   // start time and day length can all differ, so every per-person decision below —
   // "is this their weekend?", "were they late?", "when does their day end?" — uses theirs.
@@ -129,11 +138,8 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
           const [h, m] = record.check_in.split(':').map(Number)
           const minutesLate = (h * 60 + m) - workStartMinutes
           if (minutesLate > TARDINESS_GRACE_MINUTES) {
-            const { rows: existing } = await pool.query(
-              'SELECT id FROM tardiness_log WHERE employee_id = $1 AND date = $2',
-              [emp.id, processDate]
-            )
-            if (existing.length === 0) {
+            // Looked up in memory: this used to be one SELECT per employee per run.
+            if (!tardinessAlreadyLogged.has(emp.id)) {
               const deduction = TARDINESS_DEDUCTS_LEAVE ? tardinessLeaveDeduction(minutesLate, workHoursDay, TARDINESS_PENALTY_GRACE_MINUTES) : 0
               const tc = await pool.connect()
               try {
@@ -152,6 +158,8 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
                   tc
                 )
                 await tc.query('COMMIT')
+                // Keep the in-memory guard in step with the table.
+                tardinessAlreadyLogged.add(emp.id)
                 results.tardinessCreated++
                 await notifyEmployee(
                   emp.id,

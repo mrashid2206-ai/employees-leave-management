@@ -541,6 +541,8 @@ export const translations = {
   errorLog: { ar: 'سجل الأخطاء', en: 'Error log' },
   errorLogHint: { ar: 'أخطاء الخادم المسجّلة تلقائياً، لتتمكن من رؤية الأعطال بعد وقوعها.', en: 'Server errors captured automatically, so failures are visible after the fact.' },
   noErrorsRecorded: { ar: 'لا توجد أخطاء مسجّلة', en: 'No errors recorded' },
+  maxPermissionsPerMonth: { ar: 'الحد الأقصى للاستئذان شهرياً', en: 'Max permissions per month' },
+  zeroMeansUnlimited: { ar: '0 = بدون حد', en: '0 = unlimited' },
 
   // ---- Push reminders ----
   pushNotConfigured: { ar: 'الإشعارات غير مفعّلة على الخادم', en: 'Push is not configured on the server' },
