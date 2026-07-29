@@ -24,25 +24,50 @@ export interface OfficeSettings {
 // actions (previously duplicated and divergent). GPS is authoritative when coordinates
 // are supplied, so a spoofed X-Forwarded-For cannot override a failing GPS check; IP is
 // only a fallback when GPS is unavailable.
+/** Where a check-in happened, as far as the evidence allows us to say. */
+export type LocationState =
+  | 'onsite'      // GPS inside the radius, or the office's own network
+  | 'offsite'     // GPS proves they were somewhere else
+  | 'unverified'  // no coordinates and not on the office network — location unknown
+
+/**
+ * Decide the location state from the available evidence.
+ *
+ * The asymmetry between GPS and IP is deliberate, and was the whole point of revisiting
+ * this: matching the office IP is STRONG evidence of being on the premises (you are on
+ * their network), while failing to match it is WEAK — mobile data hands out a different
+ * address every time, so an employee at their own desk on 4G looks identical to one at
+ * home. Treating that as proof of absence produced a report where the majority of
+ * "off-site" rows could not be substantiated.
+ *
+ * So a non-matching IP with no coordinates is now 'unverified', not 'offsite'. Only GPS
+ * can put someone off-site.
+ */
 export function evaluateLocation(
   loc: OfficeSettings,
   lat: number | null,
   lng: number | null,
   clientIp: string
-): { configured: boolean; onsite: boolean } {
+): { configured: boolean; state: LocationState } {
   const hasGps = loc.office_lat != null && loc.office_lng != null
   const hasIp = !!loc.office_ip
-  if (!hasGps && !hasIp) return { configured: false, onsite: true }
+  if (!hasGps && !hasIp) return { configured: false, state: 'onsite' }
 
+  // GPS is authoritative when present — a matching (spoofable) IP cannot override it.
   if (hasGps && lat != null && lng != null) {
     const dist = getDistanceMeters(lat, lng, Number(loc.office_lat), Number(loc.office_lng))
-    return { configured: true, onsite: dist <= (loc.office_radius || DEFAULT_OFFICE_RADIUS_M) }
+    return {
+      configured: true,
+      state: dist <= (loc.office_radius || DEFAULT_OFFICE_RADIUS_M) ? 'onsite' : 'offsite',
+    }
   }
-  if (hasIp && clientIp !== 'unknown') {
-    return { configured: true, onsite: clientIp === loc.office_ip }
+
+  // No coordinates. The office network can still confirm presence; nothing else can
+  // disprove it.
+  if (hasIp && clientIp !== 'unknown' && clientIp === loc.office_ip) {
+    return { configured: true, state: 'onsite' }
   }
-  // GPS configured but not provided and no usable IP — cannot verify → treat as off-site.
-  return { configured: true, onsite: false }
+  return { configured: true, state: 'unverified' }
 }
 
 export async function isHoliday(dateStr: string): Promise<boolean> {
