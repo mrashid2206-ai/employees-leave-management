@@ -94,21 +94,25 @@ export async function POST(request: Request) {
     // Location verification
     const { rows: locSettings } = await pool.query('SELECT office_lat, office_lng, office_radius, office_ip FROM settings ORDER BY id LIMIT 1')
     const officeLoc = locSettings[0]
-    const { configured, onsite } = officeLoc
+    const { configured, state } = officeLoc
       ? evaluateLocation(officeLoc, latitude ?? null, longitude ?? null, clientIp)
-      : { configured: false, onsite: true }
-    // Record-only policy: capture location and flag off-site for admin review, but never
-    // block check-in (laptops have no GPS and mobile fixes can fail at the office).
-    const isOffsite = configured ? !onsite : false
+      : { configured: false, state: 'onsite' as const }
+    // Record-only policy: capture location for admin review, but never block check-in
+    // (laptops have no GPS and mobile fixes can fail at the office).
+    const locationState = configured ? state : 'onsite'
+    // is_offsite now means GPS-CONFIRMED off-site only. 'unverified' — no coordinates and
+    // not on the office network — is recorded as such rather than asserted as absence.
+    const isOffsite = locationState === 'offsite'
 
     const { rows } = await pool.query(`
-      INSERT INTO attendance (employee_id, date, check_in, status, is_holiday_work, check_in_lat, check_in_lng, check_in_ip, is_offsite)
-      VALUES ($1, $2, $3, 'present', $4, $5, $6, $7, $8)
-      ON CONFLICT (employee_id, date) DO UPDATE SET check_in = $3, status = 'present', is_holiday_work = $4, check_in_lat = $5, check_in_lng = $6, check_in_ip = $7, is_offsite = $8
-      RETURNING id, date::text as date, check_in::text as check_in, check_out::text as check_out, is_holiday_work, is_offsite
-    `, [employee_id, today, currentTime, holidayWork, latitude || null, longitude || null, clientIp, isOffsite])
+      INSERT INTO attendance (employee_id, date, check_in, status, is_holiday_work, check_in_lat, check_in_lng, check_in_ip, is_offsite, check_in_location)
+      VALUES ($1, $2, $3, 'present', $4, $5, $6, $7, $8, $9)
+      ON CONFLICT (employee_id, date) DO UPDATE SET check_in = $3, status = 'present', is_holiday_work = $4, check_in_lat = $5, check_in_lng = $6, check_in_ip = $7, is_offsite = $8, check_in_location = $9
+      RETURNING id, date::text as date, check_in::text as check_in, check_out::text as check_out, is_holiday_work, is_offsite, check_in_location
+    `, [employee_id, today, currentTime, holidayWork, latitude || null, longitude || null, clientIp, isOffsite, locationState])
 
-    // Record-only policy: not blocked, but the employee is told it was flagged off-site.
+    // Only tell the employee when GPS actually places them elsewhere. Notifying on
+    // 'unverified' would accuse people whose phone simply did not report a position.
     if (isOffsite) {
       await notifyEmployee(
         employee_id,
@@ -128,8 +132,9 @@ export async function POST(request: Request) {
     const coOfficeLoc = coLocSettings[0]
     const co = coOfficeLoc
       ? evaluateLocation(coOfficeLoc, latitude ?? null, longitude ?? null, clientIp)
-      : { configured: false, onsite: true }
-    const coOffsite = co.configured ? !co.onsite : false
+      : { configured: false, state: 'onsite' as const }
+    const coLocationState = co.configured ? co.state : 'onsite'
+    const coOffsite = coLocationState === 'offsite'
 
     const { rows: existing } = await pool.query(
       'SELECT id, check_in, check_out FROM attendance WHERE employee_id = $1 AND date = $2',
@@ -169,10 +174,10 @@ export async function POST(request: Request) {
     const overtime = computeOvertime(workHours, normalHours, holidayWork)
 
     const { rows } = await pool.query(`
-      UPDATE attendance SET check_out = $1, work_hours = $2, overtime_hours = $3, check_out_lat = $6, check_out_lng = $7, check_out_ip = $8, is_offsite_checkout = $9
+      UPDATE attendance SET check_out = $1, work_hours = $2, overtime_hours = $3, check_out_lat = $6, check_out_lng = $7, check_out_ip = $8, is_offsite_checkout = $9, check_out_location = $10
       WHERE employee_id = $4 AND date = $5
-      RETURNING id, date::text as date, check_in::text as check_in, check_out::text as check_out, work_hours, overtime_hours, is_holiday_work
-    `, [currentTime, workHours, overtime, employee_id, today, latitude || null, longitude || null, clientIp, coOffsite])
+      RETURNING id, date::text as date, check_in::text as check_in, check_out::text as check_out, work_hours, overtime_hours, is_holiday_work, check_out_location
+    `, [currentTime, workHours, overtime, employee_id, today, latitude || null, longitude || null, clientIp, coOffsite, coLocationState])
 
     // Auto-close any open permission (employee forgot to click "I'm Back").
     // Reported, not swallowed: the check-out above has already been written, so failing

@@ -49,31 +49,51 @@ describe('evaluateLocation', () => {
 
   it('is on-site when nothing is configured', () => {
     expect(evaluateLocation({ office_lat: null, office_lng: null, office_radius: null, office_ip: null }, null, null, 'unknown'))
-      .toEqual({ configured: false, onsite: true })
+      .toEqual({ configured: false, state: 'onsite' })
   })
 
   it('is on-site for GPS within the radius', () => {
-    expect(evaluateLocation(office, 23.5801, 58.3801, 'unknown').onsite).toBe(true)
+    expect(evaluateLocation(office, 23.5801, 58.3801, 'unknown').state).toBe('onsite')
   })
 
   it('is off-site for GPS outside the radius', () => {
-    expect(evaluateLocation(office, 23.70, 58.50, 'unknown').onsite).toBe(false)
+    expect(evaluateLocation(office, 23.70, 58.50, 'unknown').state).toBe('offsite')
   })
 
   it('GPS is authoritative — a spoofed matching IP cannot override a failing GPS check', () => {
-    // Coordinates far from office but the (spoofable) IP matches: must still be off-site.
-    expect(evaluateLocation(office, 23.70, 58.50, '1.2.3.4').onsite).toBe(false)
+    // Coordinates far from the office but the (spoofable) IP matches: still off-site.
+    expect(evaluateLocation(office, 23.70, 58.50, '1.2.3.4').state).toBe('offsite')
   })
 
-  it('falls back to IP only when GPS is unavailable', () => {
-    expect(evaluateLocation(office, null, null, '1.2.3.4').onsite).toBe(true)
-    expect(evaluateLocation(office, null, null, '9.9.9.9').onsite).toBe(false)
+  // The asymmetry that matters. Matching the office IP proves presence on their network;
+  // NOT matching it proves nothing, because mobile data issues a different address every
+  // time — an employee at their desk on 4G looked identical to one at home, which made 89
+  // of 150 production "off-site" rows unsubstantiated.
+  describe('without coordinates', () => {
+    it('the office IP confirms on-site', () => {
+      expect(evaluateLocation(office, null, null, '1.2.3.4').state).toBe('onsite')
+    })
+
+    it('a different IP is UNVERIFIED, never off-site', () => {
+      expect(evaluateLocation(office, null, null, '9.9.9.9').state).toBe('unverified')
+    })
+
+    it('an unknown IP is unverified', () => {
+      expect(evaluateLocation(office, null, null, 'unknown').state).toBe('unverified')
+    })
+
+    it('only GPS can put someone off-site', () => {
+      // No combination of missing coordinates and a strange IP yields 'offsite'.
+      for (const ip of ['9.9.9.9', 'unknown', '']) {
+        expect(evaluateLocation(office, null, null, ip).state).not.toBe('offsite')
+      }
+    })
   })
 
-  it('IP-only config: matches on-site, mismatch off-site, unknown off-site', () => {
+  it('IP-only config: matches on-site, anything else unverified', () => {
     const ipOnly = { office_lat: null, office_lng: null, office_radius: null, office_ip: '1.2.3.4' }
-    expect(evaluateLocation(ipOnly, null, null, '1.2.3.4').onsite).toBe(true)
-    expect(evaluateLocation(ipOnly, null, null, '9.9.9.9').onsite).toBe(false)
-    expect(evaluateLocation(ipOnly, null, null, 'unknown').onsite).toBe(false)
+    expect(evaluateLocation(ipOnly, null, null, '1.2.3.4').state).toBe('onsite')
+    expect(evaluateLocation(ipOnly, null, null, '9.9.9.9').state).toBe('unverified')
+    expect(evaluateLocation(ipOnly, null, null, 'unknown').state).toBe('unverified')
   })
 })

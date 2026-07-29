@@ -500,6 +500,11 @@ export const translations = {
   allTypes: { ar: 'كل الأنواع', en: 'All types' },
   viewOnMap: { ar: 'عرض على الخريطة', en: 'View on map' },
   noGpsFix: { ar: 'بدون إحداثيات', en: 'No GPS fix' },
+  noGpsFixHint: { ar: 'لم يرسل الجهاز إحداثيات، لذلك لا يمكن تأكيد الموقع.', en: 'The device sent no coordinates, so the location could not be confirmed.' },
+  locationStatus: { ar: 'حالة الموقع', en: 'Status' },
+  offsiteConfirmed: { ar: 'خارج الموقع (مؤكد)', en: 'Off-site (confirmed)' },
+  locationUnverified: { ar: 'غير مؤكد', en: 'Unverified' },
+  allStatuses: { ar: 'كل الحالات', en: 'All statuses' },
 
   // ---- Holiday seeding ----
   seedOmanHolidays: { ar: 'إضافة عطلات سلطنة عُمان لسنة كاملة', en: 'Add a full year of Oman public holidays' },

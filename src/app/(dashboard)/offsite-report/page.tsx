@@ -25,6 +25,8 @@ interface AttendanceRecord {
   status: string
   is_offsite?: boolean
   is_offsite_checkout?: boolean
+  check_in_location?: LocationState | null
+  check_out_location?: LocationState | null
   check_in_ip?: string | null
   check_out_ip?: string | null
   check_in_lat?: string | number | null
@@ -35,6 +37,7 @@ interface AttendanceRecord {
 }
 
 type EventKind = 'in' | 'out'
+type LocationState = 'onsite' | 'offsite' | 'unverified'
 
 interface OffsiteEvent {
   key: string
@@ -47,6 +50,9 @@ interface OffsiteEvent {
   ip: string | null
   lat: number | null
   lng: number | null
+  // 'offsite' = GPS proved it. 'unverified' = no coordinates and not on the office
+  // network, so the location is simply unknown — shown, but never counted as off-site.
+  state: LocationState
 }
 
 const num = (v: string | number | null | undefined): number | null => {
@@ -60,6 +66,7 @@ export default function OffsiteReportPage() {
   const { lang, dir } = useLanguage()
   const [deptFilter, setDeptFilter] = useState<string>('all')
   const [kindFilter, setKindFilter] = useState<string>('all')
+  const [stateFilter, setStateFilter] = useState<string>('all')
 
   const now = new Date()
   const currentYear = now.getFullYear()
@@ -96,17 +103,23 @@ export default function OffsiteReportPage() {
     for (const r of allRecords) {
       const name = r.employee?.name || ''
       const department = deptById.get(r.employee_id) || ''
-      if (r.is_offsite) {
+      // Fall back to the old boolean for rows written before the location state existed.
+      const inState: LocationState | null =
+        r.check_in_location ?? (r.check_in ? (r.is_offsite ? 'offsite' : 'onsite') : null)
+      const outState: LocationState | null =
+        r.check_out_location ?? (r.check_out ? (r.is_offsite_checkout ? 'offsite' : 'onsite') : null)
+
+      if (inState === 'offsite' || inState === 'unverified') {
         out.push({
           key: `${r.id}-in`, employeeId: r.employee_id, name, department,
-          date: r.date, time: r.check_in, kind: 'in',
+          date: r.date, time: r.check_in, kind: 'in', state: inState,
           ip: r.check_in_ip ?? null, lat: num(r.check_in_lat), lng: num(r.check_in_lng),
         })
       }
-      if (r.is_offsite_checkout) {
+      if (outState === 'offsite' || outState === 'unverified') {
         out.push({
           key: `${r.id}-out`, employeeId: r.employee_id, name, department,
-          date: r.date, time: r.check_out, kind: 'out',
+          date: r.date, time: r.check_out, kind: 'out', state: outState,
           ip: r.check_out_ip ?? null, lat: num(r.check_out_lat), lng: num(r.check_out_lng),
         })
       }
@@ -117,20 +130,26 @@ export default function OffsiteReportPage() {
   const filtered = useMemo(() => {
     return events.filter(e => {
       if (kindFilter !== 'all' && e.kind !== kindFilter) return false
+      if (stateFilter !== 'all' && e.state !== stateFilter) return false
       if (deptFilter !== 'all' && String(deptIdByEmployee.get(e.employeeId)) !== deptFilter) return false
       return true
     })
-  }, [events, kindFilter, deptFilter, deptIdByEmployee])
+  }, [events, kindFilter, stateFilter, deptFilter, deptIdByEmployee])
 
-  const checkInEvents = filtered.filter(e => e.kind === 'in').length
-  const checkOutEvents = filtered.filter(e => e.kind === 'out').length
-  const peopleAffected = new Set(filtered.map(e => e.employeeId)).size
+  // KPIs count CONFIRMED off-site only. An unverified row means "we could not tell", and
+  // counting those as absence is what made the old figures unusable — most of them were
+  // people at their desks whose phone gave no GPS fix and who were on mobile data.
+  const confirmed = filtered.filter(e => e.state === 'offsite')
+  const checkInEvents = confirmed.filter(e => e.kind === 'in').length
+  const checkOutEvents = confirmed.filter(e => e.kind === 'out').length
+  const peopleAffected = new Set(confirmed.map(e => e.employeeId)).size
+  const unverifiedCount = filtered.filter(e => e.state === 'unverified').length
 
-  // Denominator is check-ins actually recorded this month, so the rate answers
-  // "how often did people start their day away from the office?"
+  // Denominator is check-ins actually recorded, so the rate answers "how often did someone
+  // demonstrably start their day away from the office?"
   const totalCheckIns = allRecords.filter(r => r.check_in).length
   const offsiteRate = totalCheckIns > 0
-    ? Math.round((events.filter(e => e.kind === 'in').length / totalCheckIns) * 1000) / 10
+    ? Math.round((events.filter(e => e.kind === 'in' && e.state === 'offsite').length / totalCheckIns) * 1000) / 10
     : 0
 
   function handleExport() {
@@ -140,6 +159,7 @@ export default function OffsiteReportPage() {
       [t('date')]: e.date,
       [t('time')]: e.time || '',
       [t('eventType')]: e.kind === 'in' ? t('checkIn') : t('checkOut'),
+      [t('locationStatus')]: e.state === 'offsite' ? t('offsiteConfirmed') : t('locationUnverified'),
       [t('ipAddress')]: e.ip || '',
       [t('coordinates')]: e.lat !== null && e.lng !== null ? `${e.lat}, ${e.lng}` : '',
     }))
@@ -186,6 +206,14 @@ export default function OffsiteReportPage() {
             <SelectItem value="out">{t('checkOut')}</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={stateFilter} onValueChange={v => setStateFilter(v ?? 'all')}>
+          <SelectTrigger className="w-48"><SelectValue placeholder={t('allStatuses')} /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t('allStatuses')}</SelectItem>
+            <SelectItem value="offsite">{t('offsiteConfirmed')}</SelectItem>
+            <SelectItem value="unverified">{t('locationUnverified')}</SelectItem>
+          </SelectContent>
+        </Select>
         <Select value={deptFilter} onValueChange={v => setDeptFilter(v ?? 'all')}>
           <SelectTrigger className="w-40"><SelectValue placeholder={t('allDepts')} /></SelectTrigger>
           <SelectContent>
@@ -220,6 +248,9 @@ export default function OffsiteReportPage() {
             <div>
               <p className="text-xs text-muted-foreground">{t('employeesAffected')}</p>
               <p className="text-xl font-bold">{peopleAffected}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {unverifiedCount} {t('locationUnverified')}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -245,6 +276,7 @@ export default function OffsiteReportPage() {
                   <TableHead className="text-center">{t('date')}</TableHead>
                   <TableHead className="text-center">{t('time')}</TableHead>
                   <TableHead className="text-center">{t('eventType')}</TableHead>
+                  <TableHead className="text-center">{t('locationStatus')}</TableHead>
                   <TableHead className="text-center">{t('ipAddress')}</TableHead>
                   <TableHead className="text-center">{t('location')}</TableHead>
                 </TableRow>
@@ -252,7 +284,7 @@ export default function OffsiteReportPage() {
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">{t('noOffsiteActivity')}</TableCell>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">{t('noOffsiteActivity')}</TableCell>
                   </TableRow>
                 ) : (
                   filtered.map(e => (
@@ -270,6 +302,13 @@ export default function OffsiteReportPage() {
                           <Badge className="bg-purple-500/10 text-purple-500 border-0 text-xs">{t('checkOut')}</Badge>
                         )}
                       </TableCell>
+                      <TableCell className="text-center">
+                        {e.state === 'offsite' ? (
+                          <Badge className="bg-red-500/10 text-red-500 border-0 text-xs">{t('offsiteConfirmed')}</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">{t('locationUnverified')}</Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="text-center font-mono text-xs text-muted-foreground">{e.ip || '-'}</TableCell>
                       <TableCell className="text-center">
                         {e.lat !== null && e.lng !== null ? (
@@ -283,7 +322,9 @@ export default function OffsiteReportPage() {
                             {t('viewOnMap')}
                           </a>
                         ) : (
-                          <span className="text-muted-foreground text-xs">{t('noGpsFix')}</span>
+                          <span className="text-muted-foreground text-xs" title={t('noGpsFixHint')}>
+                            {t('noGpsFix')}
+                          </span>
                         )}
                       </TableCell>
                     </TableRow>
