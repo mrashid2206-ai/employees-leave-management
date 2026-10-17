@@ -185,10 +185,6 @@ export async function deleteLeaveRequest(id: number): Promise<void> {
   await request(`/api/leaves/${id}`, { method: 'DELETE' })
 }
 
-export async function updateLeaveStatus(id: number, status: string): Promise<LeaveRequest & { balance_after?: number | null }> {
-  return fetchJSON(`/api/leaves/${id}/approve`, jsonBody('PUT', { status }))
-}
-
 // Tardiness
 
 // No arguments, for the same reason as getLeaveRequests.
@@ -284,10 +280,6 @@ export async function getPermissions(span?: DateSpan): Promise<Permission[]> {
   return fetchJSON(span ? `/api/permissions?${spanQuery(span)}` : '/api/permissions')
 }
 
-export async function reviewPermission(id: number, status: 'approved' | 'rejected'): Promise<Permission> {
-  return fetchJSON(`/api/permissions/${id}`, jsonBody('PUT', { status }))
-}
-
 export async function deletePermission(id: number): Promise<void> {
   await request(`/api/permissions/${id}`, { method: 'DELETE' })
 }
@@ -318,10 +310,6 @@ export async function createCorrectionRequest(input: {
   reason: string
 }): Promise<AttendanceCorrection> {
   return fetchJSON('/api/corrections', jsonBody('POST', input))
-}
-
-export async function reviewCorrectionRequest(id: number, status: 'approved' | 'rejected'): Promise<AttendanceCorrection> {
-  return fetchJSON(`/api/corrections/${id}`, jsonBody('PUT', { status }))
 }
 
 // Conflict Detection

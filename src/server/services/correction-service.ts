@@ -2,6 +2,7 @@ import pool, { omanToday } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { checkDecisionNote, normalizeNote, notifyDecision } from '@/server/decision'
 import { isOffDayFor, computeWorkHours, computeOvertime } from '@/lib/attendance-calc'
+import { reverseAutoAbsenceLeave } from '@/lib/auto-absence'
 import { resolveSchedule } from '@/lib/schedule'
 import { ok, fail, type ServiceResult, type Actor, actorLabel } from '@/server/result'
 
@@ -84,10 +85,11 @@ export async function reviewCorrection(
     // Already a 'YYYY-MM-DD' string thanks to the date::text cast above.
     const dateStr: string = req.date
 
+    let refundedDays = 0
     if (status === 'approved') {
       // Apply the requested times to the attendance row, recomputing hours/overtime.
       const { rows: existing } = await client.query(
-        'SELECT check_in::text as check_in, check_out::text as check_out FROM attendance WHERE employee_id = $1 AND date = $2',
+        'SELECT check_in::text as check_in, check_out::text as check_out, status FROM attendance WHERE employee_id = $1 AND date = $2',
         [req.employee_id, dateStr]
       )
       const checkIn = req.requested_check_in || existing[0]?.check_in || null
@@ -109,6 +111,15 @@ export async function reviewCorrection(
            notes = COALESCE(attendance.notes, '') || ' [Corrected]'`,
         [req.employee_id, dateStr, checkIn, checkOut, workHours, overtime, holidayWork]
       )
+
+      // The most common correction is "I was here, the system marked me absent". That
+      // absence charged a leave day (src/lib/auto-absence.ts), and approving the correction
+      // turned the day 'present' without giving it back, so the employee lost a day of
+      // leave for a day the admin had just agreed they worked. Refund it here, in the same
+      // transaction, exactly as the admin attendance edits do.
+      if (existing[0]?.status === 'absent') {
+        refundedDays = await reverseAutoAbsenceLeave(client, req.employee_id, dateStr)
+      }
     }
 
     const { rows } = await client.query(
@@ -127,7 +138,9 @@ export async function reviewCorrection(
       'attendance_correction',
       actorLabel(actor),
       actor.role,
-      `Correction #${id} ${status} for emp ${req.employee_id} on ${dateStr}` + (note ? ` — note: ${note}` : '')
+      `Correction #${id} ${status} for emp ${req.employee_id} on ${dateStr}` +
+        (refundedDays > 0 ? `; refunded ${refundedDays} absence leave day(s)` : '') +
+        (note ? ` — note: ${note}` : '')
     )
     await notifyDecision(req.employee_id, 'correction', status, { date: dateStr }, note, id)
 
