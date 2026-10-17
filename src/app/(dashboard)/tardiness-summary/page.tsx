@@ -10,6 +10,8 @@ import { Download, Printer } from 'lucide-react'
 import { getEmployees, getTardinessRecords, getDepartments } from '@/lib/api'
 import { useT } from '@/lib/language-context'
 import { exportToExcel } from '@/lib/excel'
+import { inLeaveYear } from '@/lib/leave-year'
+import { useLeaveYear, LeaveYearSelect } from '@/components/leave-year-select'
 
 function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -20,6 +22,7 @@ function formatMinutesToHHMM(minutes: number): string {
 export default function TardinessSummaryPage() {
   const t = useT()
   const [deptFilter, setDeptFilter] = useState<string>('all')
+  const { years, year, index: yearIndex, setIndex: setYearIndex } = useLeaveYear()
 
   const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
   const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
@@ -29,8 +32,11 @@ export default function TardinessSummaryPage() {
     let emps = employees.filter(e => e.is_active)
     if (deptFilter !== 'all') emps = emps.filter(e => e.department_id === parseInt(deptFilter))
 
+    // One leave year at a time: tardiness deducts leave, and leave resets each year.
+    const yearTardiness = year ? tardiness.filter(t => inLeaveYear(t.date, year)) : []
+
     return emps.map(emp => {
-      const empTardiness = tardiness.filter(t => t.employee_id === emp.id)
+      const empTardiness = yearTardiness.filter(t => t.employee_id === emp.id)
       const totalMinutes = empTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
       const tardCount = empTardiness.length
       return {
@@ -41,7 +47,7 @@ export default function TardinessSummaryPage() {
         totalMinutes,
       }
     }).sort((a, b) => b.totalMinutes - a.totalMinutes)
-  }, [employees, tardiness, deptFilter])
+  }, [employees, tardiness, deptFilter, year])
 
   const totalLateCount = reportData.reduce((s, r) => s + r.tardCount, 0)
   const totalMinutes = reportData.reduce((s, r) => s + r.totalMinutes, 0)
@@ -62,7 +68,8 @@ export default function TardinessSummaryPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <h1 className="text-2xl font-bold">{t('tardinessSummary')}</h1>
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
+          <LeaveYearSelect years={years} index={yearIndex} onChange={setYearIndex} />
           <Select value={deptFilter} onValueChange={(v) => setDeptFilter(v ?? 'all')}>
             <SelectTrigger className="w-40">
               <SelectValue placeholder={t('allDepts')} />

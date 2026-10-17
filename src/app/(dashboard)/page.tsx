@@ -15,6 +15,8 @@ import dynamic from 'next/dynamic'
 import { AnimatedCounter } from '@/components/animated-counter'
 import { useLanguage, useT } from '@/lib/language-context'
 import type { Employee } from '@/lib/types'
+import { omanToday } from '@/lib/oman-date'
+import { leaveYears, inLeaveYear } from '@/lib/leave-year'
 
 import { PendingApprovals } from './_components/pending-approvals'
 
@@ -64,15 +66,24 @@ export default function DashboardPage() {
   })
   const { data: todayAttendance = EMPTY_ATTENDANCE } = useQuery<AttendanceRecord[]>({
     queryKey: ['today-attendance'],
-    queryFn: () => fetch('/api/attendance?month=' + new Date().toISOString().slice(0, 7)).then(r => r.json()),
+    // Oman's month, not UTC's: between 00:00 and 04:00 Oman time on the 1st, UTC is still
+    // in the previous month, and "today" was looked up in the wrong one.
+    queryFn: () => fetch('/api/attendance?month=' + omanToday().slice(0, 7)).then(r => r.json()),
   })
 
   const t = useT()
   const { lang } = useLanguage()
 
   // Single Oman-local (Asia/Muscat) "today" used for every today comparison below.
-  const omanNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Muscat' }))
-  const today = `${omanNow.getFullYear()}-${String(omanNow.getMonth() + 1).padStart(2, '0')}-${String(omanNow.getDate()).padStart(2, '0')}`
+  const today = omanToday()
+
+  // Usage figures cover the current leave year, the one the balances belong to. They used
+  // to add up every year, so "used" kept growing after each reset.
+  const currentYear = settings ? leaveYears(settings, 1)[0] : null
+  const yearLeaves = currentYear
+    ? leaves.filter(l => l.status === 'approved' && inLeaveYear(l.start_date, currentYear))
+    : []
+  const yearTardiness = currentYear ? tardiness.filter(t => inLeaveYear(t.date, currentYear)) : []
 
   const activeEmployees = employees.filter(e => e.is_active)
   const pendingPermissions = permissions.filter(p => p.status === 'pending').length
@@ -83,15 +94,14 @@ export default function DashboardPage() {
 
   const pendingLeaves = leaves.filter(l => l.status === 'pending')
 
-  const now = new Date()
-  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  const monthStart = `${today.slice(0, 7)}-01`
   const monthTardiness = tardiness.filter(t => t.date >= monthStart)
   const totalTardMinutes = monthTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
 
   const employeeStats = activeEmployees.map(emp => {
-    const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
+    const empLeaves = yearLeaves.filter(l => l.employee_id === emp.id)
     const usedDays = empLeaves.reduce((sum, l) => sum + l.days_count, 0)
-    const empTardiness = tardiness.filter(t => t.employee_id === emp.id)
+    const empTardiness = yearTardiness.filter(t => t.employee_id === emp.id)
     const tardMinutes = empTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
     const remaining = emp.leave_balance
     const isOnLeave = empLeaves.some(l => l.start_date <= today && l.end_date >= today)
@@ -104,8 +114,8 @@ export default function DashboardPage() {
 
   // Leave by type for pie chart
   const leaveByType = leaveTypes.map(lt => {
-    const totalDays = leaves
-      .filter(l => l.leave_type_id === lt.id && l.status === 'approved')
+    const totalDays = yearLeaves
+      .filter(l => l.leave_type_id === lt.id)
       .reduce((sum, l) => sum + l.days_count, 0)
     return { name: lang === 'ar' ? lt.name_ar : lt.name_en, value: totalDays, color: lt.color }
   }).filter(lt => lt.value > 0)
@@ -157,13 +167,16 @@ export default function DashboardPage() {
 
   // Who's In Today
   const todayData = useMemo(() => {
-    const todayRecords = todayAttendance.filter((r: AttendanceRecord) => r.date === today)
+    // Read here rather than taken as a dependency: the React Compiler can't prove a value
+    // returned by omanToday() is never mutated, and would skip optimising the component.
+    const day = omanToday()
+    const todayRecords = todayAttendance.filter((r: AttendanceRecord) => r.date === day)
     const checkedIn = todayRecords.filter((r: AttendanceRecord) => r.status === 'present' && r.check_in)
     const checkedOut = checkedIn.filter((r: AttendanceRecord) => r.check_out)
     const active = employees.filter((e: Employee) => e.is_active)
     const notCheckedIn = active.filter((e: Employee) => !todayRecords.some((r: AttendanceRecord) => r.employee_id === e.id && r.check_in))
     return { checkedIn, checkedOut, notCheckedIn, total: active.length }
-  }, [todayAttendance, employees, today])
+  }, [todayAttendance, employees])
 
   if (isLoading) {
     return (

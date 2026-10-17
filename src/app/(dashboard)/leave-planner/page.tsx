@@ -6,10 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { getEmployees, getLeaveRequests, getLeaveTypes, getSettings, getDepartments } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
-
-const MONTH_NAMES_AR = ['مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر', 'يناير', 'فبراير']
-const MONTH_NAMES_EN = ['Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb']
-const FISCAL_MONTHS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 1] // March(2) to February(1)
+import { leaveYears, inLeaveYear, leaveYearMonths, MONTH_NAMES } from '@/lib/leave-year'
 
 export default function LeavePlannerPage() {
   const t = useT()
@@ -22,20 +19,27 @@ export default function LeavePlannerPage() {
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
 
-  const monthNames = lang === 'ar' ? MONTH_NAMES_AR : MONTH_NAMES_EN
+  const monthNames = lang === 'ar' ? MONTH_NAMES.ar : MONTH_NAMES.enShort
+
+  // The planner is about the current leave year. Its months come from settings: they were
+  // hardcoded March→February, so moving the year start broke the grid.
+  const currentYear = useMemo(() => (settings ? leaveYears(settings, 1)[0] : null), [settings])
+  const months = useMemo(() => (currentYear ? leaveYearMonths(currentYear) : []), [currentYear])
 
   const plannerData = useMemo(() => {
+    if (!currentYear) return []
     let emps = employees.filter(e => e.is_active)
     if (deptFilter !== 'all') emps = emps.filter(e => e.department_id === parseInt(deptFilter))
 
     return emps.map(emp => {
-      const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
+      const empLeaves = leaves.filter(
+        l => l.employee_id === emp.id && l.status === 'approved' && inLeaveYear(l.start_date, currentYear)
+      )
       const usedDays = empLeaves.reduce((sum, l) => sum + l.days_count, 0)
       const remaining = emp.leave_balance
 
       // Build month-by-month data
-      const months = FISCAL_MONTHS.map((monthIdx, fiscalIdx) => {
-        const year = fiscalIdx < 10 ? (settings?.year_start ? new Date(settings.year_start).getFullYear() : 2026) : (settings?.year_end ? new Date(settings.year_end).getFullYear() : 2027)
+      const empMonths = months.map(({ year, month: monthIdx }) => {
 
         // Count only working leave days in this month
         let daysInMonth = 0
@@ -67,10 +71,10 @@ export default function LeavePlannerPage() {
         balance: settings?.annual_leave_balance || 30,
         used: usedDays,
         remaining,
-        months,
+        months: empMonths,
       }
     })
-  }, [employees, leaves, leaveTypes, settings, deptFilter])
+  }, [employees, leaves, leaveTypes, settings, deptFilter, currentYear, months])
 
   const maxDaysInMonth = Math.max(...plannerData.flatMap(e => e.months.map(m => m.days)), 1)
 
@@ -117,8 +121,8 @@ export default function LeavePlannerPage() {
                   <th className="text-center p-2 min-w-[40px]">{t('balance')}</th>
                   <th className="text-center p-2 min-w-[40px]">{t('used')}</th>
                   <th className="text-center p-2 min-w-[40px]">{t('remaining')}</th>
-                  {monthNames.map((m, i) => (
-                    <th key={i} className="text-center p-2 min-w-[44px] text-xs font-medium text-muted-foreground">{m}</th>
+                  {months.map(m => (
+                    <th key={`${m.year}-${m.month}`} className="text-center p-2 min-w-[44px] text-xs font-medium text-muted-foreground">{monthNames[m.month]}</th>
                   ))}
                 </tr>
               </thead>

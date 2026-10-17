@@ -11,6 +11,8 @@ import { Download, Printer, FileSpreadsheet } from 'lucide-react'
 import { exportToExcel } from '@/lib/excel'
 import { useLanguage, useT } from '@/lib/language-context'
 import { getEmployees, getLeaveRequests, getTardinessRecords, getDepartments, getLeaveTypes, getHolidays } from '@/lib/api'
+import { inLeaveYear, leaveYearMonths, MONTH_NAMES } from '@/lib/leave-year'
+import { useLeaveYear, LeaveYearSelect } from '@/components/leave-year-select'
 
 function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -18,14 +20,18 @@ function formatMinutesToHHMM(minutes: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
-const MONTHS_AR = ['مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر', 'يناير', 'فبراير']
-const MONTHS_EN = ['March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February']
+// One CSV cell. Quote it if it holds a comma, quote or line break, so a name like
+// "Al Said, Ahmed" doesn't shift every column after it.
+function csvCell(value: unknown): string {
+  const s = String(value ?? '')
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
 
 export default function ReportsPage() {
   const t = useT()
   const { dir, lang } = useLanguage()
-  const MONTHS = lang === 'ar' ? MONTHS_AR : MONTHS_EN
   const [deptFilter, setDeptFilter] = useState<string>('all')
+  const { years, year, index: yearIndex, setIndex: setYearIndex } = useLeaveYear()
 
   const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
   const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
@@ -33,6 +39,20 @@ export default function ReportsPage() {
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
   const { data: holidays = [] } = useQuery({ queryKey: ['holidays'], queryFn: getHolidays })
+
+  // One leave year at a time. Balances reset each year, so totals across years can't be
+  // read against the balance next to them.
+  const yearLeaves = useMemo(
+    () => (year ? leaves.filter(l => l.status === 'approved' && inLeaveYear(l.start_date, year)) : []),
+    [leaves, year]
+  )
+  const yearTardiness = useMemo(
+    () => (year ? tardiness.filter(t => inLeaveYear(t.date, year)) : []),
+    [tardiness, year]
+  )
+  // The balance is today's figure, so it only belongs next to the current year's usage.
+  const showBalance = !!year?.isCurrent
+  const months = useMemo(() => (year ? leaveYearMonths(year) : []), [year])
 
   const filteredEmployees = useMemo(() => {
     let emps = employees.filter(e => e.is_active)
@@ -45,9 +65,9 @@ export default function ReportsPage() {
   // Employee summary data
   const summaryData = useMemo(() => {
     return filteredEmployees.map(emp => {
-      const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
+      const empLeaves = yearLeaves.filter(l => l.employee_id === emp.id)
       const usedDays = empLeaves.reduce((sum, l) => sum + Number(l.days_count), 0)
-      const empTardiness = tardiness.filter(t => t.employee_id === emp.id)
+      const empTardiness = yearTardiness.filter(t => t.employee_id === emp.id)
       const tardMinutes = empTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
       const remaining = emp.leave_balance
 
@@ -70,15 +90,15 @@ export default function ReportsPage() {
         remaining,
       }
     })
-  }, [filteredEmployees, leaves, tardiness, leaveTypes])
+  }, [filteredEmployees, yearLeaves, yearTardiness, leaveTypes])
 
   // Monthly leave calendar — exclude public holidays so per-month totals reconcile with
   // the Summary tab's used days (days_count is already holiday-adjusted server-side).
   const holidaySet = useMemo(() => new Set(holidays.map(h => h.date)), [holidays])
   const monthlyData = useMemo(() => {
     return filteredEmployees.map(emp => {
-      const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
-      const months: number[] = Array(12).fill(0)
+      const empLeaves = yearLeaves.filter(l => l.employee_id === emp.id)
+      const counts: number[] = Array(months.length).fill(0)
 
       empLeaves.forEach(leave => {
         const [sy, sm, sd] = leave.start_date.split('-').map(Number)
@@ -90,20 +110,19 @@ export default function ReportsPage() {
           const iso = d.toISOString().split('T')[0]
           if (holidaySet.has(iso)) continue // holidays are not counted as leave
           // Weekends are counted (company policy)
-          const month = d.getUTCMonth()
-          const fiscalIdx = month >= 2 ? month - 2 : month + 10
-          months[fiscalIdx]++
+          const idx = months.findIndex(m => m.year === d.getUTCFullYear() && m.month === d.getUTCMonth())
+          if (idx >= 0) counts[idx]++
         }
       })
 
       return {
         name: emp.name,
         department: emp.department?.name || '',
-        months,
-        total: months.reduce((s, m) => s + m, 0),
+        months: counts,
+        total: counts.reduce((s, m) => s + m, 0),
       }
     })
-  }, [filteredEmployees, leaves, holidaySet])
+  }, [filteredEmployees, yearLeaves, holidaySet, months])
 
   function exportCSV() {
     const dedupedTypes = leaveTypes.filter((lt, i, arr) => arr.findIndex(t => t.name_en === lt.name_en) === i)
@@ -111,14 +130,14 @@ export default function ReportsPage() {
     const rows = summaryData.map(emp => [
       emp.name,
       emp.department,
-      emp.balance,
+      showBalance ? emp.balance : '',
       emp.usedDays,
       ...dedupedTypes.map(lt => emp.byType[lt.name_en] || 0),
-      emp.remaining,
+      showBalance ? emp.remaining : '',
       emp.tardMinutes,
     ])
 
-    const csvContent = [headers, ...rows].map(r => r.join(',')).join('\n')
+    const csvContent = [headers, ...rows].map(r => r.map(csvCell).join(',')).join('\n')
     const BOM = '\uFEFF'
     const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -133,7 +152,8 @@ export default function ReportsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <h1 className="text-2xl font-bold">{t('reports')}</h1>
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
+          <LeaveYearSelect years={years} index={yearIndex} onChange={setYearIndex} />
           <Select value={deptFilter} onValueChange={(v) => setDeptFilter(v ?? 'all')}>
             <SelectTrigger className="w-40">
               <SelectValue placeholder={t('allDepts')} />
@@ -153,9 +173,9 @@ export default function ReportsPage() {
             const data = summaryData.map(emp => ({
               [t('name')]: emp.name,
               [t('department')]: emp.department,
-              [t('balance')]: emp.balance,
+              [t('balance')]: showBalance ? emp.balance : '',
               [t('used')]: emp.usedDays,
-              [t('remaining')]: emp.remaining,
+              [t('remaining')]: showBalance ? emp.remaining : '',
               [t('tardinessHHMM') + ' (' + t('minutes') + ')']: emp.tardMinutes,
             }))
             exportToExcel(data, 'leave_report', t('leaveReport'))
@@ -204,7 +224,7 @@ export default function ReportsPage() {
                       <TableRow key={emp.id}>
                         <TableCell className="font-medium">{emp.name}</TableCell>
                         <TableCell className="text-center">{emp.department}</TableCell>
-                        <TableCell className="text-center">{emp.balance}</TableCell>
+                        <TableCell className="text-center">{showBalance ? emp.balance : '—'}</TableCell>
                         <TableCell className="text-center">{emp.usedDays}</TableCell>
                         {leaveTypes.filter((lt, i, arr) => arr.findIndex(t => t.name_en === lt.name_en) === i).map(lt => (
                           <TableCell key={lt.id} className="text-center">
@@ -212,9 +232,11 @@ export default function ReportsPage() {
                           </TableCell>
                         ))}
                         <TableCell className="text-center font-bold">
-                          <span className={emp.remaining < 5 ? 'text-[#F44336]' : 'text-[#4CAF50]'}>
-                            {emp.remaining}
-                          </span>
+                          {showBalance ? (
+                            <span className={emp.remaining < 5 ? 'text-[#F44336]' : 'text-[#4CAF50]'}>
+                              {emp.remaining}
+                            </span>
+                          ) : '—'}
                         </TableCell>
                         <TableCell className="text-center">{formatMinutesToHHMM(emp.tardMinutes)}</TableCell>
                       </TableRow>
@@ -234,8 +256,10 @@ export default function ReportsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="text-start sticky right-0 bg-card z-10">{t('name')}</TableHead>
-                      {MONTHS.map((m, i) => (
-                        <TableHead key={i} className="text-center text-xs min-w-[50px]">{m}</TableHead>
+                      {months.map(m => (
+                        <TableHead key={`${m.year}-${m.month}`} className="text-center text-xs min-w-[50px]">
+                          {MONTH_NAMES[lang === 'ar' ? 'ar' : 'en'][m.month]}
+                        </TableHead>
                       ))}
                       <TableHead className="text-center font-bold">{t('total')}</TableHead>
                     </TableRow>

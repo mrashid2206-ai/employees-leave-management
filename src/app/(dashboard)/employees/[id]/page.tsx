@@ -21,6 +21,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useState, useEffect } from 'react'
 import { omanToday } from '@/lib/oman-date'
+import { leaveYears, inLeaveYear } from '@/lib/leave-year'
 
 function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -135,8 +136,14 @@ export default function EmployeeCardPage() {
 
   const today = omanToday()
   const approvedLeaves = leaves.filter(l => l.status === 'approved')
-  const usedDays = approvedLeaves.reduce((sum, l) => sum + l.days_count, 0)
-  const tardMinutes = tardiness.reduce((sum, t) => sum + t.minutes_late, 0)
+  // The totals (and "used / allowance") cover the current leave year; the history lists
+  // below still show every year.
+  const currentYear = settings ? leaveYears(settings, 1)[0] : null
+  const yearLeaves = currentYear ? approvedLeaves.filter(l => inLeaveYear(l.start_date, currentYear)) : []
+  const usedDays = yearLeaves.reduce((sum, l) => sum + l.days_count, 0)
+  const tardMinutes = currentYear
+    ? tardiness.filter(t => inLeaveYear(t.date, currentYear)).reduce((sum, t) => sum + t.minutes_late, 0)
+    : 0
   const remaining = employee.leave_balance
   const tardLabel = `${Math.floor(tardMinutes / 60)}h ${tardMinutes % 60}m`
   const isOnLeave = approvedLeaves.some(l => l.start_date <= today && l.end_date >= today)
@@ -144,7 +151,7 @@ export default function EmployeeCardPage() {
   // Leave breakdown by type
   const leaveBreakdown = leaveTypes.map(lt => ({
     ...lt,
-    days: approvedLeaves
+    days: yearLeaves
       .filter(l => l.leave_type_id === lt.id)
       .reduce((sum, l) => sum + l.days_count, 0)
   })).filter(lt => lt.days > 0)
