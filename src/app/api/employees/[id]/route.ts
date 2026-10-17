@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAnyAuth, verifyAdmin, unauthorized, forbidden } from '@/lib/api-auth'
-import { logAudit } from '@/lib/audit'
-import { bumpTokenVersion } from '@/lib/token-version'
-import { EMPLOYEE_COLUMNS } from '@/server/employee-columns'
+import { respond } from '@/server/result'
+import { updateEmployee, setEmployeeActive } from '@/server/services/employee-service'
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await verifyAnyAuth(request)
@@ -30,78 +29,15 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!admin) return unauthorized()
   const { id } = await params
   const body = await request.json()
-  // password_hash is deliberately NOT updatable here. Passwords go through
-  // /api/employees/[id]/reset-password, which hashes properly, enforces the length policy
-  // and revokes existing sessions. Allowing a raw write here meant a plaintext value could
-  // be stored as if it were a hash, silently locking the account out of every future login.
-  const allowedFields = ['name', 'department_id', 'leave_balance', 'is_active', 'username', 'email', 'phone', 'position', 'join_date', 'work_start_time', 'work_days', 'work_hours_per_day']
-  const fields = Object.keys(body).filter(k => allowedFields.includes(k))
-  if (fields.length === 0) return NextResponse.json({ error: 'No fields' }, { status: 400 })
-
-  // A cleared schedule field means "inherit the department/global schedule", i.e. NULL.
-  // An empty string would otherwise blow up on the TIME/INT columns.
-  const SCHEDULE_FIELDS = new Set(['work_start_time', 'work_days', 'work_hours_per_day'])
-  const normalise = (field: string, value: unknown) =>
-    SCHEDULE_FIELDS.has(field) && (value === '' || value === undefined) ? null : value
-
-  const sets = fields.map((f, i) => `${f} = $${i + 2}`).join(', ')
-  const values = [id, ...fields.map(f => normalise(f, body[f]))]
-
-  // Deactivating from the edit form must end sessions too, exactly like DELETE does, and
-  // in the same transaction as the edit: a deactivation whose revocation failed is
-  // rolled back and reported, not saved as if it had worked.
-  const client = await pool.connect()
-  try {
-    await client.query('BEGIN')
-    const { rows } = await client.query(
-      `UPDATE employees SET ${sets}, updated_at = NOW() WHERE id = $1 RETURNING ${EMPLOYEE_COLUMNS}`,
-      values
-    )
-    if (body.is_active === false) await bumpTokenVersion('employee', Number(id), client)
-    await client.query('COMMIT')
-    return NextResponse.json(rows[0])
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => {})
-    throw err
-  } finally {
-    client.release()
-  }
+  // Field whitelist, the balance-reason rule and deactivation all live in the service, so
+  // the list's on/off toggle and DELETE can't drift apart again.
+  return respond(await updateEmployee(id, body, admin))
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
   const { id } = await params
-  // One transaction for the whole offboarding, so a failure part-way (most importantly in
-  // the session revocation) leaves the employee exactly as they were and the admin sees
-  // an error, instead of a "deactivated" toast for someone whose sessions still work.
-  const client = await pool.connect()
-  try {
-    await client.query('BEGIN')
-    // Soft delete - set is_active to false
-    const { rows } = await client.query(
-      'UPDATE employees SET is_active = false, updated_at = NOW() WHERE id = $1 RETURNING id',
-      [id]
-    )
-    if (rows.length === 0) {
-      await client.query('ROLLBACK')
-      return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    }
-
-    // Cancel pending leave requests
-    await client.query("UPDATE leave_requests SET status = 'cancelled', updated_at = NOW() WHERE employee_id = $1 AND status = 'pending'", [id])
-
-    // Offboarding must actually end access, not wait up to 12h for the JWT to expire.
-    await bumpTokenVersion('employee', Number(id), client)
-    await client.query('COMMIT')
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => {})
-    throw err
-  } finally {
-    client.release()
-  }
-
-  await logAudit('employee_deactivated', admin.username, 'admin', `Deactivated employee ${id}`)
-
-  return NextResponse.json({ success: true })
+  // Soft delete: the row stays for history; see setEmployeeActive for what deactivation does.
+  return respond(await setEmployeeActive(id, false, admin))
 }

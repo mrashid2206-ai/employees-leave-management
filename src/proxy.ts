@@ -9,12 +9,22 @@ const PUBLIC_PATHS = ['/login', '/employee-login', '/api/auth']
 // Employee-only pages (require employee token)
 const EMPLOYEE_PATHS = ['/check-in', '/apply-leave']
 
-// Files from public/ the browser fetches by itself. These fell through to the admin-page
-// check, so an employee's browser asking for /sw.js was redirected to /check-in, and a
-// service worker script behind a redirect is refused outright: push reminders and PWA
-// install couldn't work for an employee who wasn't also signed in as an admin. None of
-// these hold anything private.
-const PUBLIC_FILES = new Set(['/sw.js', '/manifest.json', '/icon.svg', '/robots.txt'])
+// Files from public/ the browser fetches by itself, with no session: the manifest and
+// icons from the login page, and the service worker script. They used to fall through to
+// the page checks and get redirected to /login or /check-in, and a service worker behind a
+// redirect is refused outright, so push reminders and PWA install never worked. An exact
+// list rather than "anything with an extension", so no route can opt out of auth by
+// accident. None of these hold anything private.
+const PUBLIC_FILES = new Set([
+  '/sw.js',
+  '/manifest.json',
+  '/robots.txt',
+  '/icon.svg',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-maskable-512.png',
+  '/apple-touch-icon.png',
+])
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -52,6 +62,24 @@ export async function proxy(request: NextRequest) {
         }
       } catch {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+    }
+  }
+
+  // An employee who is already signed in has no business on the login form — send them
+  // to the portal. Only the signature/expiry is checked here (no DB in the proxy), so a
+  // revoked-but-unexpired token also lands on /check-in; the portal then gets a 401,
+  // clears the cookie and comes back here, which is why this can't loop.
+  if (pathname === '/employee-login') {
+    const empToken = request.cookies.get('emp-auth-token')?.value
+    if (empToken) {
+      try {
+        const { payload } = await jwtVerify(empToken, getJwtSecret())
+        if (payload.role === 'employee') {
+          return NextResponse.redirect(new URL('/check-in', request.url))
+        }
+      } catch {
+        /* expired or invalid — show the login form */
       }
     }
   }

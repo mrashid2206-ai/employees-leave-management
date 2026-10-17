@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import pool from '@/lib/db'
+import pool, { omanToday, omanTime } from '@/lib/db'
 import { verifyAnyAuth, unauthorized, forbidden } from '@/lib/api-auth'
 import { parseBody } from '@/server/validation'
 import { permissionCreateSchema } from '@/server/schemas'
@@ -44,12 +44,18 @@ export async function POST(request: Request) {
 
   const valid = parseBody(permissionCreateSchema, await request.json())
   if (!valid.ok) return valid.response
-  const { employee_id, date, leave_time, reason } = valid.data
-
-  // Required fields and their formats are enforced by permissionCreateSchema above.
+  const { employee_id, reason } = valid.data
 
   // Employees can only create for themselves
   if (user.role === 'employee' && user.id !== employee_id) return forbidden()
+
+  // "I'm leaving now" is stamped here, in Oman time. The portal used to send the phone's
+  // own clock, so a wrong or foreign-zone device recorded a leave time hours off — and
+  // that time feeds the paid-hours deduction. Employees can't choose it; an admin
+  // recording a permission after the fact may still give the date and time explicitly.
+  const stampNow = user.role === 'employee'
+  const date = stampNow ? omanToday() : (valid.data.date ?? omanToday())
+  const leave_time = stampNow ? omanTime() : (valid.data.leave_time ?? omanTime())
 
   // Monthly cap. Employees are held to it; admins are not, consistent with every other
   // limit in the system (the cap is guidance for an admin, not a wall). 0 = unlimited.

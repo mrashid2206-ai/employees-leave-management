@@ -31,16 +31,18 @@ export async function POST(request: Request) {
   return NextResponse.json({ success: true })
 }
 
-// Unsubscribe this device (e.g. the employee turns reminders off).
+// Unsubscribe this device: the employee turns reminders off, or logs out (a shared
+// phone must stop receiving the previous person's reminders). Scoped to the caller so
+// one employee can never detach another's device, even knowing its endpoint.
 export async function DELETE(request: Request) {
   const user = await verifyEmployee(request)
-  if (!user) return unauthorized()
+  if (!user || user.id == null) return unauthorized()
   const body = await request.json().catch(() => null)
   if (!body?.endpoint) return NextResponse.json({ error: 'Invalid subscription' }, { status: 400 })
   // Non-fatal: unsubscribing is best-effort, but a persistent failure means dead
   // subscriptions accumulate, so it is logged rather than discarded.
   await pool
-    .query('DELETE FROM push_subscriptions WHERE endpoint = $1', [body.endpoint])
+    .query('DELETE FROM push_subscriptions WHERE endpoint = $1 AND employee_id = $2', [body.endpoint, user.id])
     .catch(err => logger.error('failed to delete push subscription', err))
   return NextResponse.json({ success: true })
 }

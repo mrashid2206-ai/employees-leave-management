@@ -1,4 +1,4 @@
-import pool from '@/lib/db'
+import pool, { omanToday } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { notifyEmployee } from '@/lib/employee-notify'
 import { isOffDayFor, computeWorkHours, computeOvertime } from '@/lib/attendance-calc'
@@ -20,10 +20,17 @@ export interface CorrectionInput {
 export async function createCorrection(input: CorrectionInput, actor: Actor): Promise<ServiceResult<unknown>> {
   // Employees may only file corrections for themselves.
   if (actor.role === 'employee' && actor.id !== input.employee_id) return fail(403, 'Forbidden')
+  // The portal shows these messages verbatim, and most employees read Arabic, so each one
+  // carries both languages (the same convention as the balance message in leave-service).
   if (!input.requested_check_in && !input.requested_check_out) {
-    return fail(400, 'Provide a corrected check-in and/or check-out time')
+    return fail(400, 'Provide a corrected check-in and/or check-out time / أدخل وقت الحضور أو الانصراف المصحّح')
   }
-
+  // The portal now lets an employee pick ANY day (the "I forgot to check in" case has no
+  // attendance row to start from), so the date is no longer implied by an existing record.
+  // A day that hasn't happened yet has nothing to correct. Oman's today, never UTC's.
+  if (input.date > omanToday()) {
+    return fail(400, 'You cannot request a correction for a future date / لا يمكن طلب تصحيح لتاريخ مستقبلي')
+  }
 
   // One open request per employee/day keeps the queue unambiguous.
   const { rows: dup } = await pool.query(
@@ -31,7 +38,7 @@ export async function createCorrection(input: CorrectionInput, actor: Actor): Pr
     [input.employee_id, input.date]
   )
   if (dup.length > 0) {
-    return fail(409, 'You already have a pending correction request for this date')
+    return fail(409, 'You already have a pending correction request for this date / لديك طلب تصحيح معلّق لهذا التاريخ بالفعل')
   }
 
   const { rows } = await pool.query(

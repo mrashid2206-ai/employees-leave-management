@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
+import { logAudit } from '@/lib/audit'
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await verifyAdmin(request)
@@ -13,20 +14,22 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   try {
     await client.query('BEGIN')
     const { rows } = await client.query(
-      'SELECT employee_id, COALESCE(leave_deducted, 0) AS leave_deducted FROM tardiness_log WHERE id = $1 FOR UPDATE',
+      'SELECT employee_id, date::text AS date, COALESCE(leave_deducted, 0) AS leave_deducted FROM tardiness_log WHERE id = $1 FOR UPDATE',
       [id]
     )
     if (rows.length === 0) {
       await client.query('ROLLBACK')
       return NextResponse.json({ success: true })
     }
-    const { employee_id, leave_deducted } = rows[0]
+    const { employee_id, date, leave_deducted } = rows[0]
     await client.query('DELETE FROM tardiness_log WHERE id = $1', [id])
     const refund = parseFloat(String(leave_deducted))
     if (refund > 0) {
       await client.query('UPDATE employees SET leave_balance = leave_balance + $1, updated_at = NOW() WHERE id = $2', [refund, employee_id])
     }
     await client.query('COMMIT')
+    await logAudit('tardiness_deleted', admin.username, 'admin',
+      `Deleted tardiness #${id} for emp ${employee_id} on ${date}; refunded ${refund} leave day(s)`)
     return NextResponse.json({ success: true, refunded: refund })
   } catch (err) {
     await client.query('ROLLBACK')

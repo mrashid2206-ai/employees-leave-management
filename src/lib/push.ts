@@ -23,6 +23,11 @@ function ensureConfigured(): boolean {
   return true
 }
 
+// Lets scheduled reminders bail out before doing any selection work when push is off.
+export function isPushConfigured(): boolean {
+  return ensureConfigured()
+}
+
 export function pushPublicKey(): string | null {
   return process.env.VAPID_PUBLIC_KEY || null
 }

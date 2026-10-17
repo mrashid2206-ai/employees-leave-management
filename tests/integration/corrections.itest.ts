@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest'
 import pool from '@/lib/db'
+import { addDays, omanToday } from '@/lib/oman-date'
 import { createCorrection, reviewCorrection } from '@/server/services/correction-service'
 import { HAS_TEST_DB, resetDb, addEmployee, closePool, ADMIN } from './helpers'
 
@@ -76,6 +77,33 @@ describe.skipIf(!HAS_TEST_DB)('attendance corrections', () => {
       const duplicate = await file()
       expect(duplicate.ok).toBe(false)
       expect(!duplicate.ok && duplicate.status).toBe(409)
+    })
+
+    it('explains a duplicate in Arabic as well as English', async () => {
+      // The portal shows this message verbatim, and most employees read Arabic.
+      await file()
+      const duplicate = await file()
+      const message = !duplicate.ok ? String(duplicate.body.error) : ''
+      expect(message).toContain('already have a pending correction request')
+      expect(message).toContain('لديك طلب تصحيح معلّق')
+    })
+
+    it('accepts a day with no attendance row at all ("I forgot to check in")', async () => {
+      const res = await file({ date: '2026-06-11' })
+      expect(res.ok).toBe(true)
+    })
+
+    it('refuses a future date, in both languages', async () => {
+      const res = await file({ date: addDays(omanToday(), 1) })
+      expect(res.ok).toBe(false)
+      expect(!res.ok && res.status).toBe(400)
+      const message = !res.ok ? String(res.body.error) : ''
+      expect(message).toContain('future date')
+      expect(message).toContain('تاريخ مستقبلي')
+    })
+
+    it("accepts today (Oman's today)", async () => {
+      expect((await file({ date: omanToday() })).ok).toBe(true)
     })
 
     it('allows a new request once the previous one is resolved', async () => {
