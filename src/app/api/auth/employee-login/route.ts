@@ -3,27 +3,16 @@ import { SignJWT } from 'jose'
 import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
 import { getJwtSecret } from '@/lib/jwt'
-import { checkRateLimit, resetRateLimit } from '@/lib/rate-limit'
-
-function clientIp(request: Request): string {
-  return (
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    request.headers.get('x-real-ip') ||
-    'unknown'
-  )
-}
+import { checkLoginRateLimit } from '@/lib/rate-limit'
+import { clientIp } from '@/lib/client-ip'
 
 export async function POST(request: Request) {
   const body = await request.json()
   const username = (body.username || '').trim().toLowerCase()
   const password = (body.password || '').trim()
 
-  // Rate limit per-username (5/15min) AND per-IP (20/15min).
-  const rateKey = `emp-login:${username}`
-  const ipKey = `emp-login-ip:${clientIp(request)}`
-  const userLimit = await checkRateLimit(rateKey, 5, 900000)
-  const ipLimit = await checkRateLimit(ipKey, 20, 900000)
-  if (!userLimit.allowed || !ipLimit.allowed) {
+  const limit = await checkLoginRateLimit('emp-login', username, clientIp(request))
+  if (!limit.allowed) {
     return NextResponse.json({ error: 'Too many login attempts. Try again in 15 minutes.' }, { status: 429 })
   }
 
@@ -37,8 +26,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid username or password / اسم المستخدم أو كلمة المرور غير صحيحة' }, { status: 401 })
   }
 
-  // Reset rate limit on successful login
-  resetRateLimit(rateKey)
+  await limit.reset()
 
   const emp = rows[0]
   const token = await new SignJWT({

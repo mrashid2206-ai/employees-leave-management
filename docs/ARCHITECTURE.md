@@ -203,8 +203,8 @@ Recent migrations worth knowing about:
 | `0012_automation_journal` | `automation_runs` + `automation_effects` (undo), and `error_log` |
 | `0013_token_revocation` | `token_version` on `employees` / `admin_users` — makes sessions revocable |
 
-Historical/legacy SQL (`supabase/migrations/*`, `railway-migration.sql`) predates the runner
-and is kept for reference only.
+Historical/legacy SQL (`railway-migration.sql`) predates the runner and is kept for reference
+only. The old `supabase/` folder and its client code were never used and have been removed.
 
 ## 8. Local development
 

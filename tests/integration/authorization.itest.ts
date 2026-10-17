@@ -19,12 +19,14 @@ const BASE = 'http://localhost'
 describe.skipIf(!HAS_TEST_DB)('authorization', () => {
   let me: number
   let other: number
+  let annualTypeId: number
   let empCookie: string
   let adminCookie: string
 
   beforeEach(async () => {
     const seeded = await resetDb()
     me = seeded.employeeId
+    annualTypeId = seeded.annualTypeId
     other = await addEmployee()
     empCookie = await employeeToken(me)
     adminCookie = await adminToken()
@@ -149,6 +151,33 @@ describe.skipIf(!HAS_TEST_DB)('authorization', () => {
       expect(rows).toHaveLength(1)
     })
 
+    it('GET /api/leaves — an employee sees colleagues’ approved leave only, without notes', async () => {
+      await pool.query(
+        `INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, days_count, status, notes) VALUES
+           ($1, $2, '2026-01-05', '2026-01-06', 2, 'approved', 'medical certificate #123'),
+           ($1, $2, '2026-02-05', '2026-02-05', 1, 'pending',  'private reason'),
+           ($1, $2, '2026-03-05', '2026-03-05', 1, 'rejected', 'private reason')`,
+        [other, annualTypeId]
+      )
+      const { GET } = await import('@/app/api/leaves/route')
+
+      // The "who's on leave?" panel: who and when, nothing more.
+      const res = await GET(authedRequest(`${BASE}/api/leaves`, { employee: empCookie }))
+      expect(res.status).toBe(200)
+      const rows = await res.json()
+      expect(rows).toHaveLength(1)
+      expect(rows[0].status).toBe('approved')
+      expect(rows[0].employee).toEqual({ name: 'Other Employee' })
+      expect(rows[0]).not.toHaveProperty('notes')
+      expect(rows[0]).not.toHaveProperty('employee_id')
+      expect(JSON.stringify(rows)).not.toContain('medical')
+
+      // Admins still get every request, notes included.
+      const all = await (await GET(authedRequest(`${BASE}/api/leaves`, { admin: adminCookie }))).json()
+      expect(all).toHaveLength(3)
+      expect(all.some((r: { notes: string }) => r.notes === 'medical certificate #123')).toBe(true)
+    })
+
     it('POST /api/corrections — cannot file a correction as someone else', async () => {
       const { POST } = await import('@/app/api/corrections/route')
       const res = await POST(
@@ -163,6 +192,40 @@ describe.skipIf(!HAS_TEST_DB)('authorization', () => {
         })
       )
       expect(res.status).toBe(403)
+    })
+  })
+
+  describe('secrets never leave the server', () => {
+    // These responses used `RETURNING *`, which carried the employee's password_hash and
+    // token_version to the admin's browser.
+    const SECRETS = ['password_hash', 'token_version']
+
+    it('POST /api/employees', async () => {
+      const { POST } = await import('@/app/api/employees/route')
+      const res = await POST(authedRequest(`${BASE}/api/employees`, { admin: adminCookie }, {
+        method: 'POST',
+        body: JSON.stringify({ name: 'New Hire', department_id: 1 }),
+      }))
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.name).toBe('New Hire')
+      expect(body.username).toBe('new.hire')
+      for (const k of SECRETS) expect(body).not.toHaveProperty(k)
+    })
+
+    it('PUT /api/employees/[id]', async () => {
+      const { PUT } = await import('@/app/api/employees/[id]/route')
+      const res = await PUT(
+        authedRequest(`${BASE}/api/employees/${me}`, { admin: adminCookie }, {
+          method: 'PUT',
+          body: JSON.stringify({ position: 'Clerk' }),
+        }),
+        routeParams({ id: String(me) })
+      )
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.position).toBe('Clerk')
+      for (const k of SECRETS) expect(body).not.toHaveProperty(k)
     })
   })
 
@@ -260,6 +323,37 @@ describe.skipIf(!HAS_TEST_DB)('authorization', () => {
         expect(res.status).toBe(401)
       } finally {
         if (prev !== undefined) process.env.ADMIN_PASSWORD = prev
+      }
+    })
+
+    // It used to stay open whenever no row was NAMED 'admin', so with real admins under
+    // other usernames, a still-set ADMIN_PASSWORD was a permanent second way in.
+    it('a bootstrap token is rejected once a real admin exists', async () => {
+      // resetDb seeded an active 'admin-test', so bootstrap is over.
+      const prev = process.env.ADMIN_PASSWORD
+      process.env.ADMIN_PASSWORD = 'bootstrap-secret'
+      try {
+        const bootstrap = await adminToken({ username: 'admin' })
+        const { GET } = await import('@/app/api/audit/route')
+        expect((await GET(authedRequest(`${BASE}/api/audit`, { admin: bootstrap }))).status).toBe(401)
+      } finally {
+        process.env.ADMIN_PASSWORD = prev
+      }
+    })
+
+    it('the bootstrap password only logs in while there is no active admin', async () => {
+      const { authenticate } = await import('@/lib/auth')
+      const prev = process.env.ADMIN_PASSWORD
+      process.env.ADMIN_PASSWORD = 'bootstrap-secret'
+      try {
+        expect(await authenticate('admin', 'bootstrap-secret')).toBeNull()
+
+        // Every admin deactivated counts as none, so the install can be recovered.
+        await pool.query('UPDATE admin_users SET is_active = false')
+        expect(await authenticate('admin', 'bootstrap-secret')).not.toBeNull()
+        expect(await authenticate('admin', 'wrong')).toBeNull()
+      } finally {
+        process.env.ADMIN_PASSWORD = prev
       }
     })
 

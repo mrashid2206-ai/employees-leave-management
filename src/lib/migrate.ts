@@ -22,6 +22,9 @@ export async function runMigrations(): Promise<{ applied: string[] }> {
   const client = await pool.connect()
   const applied: string[] = []
   try {
+    // The pool's statement_timeout guards requests, but a migration that rewrites a big
+    // table may legitimately take longer. Reset before the client returns to the pool.
+    await client.query('SET statement_timeout = 0')
     await client.query('SELECT pg_advisory_lock($1)', [LOCK_KEY])
     await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
       version TEXT PRIMARY KEY,
@@ -52,6 +55,7 @@ export async function runMigrations(): Promise<{ applied: string[] }> {
     // Safe to ignore: releasing the connection below drops the session and with it any
     // session-scoped advisory lock, so a failed explicit unlock cannot strand it.
     await client.query('SELECT pg_advisory_unlock($1)', [LOCK_KEY]).catch(() => {})
+    await client.query('RESET statement_timeout').catch(() => {})
     client.release()
   }
 }

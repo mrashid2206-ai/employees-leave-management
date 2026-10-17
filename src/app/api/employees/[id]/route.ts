@@ -3,6 +3,7 @@ import pool from '@/lib/db'
 import { verifyAnyAuth, verifyAdmin, unauthorized, forbidden } from '@/lib/api-auth'
 import { logAudit } from '@/lib/audit'
 import { bumpTokenVersion } from '@/lib/token-version'
+import { EMPLOYEE_COLUMNS } from '@/server/employee-columns'
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await verifyAnyAuth(request)
@@ -47,7 +48,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const values = [id, ...fields.map(f => normalise(f, body[f]))]
 
   const { rows } = await pool.query(
-    `UPDATE employees SET ${sets}, updated_at = NOW() WHERE id = $1 RETURNING *`,
+    `UPDATE employees SET ${sets}, updated_at = NOW() WHERE id = $1 RETURNING ${EMPLOYEE_COLUMNS}`,
     values
   )
 
@@ -63,7 +64,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params
   // Soft delete - set is_active to false
   const { rows } = await pool.query(
-    'UPDATE employees SET is_active = false, updated_at = NOW() WHERE id = $1 RETURNING *',
+    'UPDATE employees SET is_active = false, updated_at = NOW() WHERE id = $1 RETURNING id',
     [id]
   )
   if (rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })

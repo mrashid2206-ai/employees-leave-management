@@ -19,6 +19,20 @@ const SOURCE: Record<Identity, { table: string; key: string }> = {
   admin: { table: 'admin_users', key: 'username' },
 }
 
+/**
+ * May the bootstrap admin (username 'admin' + the ADMIN_PASSWORD env var) be used?
+ *
+ * Only while there is no active admin account at all, i.e. a fresh database or one where
+ * every admin has been deactivated. It used to be allowed whenever no row was *named*
+ * 'admin', so once the real admins had other usernames, a still-set ADMIN_PASSWORD stayed
+ * a permanent second way in. Throws on a DB error so callers fail closed.
+ */
+export async function bootstrapAdminAllowed(): Promise<boolean> {
+  if (!process.env.ADMIN_PASSWORD) return false
+  const { rows } = await pool.query('SELECT EXISTS (SELECT 1 FROM admin_users WHERE is_active = true) AS any')
+  return !rows[0].any
+}
+
 /** Current token version, used when minting a token. */
 export async function currentTokenVersion(kind: Identity, subject: string | number): Promise<number> {
   const { table, key } = SOURCE[kind]
@@ -55,11 +69,9 @@ export async function tokenIsCurrent(
     )
     if (rows.length === 0) {
       // No row: normally a deleted identity, so reject. The one exception is the
-      // BOOTSTRAP admin — `authenticate()` issues a token for username 'admin' backed by
-      // the ADMIN_PASSWORD env var precisely when admin_users is still empty, so there is
-      // no row to check. Rejecting it would lock an admin out of a fresh deployment
-      // entirely. Such a token can only be obtained by knowing ADMIN_PASSWORD.
-      return kind === 'admin' && subject === 'admin' && !!process.env.ADMIN_PASSWORD
+      // BOOTSTRAP admin, which has no row by design. Its token stays valid only while
+      // bootstrap is still allowed, so it dies the moment a real admin is created.
+      return kind === 'admin' && subject === 'admin' && (await bootstrapAdminAllowed())
     }
     if (rows[0].is_active === false) return false // deactivated — reject immediately
     return (rows[0].token_version ?? 0) === claimed
