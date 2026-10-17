@@ -8,6 +8,7 @@ import { omanToday } from '@/lib/oman-date'
 import { leaveYears, inLeaveYear } from '@/lib/leave-year'
 import { resolveScheduleFrom, type WorkSchedule } from '@/lib/schedule-core'
 import { t as translate, type Lang } from '@/lib/translations'
+import { AUTH_CONTEXT_HEADER, EMPLOYEE_CONTEXT } from '@/lib/auth-context'
 
 /* -------------------------------------------------------------------------- */
 /* Shapes                                                                      */
@@ -234,9 +235,12 @@ async function readErrorPayload(res: Response): Promise<ApiErrorPayload> {
 }
 
 // Every portal request goes through these three, so the session-expiry handling above
-// covers all of them (queries and mutations alike).
+// covers all of them (queries and mutations alike), and every one is made as the
+// employee even if this browser also holds an admin session (see src/lib/auth-context.ts).
+const AS_EMPLOYEE = { [AUTH_CONTEXT_HEADER]: EMPLOYEE_CONTEXT }
+
 async function getJSON<T>(url: string): Promise<T> {
-  const res = await fetch(url)
+  const res = await fetch(url, { headers: AS_EMPLOYEE })
   if (!res.ok) return failWith(res)
   return res.json() as Promise<T>
 }
@@ -244,7 +248,7 @@ async function getJSON<T>(url: string): Promise<T> {
 async function sendJSON<T>(url: string, method: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...AS_EMPLOYEE, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
   if (!res.ok) return failWith(res)
@@ -255,8 +259,8 @@ async function sendVoid(url: string, method: string, body?: unknown): Promise<vo
   const res = await fetch(url, {
     method,
     ...(body === undefined
-      ? {}
-      : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+      ? { headers: AS_EMPLOYEE }
+      : { headers: { ...AS_EMPLOYEE, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   })
   if (!res.ok) return failWith(res)
 }
