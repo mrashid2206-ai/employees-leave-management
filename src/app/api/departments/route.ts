@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
+import { logAudit } from '@/lib/audit'
 import { parseBody } from '@/server/validation'
 import { departmentSchema } from '@/server/schemas'
 
@@ -26,5 +27,6 @@ export async function POST(request: Request) {
     'INSERT INTO departments (name) VALUES ($1) RETURNING *',
     [name]
   )
+  await logAudit('department_created', admin.username, 'admin', `Created department #${rows[0].id} "${name}"`)
   return NextResponse.json(rows[0])
 }
