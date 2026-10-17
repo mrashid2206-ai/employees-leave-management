@@ -19,7 +19,9 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
   icons: {
     icon: '/favicon.svg',
-    apple: '/icon.svg',
+    // iOS ignores an SVG apple-touch-icon and falls back to a page screenshot. The PNG is
+    // full-bleed because iOS paints transparency black and rounds the corners itself.
+    apple: { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
   },
   appleWebApp: {
     capable: true,

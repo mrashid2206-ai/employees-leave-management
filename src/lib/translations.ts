@@ -318,6 +318,13 @@ export const translations = {
   user: { ar: '\\u0627\\u0644\\u0645\\u0633\\u062a\\u062e\\u062f\\u0645', en: 'User' },
   role: { ar: '\\u0627\\u0644\\u062f\\u0648\\u0631', en: 'Role' },
   details: { ar: '\\u0627\\u0644\\u062a\\u0641\\u0627\\u0635\\u064a\\u0644', en: 'Details' },
+  // Portal accessibility: bell, login, bottom nav
+  notificationsWithUnread: { ar: 'الإشعارات، {count} غير مقروءة', en: 'Notifications, {count} unread' },
+  markAllRead: { ar: 'تحديد الكل كمقروء', en: 'Mark all as read' },
+  unreadNotification: { ar: 'غير مقروء', en: 'Unread' },
+  showPassword: { ar: 'إظهار كلمة المرور', en: 'Show password' },
+  portalSections: { ar: 'أقسام البوابة', en: 'Portal sections' },
+  toggleDarkMode: { ar: 'تبديل الوضع الداكن', en: 'Toggle dark mode' },
   holiday2: { ar: 'عطلة رسمية', en: 'Holiday' },
   reason: { ar: 'السبب', en: 'Reason' },
   fileTooLargeMax2: { ar: 'الملف كبير جداً (الحد 2 ميجابايت)', en: 'File too large (max 2 MB)' },

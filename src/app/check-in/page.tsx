@@ -10,6 +10,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { useLanguage, useT } from '@/lib/language-context'
 import { LanguageToggle } from '@/components/language-toggle'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { unsubscribeThisDevice } from '@/components/push-setup'
 import { AttendanceTab } from './_components/attendance-tab'
 import { LeaveTab } from './_components/leave-tab'
 import { PortalHeader } from './_components/portal-header'
@@ -71,6 +72,8 @@ export default function EmployeePortalPage() {
   }, [])
 
   async function handleLogout() {
+    // Before the session ends: removing the server-side subscription needs the cookie.
+    await unsubscribeThisDevice()
     await fetch('/api/auth/employee-logout', { method: 'POST' })
     sessionStorage.removeItem('emp-user')
     window.location.href = '/employee-login'

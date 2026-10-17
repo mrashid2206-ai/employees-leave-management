@@ -1,17 +1,25 @@
 name: Scheduled automation
 
 # Triggers the app's daily attendance/leave automation (and a daily yearly-reset
-# check that no-ops until the fiscal year ends). Requires two repo secrets:
+# check that no-ops until the fiscal year ends), plus the evening check-out reminder.
+# Requires two repo secrets:
 #   APP_URL      e.g. https://your-app.up.railway.app
 #   CRON_SECRET  same value as the app's CRON_SECRET env var
 on:
   schedule:
     # 21:00 UTC = 01:00 Asia/Muscat (UTC+4). GitHub may delay scheduled runs under load.
     - cron: '0 21 * * *'
+    # Hourly at :15 from 10:15 to 18:15 UTC = 14:15 to 22:15 Asia/Muscat. Working days
+    # end at different times per schedule, so one evening run can't fit everyone; the
+    # endpoint reminds each person once, after their own end time. Every day, because
+    # work days are per employee too — the endpoint skips each person's off days.
+    - cron: '15 10-18 * * *'
   workflow_dispatch: {}
 
 jobs:
   run:
+    # A manual dispatch runs the nightly jobs only; reminders are time-of-day specific.
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 21 * * *'
     runs-on: ubuntu-latest
     steps:
       - name: Daily automation
@@ -27,4 +35,18 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           curl -fsS --retry 3 -X POST "$APP_URL/api/cron/yearly" \
+            -H "Authorization: Bearer $CRON_SECRET"
+
+  checkout-reminder:
+    if: github.event.schedule == '15 10-18 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      # Safe to retry: a reminder is claimed before it is sent, so a retried request
+      # after a slow success reminds nobody twice. No-ops when push isn't configured.
+      - name: Check-out reminder
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -fsS --retry 3 -X POST "$APP_URL/api/cron/checkout-reminder" \
             -H "Authorization: Bearer $CRON_SECRET"
