@@ -67,7 +67,14 @@ export interface LeaveType {
   color: string
 }
 
-export interface LeaveRequest {
+/** Who decided a request, when, and the remark they left (the reason, for a rejection). */
+export interface DecisionFields {
+  reviewed_by?: string | null
+  reviewed_at?: string | null
+  decision_note?: string | null
+}
+
+export interface LeaveRequest extends DecisionFields {
   id: number
   employee_id: number
   leave_type_id: number

@@ -6,12 +6,19 @@ import { getJwtSecret } from '@/lib/jwt'
 // Fully public
 const PUBLIC_PATHS = ['/login', '/employee-login', '/api/auth']
 
-// Public files from /public that the browser requests on its own (install, push). An
-// exact list rather than "anything with an extension", so no route can opt out of auth
-// by accident.
-const PWA_ASSETS = new Set([
+// Employee-only pages (require employee token)
+const EMPLOYEE_PATHS = ['/check-in', '/apply-leave']
+
+// Files from public/ the browser fetches by itself, with no session: the manifest and
+// icons from the login page, and the service worker script. They used to fall through to
+// the page checks and get redirected to /login or /check-in, and a service worker behind a
+// redirect is refused outright, so push reminders and PWA install never worked. An exact
+// list rather than "anything with an extension", so no route can opt out of auth by
+// accident. None of these hold anything private.
+const PUBLIC_FILES = new Set([
   '/sw.js',
   '/manifest.json',
+  '/robots.txt',
   '/icon.svg',
   '/icon-192.png',
   '/icon-512.png',
@@ -19,32 +26,16 @@ const PWA_ASSETS = new Set([
   '/apple-touch-icon.png',
 ])
 
-// Employee-only pages (require employee token)
-const EMPLOYEE_PATHS = ['/check-in', '/apply-leave']
-
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Allow static files. The PWA files must be reachable WITHOUT a session: the browser
-  // fetches the manifest and icons from the login page, and a service worker script
-  // behind a redirect (to /login or /check-in) is refused outright — so before this list
-  // the portal could never register its worker or be installed.
-  if (
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/favicon') ||
-    PWA_ASSETS.has(pathname)
-  ) {
+  // Allow static files
+  if (pathname.startsWith('/_next') || pathname.startsWith('/favicon') || PUBLIC_FILES.has(pathname)) {
     return NextResponse.next()
   }
 
-  // Security headers on all responses
-  const addSecurityHeaders = (response: NextResponse) => {
-    response.headers.set('X-Content-Type-Options', 'nosniff')
-    response.headers.set('X-Frame-Options', 'DENY')
-    response.headers.set('X-XSS-Protection', '1; mode=block')
-    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-    return response
-  }
+  // Security headers are NOT set here: they live in next.config.ts headers(), which
+  // reaches every response, including the static files this matcher skips.
 
   // Cross-origin protection for ALL API routes (including /api/auth, so login/logout
   // POSTs are covered too). Requests with no Origin header (server-side, curl) are
@@ -67,10 +58,10 @@ export async function proxy(request: NextRequest) {
       try {
         const originHost = new URL(origin).host
         if (!allowedHosts.has(originHost)) {
-          return addSecurityHeaders(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+          return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
       } catch {
-        return addSecurityHeaders(NextResponse.json({ error: 'Forbidden' }, { status: 403 }))
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
     }
   }
@@ -85,7 +76,7 @@ export async function proxy(request: NextRequest) {
       try {
         const { payload } = await jwtVerify(empToken, getJwtSecret())
         if (payload.role === 'employee') {
-          return addSecurityHeaders(NextResponse.redirect(new URL('/check-in', request.url)))
+          return NextResponse.redirect(new URL('/check-in', request.url))
         }
       } catch {
         /* expired or invalid — show the login form */
@@ -95,8 +86,7 @@ export async function proxy(request: NextRequest) {
 
   // Allow fully public paths
   if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
-    const response = NextResponse.next()
-    return addSecurityHeaders(response)
+    return NextResponse.next()
   }
 
   // Allow all API routes (auth checked per-route)

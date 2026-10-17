@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -7,27 +8,38 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Check, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { getCorrections, reviewCorrectionRequest } from '@/lib/api'
+import { decideCorrection, getCorrections, type ReviewedCorrection } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
 import { QueryError } from '@/components/query-error'
+import { DecisionDialog } from '@/components/decision-dialog'
+import { DecisionTrace } from '@/components/decision-trace'
 
 // Admin queue for employee-submitted attendance corrections. Approving applies the
-// requested times to the attendance record (hours/overtime recomputed server-side).
+// requested times to the attendance record (hours/overtime recomputed server-side);
+// rejecting asks for the reason, which the employee is shown.
 export default function CorrectionsPage() {
   const t = useT()
   const { dir } = useLanguage()
   const queryClient = useQueryClient()
+  const [rejectTarget, setRejectTarget] = useState<ReviewedCorrection | null>(null)
 
-  const { data: corrections = [], isError, refetch } = useQuery({ queryKey: ['corrections'], queryFn: getCorrections })
+  const { data = [], isError, refetch } = useQuery({ queryKey: ['corrections'], queryFn: getCorrections })
+  // The list carries the decision fields as well (see ReviewedCorrection).
+  const corrections = data as ReviewedCorrection[]
 
   const reviewMutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: 'approved' | 'rejected' }) => reviewCorrectionRequest(id, status),
+    mutationFn: ({ id, status, note }: { id: number; status: 'approved' | 'rejected'; note?: string }) =>
+      decideCorrection(id, status, note || null),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['corrections'] })
       queryClient.invalidateQueries({ queryKey: ['attendance'] })
+      setRejectTarget(null)
       toast.success(t('updatedSuccess'))
     },
-    onError: () => toast.error(t('error')),
+    onError: (err: Error) => {
+      queryClient.invalidateQueries({ queryKey: ['corrections'] })
+      toast.error(err.message || t('error'))
+    },
   })
 
   const pending = corrections.filter(c => c.status === 'pending')
@@ -77,13 +89,17 @@ export default function CorrectionsPage() {
                     <TableCell className="text-center font-mono">{c.requested_check_in?.slice(0, 5) || '-'}</TableCell>
                     <TableCell className="text-center font-mono">{c.requested_check_out?.slice(0, 5) || '-'}</TableCell>
                     <TableCell className="max-w-xs truncate">{c.reason}</TableCell>
-                    <TableCell className="text-center">{statusBadge(c.status)}</TableCell>
+                    <TableCell className="text-center">
+                      {statusBadge(c.status)}
+                      <DecisionTrace {...c} />
+                    </TableCell>
                     <TableCell className="text-center">
                       {c.status === 'pending' ? (
                         <div className="flex items-center justify-center gap-1">
                           <Button
                             size="sm"
                             className="h-7 bg-emerald-600 hover:bg-emerald-700"
+                            aria-label={t('approve')}
                             disabled={reviewMutation.isPending}
                             onClick={() => reviewMutation.mutate({ id: c.id, status: 'approved' })}
                           >
@@ -93,14 +109,15 @@ export default function CorrectionsPage() {
                             size="sm"
                             variant="outline"
                             className="h-7 text-rose-500 hover:bg-rose-500/10"
+                            aria-label={t('reject')}
                             disabled={reviewMutation.isPending}
-                            onClick={() => reviewMutation.mutate({ id: c.id, status: 'rejected' })}
+                            onClick={() => setRejectTarget(c)}
                           >
                             <X className="h-3.5 w-3.5" />
                           </Button>
                         </div>
                       ) : (
-                        <span className="text-xs text-muted-foreground">{c.reviewed_by || '-'}</span>
+                        <span className="text-xs text-muted-foreground">-</span>
                       )}
                     </TableCell>
                   </TableRow>
@@ -110,6 +127,22 @@ export default function CorrectionsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {rejectTarget && (
+        <DecisionDialog
+          key={rejectTarget.id}
+          open
+          onOpenChange={open => { if (!open) setRejectTarget(null) }}
+          mode="reject"
+          description={
+            <span dir="auto">
+              {rejectTarget.employee?.name} · <span className="font-mono" dir="ltr">{rejectTarget.date}</span>
+            </span>
+          }
+          loading={reviewMutation.isPending}
+          onConfirm={note => reviewMutation.mutate({ id: rejectTarget.id, status: 'rejected', note })}
+        />
+      )}
     </div>
   )
 }

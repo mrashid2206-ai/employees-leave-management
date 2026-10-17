@@ -7,6 +7,7 @@ import { logAudit } from '@/lib/audit'
 import { getJwtSecret } from '@/lib/jwt'
 import { bumpTokenVersion, currentTokenVersion } from '@/lib/token-version'
 import { MIN_PASSWORD_LENGTH } from '@/lib/constants'
+import { logger } from '@/lib/log'
 
 export async function POST(request: Request) {
   const user = await verifyEmployee(request)
@@ -32,12 +33,27 @@ export async function POST(request: Request) {
   }
 
   const hash = await bcrypt.hash(new_password, 10)
-  await pool.query('UPDATE employees SET password_hash = $1, must_change_password = FALSE, updated_at = NOW() WHERE id = $2', [hash, user.id])
 
   // Changing a password should end every OTHER session — that is half the reason people
   // change one. Bump the version to invalidate them all, then hand this caller a fresh
   // cookie carrying the new version so the session doing the change survives.
-  await bumpTokenVersion('employee', user.id!)
+  //
+  // One transaction: if the sessions can't be revoked, the password doesn't change
+  // either, and the employee is told it failed. Otherwise they'd believe a session they
+  // were worried about had been ended.
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await client.query('UPDATE employees SET password_hash = $1, must_change_password = FALSE, updated_at = NOW() WHERE id = $2', [hash, user.id])
+    await bumpTokenVersion('employee', user.id!, client)
+    await client.query('COMMIT')
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    logger.error('password change failed', err, { employeeId: user.id })
+    return NextResponse.json({ error: 'Could not change password' }, { status: 500 })
+  } finally {
+    client.release()
+  }
   const tv = await currentTokenVersion('employee', user.id!)
   const token = await new SignJWT({
     id: user.id,

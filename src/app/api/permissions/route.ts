@@ -82,9 +82,13 @@ export async function POST(request: Request) {
 
   const status = user.role === 'admin' ? 'approved' : 'pending'
 
+  // An admin recording a permission is also deciding it, so it carries the same trace as
+  // one approved from the queue.
+  const isAdmin = user.role === 'admin'
   const { rows } = await pool.query(
-    'INSERT INTO permissions (employee_id, date, leave_time, reason, status, approved_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-    [employee_id, date, leave_time, reason || null, status, user.role === 'admin' ? user.username : null]
+    `INSERT INTO permissions (employee_id, date, leave_time, reason, status, approved_by, reviewed_at)
+     VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $7::boolean THEN NOW() END) RETURNING *`,
+    [employee_id, date, leave_time, reason || null, status, isAdmin ? user.username : null, isAdmin]
   )
 
   return NextResponse.json(rows[0])

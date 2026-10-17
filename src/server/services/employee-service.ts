@@ -11,7 +11,8 @@ import { ok, fail, type ServiceResult, type Actor, actorLabel } from '@/server/r
 // Deactivation used to have two implementations: DELETE cancelled pending leave, ended
 // sessions and wrote an audit entry, while the list's on/off toggle (a PUT with
 // is_active: false) only ended sessions. The same action had different consequences
-// depending on which button was pressed. Both now go through applyActive/afterActive.
+// depending on which button was pressed. Both now go through applyActive (the writes,
+// session revocation included, in one transaction) and afterActive (the audit entry).
 
 // password_hash is deliberately NOT updatable here. Passwords go through
 // /api/employees/[id]/reset-password, which hashes properly, enforces the length policy
@@ -47,17 +48,19 @@ async function applyActive(client: PoolClient, emp: EmployeeRow, active: boolean
       [emp.id]
     )
     cancelledLeaves = rowCount ?? 0
+    // Offboarding must actually end access, not wait up to 12h for the JWT to expire.
+    // In the same transaction, so a revocation that fails rolls the deactivation back and
+    // the admin sees an error, instead of a "deactivated" toast for someone whose sessions
+    // still work. Bumped even when already inactive: it's free, and a repeated
+    // "deactivate" should never leave a session alive.
+    await bumpTokenVersion('employee', emp.id, client)
   }
   return { wasActive: emp.is_active, cancelledLeaves }
 }
 
-/** Side effects that must follow a committed (de)activation. */
+/** The audit entry for a committed (de)activation. */
 async function afterActive(emp: EmployeeRow, active: boolean, change: ActiveChange, actor: Actor): Promise<void> {
   if (!active) {
-    // Offboarding must actually end access, not wait up to 12h for the JWT to expire.
-    // Bumped even when already inactive: it's free, and a repeated "deactivate" should
-    // never leave a session alive.
-    await bumpTokenVersion('employee', emp.id)
     if (change.wasActive || change.cancelledLeaves > 0) {
       await logAudit('employee_deactivated', actorLabel(actor), actor.role,
         `Deactivated emp ${emp.id} (${emp.name}); cancelled ${change.cancelledLeaves} pending leave request(s)`)

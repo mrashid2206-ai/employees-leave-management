@@ -11,9 +11,16 @@ function emit(level: 'info' | 'warn' | 'error', msg: string, meta?: Meta) {
   else console.log(line)
 }
 
+// The stack is the part of an error that says WHERE it happened. Logging only the message
+// left "connection terminated unexpectedly" with no way to tell which query or route
+// raised it.
+function describe(err: unknown): Meta {
+  if (err instanceof Error) return { error: err.message, stack: err.stack }
+  return { error: err ? String(err) : undefined }
+}
+
 export const logger = {
   info: (msg: string, meta?: Meta) => emit('info', msg, meta),
   warn: (msg: string, meta?: Meta) => emit('warn', msg, meta),
-  error: (msg: string, err?: unknown, meta?: Meta) =>
-    emit('error', msg, { ...(meta || {}), error: err instanceof Error ? err.message : err ? String(err) : undefined }),
+  error: (msg: string, err?: unknown, meta?: Meta) => emit('error', msg, { ...(meta || {}), ...describe(err) }),
 }
