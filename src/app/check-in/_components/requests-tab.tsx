@@ -4,10 +4,14 @@ import { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Calendar, CalendarDays, ClipboardList } from 'lucide-react'
+import { Calendar, CalendarDays, ClipboardList, PencilLine } from 'lucide-react'
 import { toast } from 'sonner'
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { QueryError } from '@/components/query-error'
 import { useLanguage, useT } from '@/lib/language-context'
-import { useCalendarData, useCancelLeave, useMyRequests } from '../_hooks/use-portal'
+import { monthEnd, omanMonth, omanYesterday } from '@/lib/oman-date'
+import { apiErrorPayload, useCalendarData, useCancelLeave, useMyCorrections, useMyRequests } from '../_hooks/use-portal'
+import { CorrectionDialog } from './correction-dialog'
 
 interface RequestsTabProps {
   empId?: number
@@ -18,13 +22,18 @@ export function RequestsTab({ empId }: RequestsTabProps) {
   const { lang } = useLanguage()
 
   const [showCalendar, setShowCalendar] = useState(false)
+  const [cancelId, setCancelId] = useState<number | null>(null)
+  const [newCorrection, setNewCorrection] = useState(false)
 
-  const { data: myRequests = [] } = useMyRequests(empId)
-  const { data: calendar } = useCalendarData(showCalendar)
+  const requestsQuery = useMyRequests(empId)
+  const correctionsQuery = useMyCorrections(empId)
+  const myRequests = requestsQuery.data ?? []
+  const corrections = correctionsQuery.data ?? []
+  const calendarQuery = useCalendarData(showCalendar)
   const cancelLeave = useCancelLeave(empId)
 
-  const calendarLeaves = calendar?.leaves ?? []
-  const calendarHolidays = calendar?.holidays ?? []
+  const calendarLeaves = calendarQuery.data?.leaves ?? []
+  const calendarHolidays = calendarQuery.data?.holidays ?? []
 
   function getStatusBadge(status: string) {
     switch (status) {
@@ -39,34 +48,37 @@ export function RequestsTab({ empId }: RequestsTabProps) {
     try {
       await cancelLeave.mutateAsync(id)
       toast.success(t('requestCancelled'))
-    } catch { toast.error(t('error')) }
+    } catch (err) {
+      toast.error(apiErrorPayload(err).error || t('error'))
+    }
   }
 
-  const now = new Date()
-  const monthHolidays = calendarHolidays.filter(h => {
-    const [hy, hm] = h.date.split('-').map(Number)
-    return hy === now.getFullYear() && hm === now.getMonth() + 1
-  })
-  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-  const monthEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`
-  const thisMonthLeaves = calendarLeaves.filter(l => l.end_date >= monthStart && l.start_date <= monthEnd)
+  // "This month" is Oman's month — the device's local month differs for a day either
+  // side of a month boundary when the phone is set to another zone.
+  const month = omanMonth()
+  const monthStart = `${month}-01`
+  const monthLast = monthEnd(month)
+  const monthHolidays = calendarHolidays.filter(h => h.date.slice(0, 7) === month)
+  const thisMonthLeaves = calendarLeaves.filter(l => l.end_date >= monthStart && l.start_date <= monthLast)
+  const cancelTarget = myRequests.find(r => r.id === cancelId)
 
   return (
     <div className="space-y-3 animate-in">
       {/* Calendar toggle */}
       <Button variant="outline" size="sm" className="w-full" onClick={() => setShowCalendar(!showCalendar)}>
-        <Calendar className="h-3.5 w-3.5 mr-1.5" />
+        <Calendar className="h-3.5 w-3.5 me-1.5" />
         {t('whoSOnLeave')}
       </Button>
 
       {showCalendar && (
         <div className="space-y-3">
+          {calendarQuery.isError && <QueryError onRetry={() => calendarQuery.refetch()} />}
           {/* Holidays this month */}
           {monthHolidays.length > 0 && (
             <>
               <h3 className="text-sm font-semibold text-purple-500 mt-2">{t('holidays')}</h3>
               {monthHolidays.map(h => (
-                <Card key={h.id} className="border-0 shadow-md border-l-4 border-l-purple-500">
+                <Card key={h.id} className="border-0 shadow-md border-s-4 border-s-purple-500">
                   <CardContent className="p-3 flex items-center justify-between">
                     <span className="text-sm font-medium">{h.name}</span>
                     <span className="text-xs font-mono text-muted-foreground">{h.date}</span>
@@ -75,7 +87,7 @@ export function RequestsTab({ empId }: RequestsTabProps) {
               ))}
             </>
           )}
-          {thisMonthLeaves.length === 0 ? (
+          {calendarQuery.isSuccess && thisMonthLeaves.length === 0 ? (
             <Card className="border-0 shadow-md">
               <CardContent className="p-8 text-center text-muted-foreground text-sm">
                 <CalendarDays className="h-10 w-10 mx-auto mb-2 opacity-30" />
@@ -93,8 +105,8 @@ export function RequestsTab({ empId }: RequestsTabProps) {
                         {lang === 'ar' ? l.leave_type?.name_ar : l.leave_type?.name_en}
                       </p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs font-mono">{l.start_date} → {l.end_date}</p>
+                    <div className="text-end">
+                      <p className="text-xs font-mono" dir="ltr">{l.start_date} → {l.end_date}</p>
                       <Badge variant="outline" className="text-[10px] mt-1">{l.days_count} {t('days')}</Badge>
                     </div>
                   </div>
@@ -107,7 +119,11 @@ export function RequestsTab({ empId }: RequestsTabProps) {
 
       {/* My Requests List */}
       <h2 className="font-bold text-lg">{t('myRequests')} ({myRequests.length})</h2>
-      {myRequests.length === 0 ? (
+      {requestsQuery.isError ? (
+        <QueryError onRetry={() => requestsQuery.refetch()} />
+      ) : requestsQuery.isPending ? (
+        <div className="text-center py-6 text-muted-foreground text-sm">{t('loading')}</div>
+      ) : myRequests.length === 0 ? (
         <Card className="border-0 shadow-md">
           <CardContent className="p-8 text-center text-muted-foreground text-sm">
             <ClipboardList className="h-10 w-10 mx-auto mb-2 opacity-30" />
@@ -128,9 +144,7 @@ export function RequestsTab({ empId }: RequestsTabProps) {
                   {getStatusBadge(req.status)}
                 </div>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="font-mono">{req.start_date}</span>
-                  <span>→</span>
-                  <span className="font-mono">{req.end_date}</span>
+                  <span className="font-mono" dir="ltr">{req.start_date} → {req.end_date}</span>
                   <Badge variant="outline" className="text-[10px] h-5">{req.days_count} {t('days')}</Badge>
                 </div>
                 {req.notes && (
@@ -142,7 +156,7 @@ export function RequestsTab({ empId }: RequestsTabProps) {
                     size="sm"
                     className="text-rose-500 hover:bg-rose-500/10 text-xs h-6 mt-2"
                     disabled={cancelLeave.isPending}
-                    onClick={() => handleCancel(req.id)}
+                    onClick={() => setCancelId(req.id)}
                   >
                     {t('cancelRequest')}
                   </Button>
@@ -151,6 +165,74 @@ export function RequestsTab({ empId }: RequestsTabProps) {
             </Card>
           )
         })
+      )}
+
+      {/* Attendance corrections. These were sent and then never shown again — the
+          employee had no way to see whether one was still pending, approved or refused. */}
+      <div className="flex items-center justify-between gap-2 pt-2">
+        <h2 className="font-bold text-lg">{t('portalMyCorrections')} ({corrections.length})</h2>
+        {!!empId && (
+          <Button size="sm" variant="outline" onClick={() => setNewCorrection(true)} data-testid="btn-new-correction">
+            <PencilLine className="h-3.5 w-3.5 me-1.5" />
+            {t('requestCorrection')}
+          </Button>
+        )}
+      </div>
+      {correctionsQuery.isError ? (
+        <QueryError onRetry={() => correctionsQuery.refetch()} />
+      ) : correctionsQuery.isPending ? (
+        <div className="text-center py-6 text-muted-foreground text-sm">{t('loading')}</div>
+      ) : corrections.length === 0 ? (
+        <Card className="border-0 shadow-md">
+          <CardContent className="p-6 text-center text-muted-foreground text-sm">
+            {t('portalNoCorrections')}
+          </CardContent>
+        </Card>
+      ) : (
+        corrections.map(c => (
+          <Card key={c.id} className="border-0 shadow-md" data-testid="correction-row">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold font-mono">{c.date}</span>
+                {getStatusBadge(c.status)}
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-center">
+                <div className="p-1.5 rounded bg-emerald-500/10">
+                  <p className="text-[10px] text-muted-foreground">{t('correctedCheckIn')}</p>
+                  <p className="text-xs font-bold text-emerald-500 font-mono">{c.requested_check_in?.slice(0, 5) || '--:--'}</p>
+                </div>
+                <div className="p-1.5 rounded bg-amber-500/10">
+                  <p className="text-[10px] text-muted-foreground">{t('correctedCheckOut')}</p>
+                  <p className="text-xs font-bold text-amber-500 font-mono">{c.requested_check_out?.slice(0, 5) || '--:--'}</p>
+                </div>
+              </div>
+              {c.reason && (
+                <p className="text-xs text-muted-foreground mt-2 bg-accent/30 p-2 rounded">{c.reason}</p>
+              )}
+            </CardContent>
+          </Card>
+        ))
+      )}
+
+      <ConfirmDialog
+        open={cancelId !== null}
+        onOpenChange={open => { if (!open) setCancelId(null) }}
+        variant="warning"
+        title={t('cancelRequest')}
+        description={cancelTarget
+          ? t('portalConfirmCancelLeave', { start: cancelTarget.start_date, end: cancelTarget.end_date })
+          : ''}
+        confirmLabel={t('cancelRequest')}
+        loading={cancelLeave.isPending}
+        onConfirm={() => { if (cancelId !== null) void handleCancel(cancelId) }}
+      />
+
+      {empId && newCorrection && (
+        <CorrectionDialog
+          empId={empId}
+          initialDate={omanYesterday()}
+          onClose={() => setNewCorrection(false)}
+        />
       )}
     </div>
   )

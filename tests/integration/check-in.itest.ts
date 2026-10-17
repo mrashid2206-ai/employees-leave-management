@@ -121,7 +121,10 @@ describe.skipIf(!HAS_TEST_DB)('check-in / check-out', () => {
 
       const res = await act('check-in')
       expect(res.status).toBe(200)
-      expect((await res.json()).leaveCancelled).toBe(true)
+      const body = await res.json()
+      expect(body.leaveCancelled).toBe(true)
+      // The portal tells the employee how much went back on their balance.
+      expect(body.leaveRefundedDays).toBe(1)
 
       // The day is given back — they worked it.
       expect(await balanceOf(empId)).toBe(before + 1)

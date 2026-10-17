@@ -22,12 +22,11 @@ test.describe('employee check-in', () => {
 
   test('records a check-in and shows the time', async ({ page }) => {
     await useEnglish(page)
-    // The portal confirms with window.confirm(); Playwright dismisses dialogs by default.
-    page.on('dialog', d => d.accept())
-
     await loginAsEmployee(page)
 
     await page.getByTestId('btn-check-in').click()
+    // The portal confirms in its own dialog (it used to be a native window.confirm()).
+    await page.getByRole('dialog').getByRole('button', { name: 'Confirm' }).click()
 
     // Today's status panel only appears once a check-in exists.
     await expect(page.getByText("Today's Status")).toBeVisible()
@@ -37,7 +36,6 @@ test.describe('employee check-in', () => {
 
   test('a second check-in the same day is refused', async ({ page }) => {
     await useEnglish(page)
-    page.on('dialog', d => d.accept())
     await loginAsEmployee(page)
 
     // Already checked in by the previous test (same seeded employee, same day).

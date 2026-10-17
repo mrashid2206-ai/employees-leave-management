@@ -48,6 +48,8 @@ export async function POST(request: Request) {
 
     // Handle any approved leave covering today
     let leaveCancelled = false
+    // Reported back so the portal can say how much went back on the balance.
+    let leaveRefundedDays = 0
     const { rows: todayLeaves } = await pool.query(
       "SELECT id, days_count, start_date::text as start_date, end_date::text as end_date, leave_type_id FROM leave_requests WHERE employee_id = $1 AND status = 'approved' AND start_date <= $2 AND end_date >= $2",
       [employee_id, today]
@@ -66,6 +68,7 @@ export async function POST(request: Request) {
           if ((upd.rowCount || 0) === 1) {
             await client.query('UPDATE employees SET leave_balance = leave_balance + $1 WHERE id = $2', [upd.rows[0].days_count, employee_id])
             leaveCancelled = true
+            leaveRefundedDays += parseFloat(upd.rows[0].days_count)
           }
           await client.query('COMMIT')
         } catch {
@@ -116,7 +119,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true, action: 'check-in', time: currentTime,
-      isHolidayWork: holidayWork, leaveCancelled, isOffsite, record: rows[0]
+      isHolidayWork: holidayWork, leaveCancelled, leaveRefundedDays, isOffsite, record: rows[0]
     })
 
   } else if (action === 'check-out') {
