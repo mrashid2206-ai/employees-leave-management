@@ -2,6 +2,7 @@ import { jwtVerify } from 'jose'
 import { NextResponse } from 'next/server'
 import { getJwtSecret, getCookie } from '@/lib/jwt'
 import { tokenIsCurrent } from '@/lib/token-version'
+import { AUTH_CONTEXT_HEADER, EMPLOYEE_CONTEXT } from '@/lib/auth-context'
 
 export interface AuthUser {
   id?: number
@@ -42,8 +43,11 @@ export async function verifyEmployee(request: Request): Promise<AuthUser | null>
   }
 }
 
-// Verify either admin or employee
+// Verify either admin or employee. A request from the employee portal says so (see
+// src/lib/auth-context.ts) and is authenticated as the employee only, even when the browser
+// also holds an admin session.
 export async function verifyAnyAuth(request: Request): Promise<AuthUser | null> {
+  if (request.headers.get(AUTH_CONTEXT_HEADER) === EMPLOYEE_CONTEXT) return verifyEmployee(request)
   const admin = await verifyAdmin(request)
   if (admin) return admin
   return verifyEmployee(request)
