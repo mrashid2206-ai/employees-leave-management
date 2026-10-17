@@ -13,6 +13,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     SELECT lr.id, lr.employee_id, lr.leave_type_id,
       lr.start_date::text as start_date, lr.end_date::text as end_date,
       lr.days_count::float8 as days_count, lr.notes, lr.status, lr.created_at, lr.updated_at,
+      (SELECT COUNT(*)::int FROM leave_attachments la WHERE la.leave_request_id = lr.id) as attachment_count,
+      lr.reviewed_by, lr.reviewed_at, lr.decision_note,
       json_build_object('id', lt.id, 'name_ar', lt.name_ar, 'name_en', lt.name_en, 'color', lt.color) as leave_type
     FROM leave_requests lr
     LEFT JOIN leave_types lt ON lr.leave_type_id = lt.id

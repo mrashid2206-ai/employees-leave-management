@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     `SELECT c.id, c.employee_id, c.date::text as date,
             c.requested_check_in::text as requested_check_in,
             c.requested_check_out::text as requested_check_out,
-            c.reason, c.status, c.reviewed_by, c.created_at,
+            c.reason, c.status, c.reviewed_by, c.reviewed_at, c.decision_note, c.created_at,
             json_build_object('id', e.id, 'name', e.name, 'department_id', e.department_id) as employee
        FROM attendance_corrections c
        LEFT JOIN employees e ON c.employee_id = e.id

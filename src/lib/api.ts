@@ -273,7 +273,10 @@ export interface Permission {
   return_time: string | null
   reason: string | null
   status: string
+  /** The reviewer. The column predates the rejection path and kept its name. */
   approved_by: string | null
+  reviewed_at?: string | null
+  decision_note?: string | null
   created_at: string
 }
 
@@ -454,4 +457,75 @@ export interface ErrorLogRow {
 
 export async function getErrorLog(limit = 50): Promise<{ rows: ErrorLogRow[]; total: number }> {
   return fetchJSON(`/api/errors?limit=${limit}`)
+}
+
+// Approval decisions
+//
+// Unlike fetchJSON, a refusal keeps the server's whole body: approving a leave can come
+// back as a department-limit warning (`warning`, `absentCount`, `maxAbsent`) that the page
+// turns into an "approve anyway?" prompt rather than a dead-end error.
+export class DecisionError extends Error {
+  readonly status: number
+  readonly body: Record<string, unknown>
+  constructor(status: number, body: Record<string, unknown>) {
+    super(typeof body.error === 'string' ? body.error : `API error: ${status}`)
+    this.status = status
+    this.body = body
+  }
+}
+
+async function sendDecision<T>(url: string, method: string, payload: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new DecisionError(res.status, data ?? {})
+  return data as T
+}
+
+// The corrections list carries the decision fields too (reviewed_at, decision_note).
+export type ReviewedCorrection = AttendanceCorrection & import('@/lib/types').DecisionFields
+
+export async function decideLeave(
+  id: number,
+  status: 'approved' | 'rejected' | 'pending',
+  opts: { note?: string | null; force?: boolean } = {}
+): Promise<LeaveRequest & { balance_after?: number | null }> {
+  return sendDecision(`/api/leaves/${id}/approve`, 'PUT', { status, ...opts })
+}
+
+export interface BulkDecisionItem {
+  id: number
+  ok: boolean
+  error?: string
+  status?: number
+  warning?: boolean
+  balance_after?: number | null
+}
+
+export async function decideLeavesBulk(input: {
+  ids: number[]
+  status: 'approved' | 'rejected'
+  note?: string | null
+  force?: boolean
+}): Promise<{ results: BulkDecisionItem[]; succeeded: number; failed: number }> {
+  return sendDecision('/api/leaves/bulk-status', 'POST', input)
+}
+
+export async function decidePermission(
+  id: number,
+  status: 'approved' | 'rejected',
+  note?: string | null
+): Promise<Record<string, unknown>> {
+  return sendDecision(`/api/permissions/${id}`, 'PUT', { status, note })
+}
+
+export async function decideCorrection(
+  id: number,
+  status: 'approved' | 'rejected',
+  note?: string | null
+): Promise<ReviewedCorrection> {
+  return sendDecision(`/api/corrections/${id}`, 'PUT', { status, note })
 }

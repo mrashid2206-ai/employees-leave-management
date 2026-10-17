@@ -20,7 +20,8 @@ export async function GET(request: Request) {
   // Employees call this for the "who's on leave?" panel, so they get approved leave only,
   // with just enough to show who is away and when. Notes (which carry medical details for
   // sick leave) and pending/rejected requests are other people's business. An employee's
-  // own requests, notes included, come from /api/leaves/my-requests.
+  // own requests, notes included, come from /api/leaves/my-requests. No attachment count
+  // either: that a colleague sent in a medical certificate is itself medical information.
   if (user.role === 'employee') {
     const where = ["lr.status = 'approved'", 'e.is_active = true', ...inRange].join(' AND ')
     const { rows } = await pool.query(`
@@ -41,6 +42,8 @@ export async function GET(request: Request) {
     SELECT lr.id, lr.employee_id, lr.leave_type_id,
       lr.start_date::text as start_date, lr.end_date::text as end_date,
       lr.days_count::float8 as days_count, lr.notes, lr.status, lr.created_at, lr.updated_at,
+      (SELECT COUNT(*)::int FROM leave_attachments la WHERE la.leave_request_id = lr.id) as attachment_count,
+      lr.reviewed_by, lr.reviewed_at, lr.decision_note,
       json_build_object('id', e.id, 'name', e.name, 'department_id', e.department_id) as employee,
       json_build_object('id', lt.id, 'name_ar', lt.name_ar, 'name_en', lt.name_en, 'color', lt.color) as leave_type
     FROM leave_requests lr

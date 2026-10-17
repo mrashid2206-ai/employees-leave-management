@@ -11,15 +11,22 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
-import { Plus, Trash2, Pencil, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
+import { Plus, Trash2, Pencil, AlertTriangle, CheckCircle, XCircle, Download, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  getEmployees, getLeaveRequests, getLeaveTypes, deleteLeaveRequest, checkLeaveConflict, updateLeaveStatus
+  getEmployees, getLeaveRequests, getLeaveTypes, getDepartments, deleteLeaveRequest, checkLeaveConflict,
+  decideLeavesBulk, type BulkDecisionItem,
 } from '@/lib/api'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { DecisionDialog } from '@/components/decision-dialog'
+import { DecisionTrace, decisionDate } from '@/components/decision-trace'
 import { useLanguage, useT } from '@/lib/language-context'
 import { QueryError } from '@/components/query-error'
+import { LeaveAttachments } from '@/components/leave-attachments'
+import { exportToExcel } from '@/lib/excel'
+import { omanToday } from '@/lib/oman-date'
+import { invalidateAfterLeaveDecision, useLeaveDecision } from '../_components/leave-decision'
 
 interface CreateLeavePayload {
   employee_id: number
@@ -67,6 +74,12 @@ export default function LeavesPage() {
 
   const [filterYear, setFilterYear] = useState<string>('all')
   const [filterMonth, setFilterMonth] = useState<string>('all')
+  const [filterStatus, setFilterStatus] = useState<string>('all')
+  const [filterEmployee, setFilterEmployee] = useState<string>('all')
+  const [filterDept, setFilterDept] = useState<string>('all')
+  const [filterType, setFilterType] = useState<string>('all')
+  const [search, setSearch] = useState('')
+  const [bulkDecision, setBulkDecision] = useState<'approve' | 'reject' | null>(null)
 
   const monthNames = lang === 'ar'
     ? ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
@@ -75,14 +88,33 @@ export default function LeavesPage() {
   const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
   const { data: allLeaves = [], isError: leavesError, refetch: refetchLeaves } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
   const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
+  const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
 
-  const leaves = allLeaves.filter(l => {
-    if (!l.start_date) return true
-    const [y, m] = l.start_date.split('-')
-    if (filterYear !== 'all' && y !== filterYear) return false
-    if (filterMonth !== 'all' && parseInt(m) !== parseInt(filterMonth)) return false
-    return true
-  })
+  const leaves = useMemo(() => {
+    const needle = search.trim().toLowerCase()
+    return allLeaves.filter(l => {
+      if (l.start_date) {
+        const [y, m] = l.start_date.split('-')
+        if (filterYear !== 'all' && y !== filterYear) return false
+        if (filterMonth !== 'all' && parseInt(m) !== parseInt(filterMonth)) return false
+      }
+      if (filterStatus !== 'all' && l.status !== filterStatus) return false
+      if (filterEmployee !== 'all' && l.employee_id !== parseInt(filterEmployee)) return false
+      if (filterDept !== 'all' && l.employee?.department_id !== parseInt(filterDept)) return false
+      if (filterType !== 'all' && l.leave_type_id !== parseInt(filterType)) return false
+      if (needle && !(l.employee?.name ?? '').toLowerCase().includes(needle)) return false
+      return true
+    })
+  }, [allLeaves, filterYear, filterMonth, filterStatus, filterEmployee, filterDept, filterType, search])
+
+  // Only a pending request can be bulk-decided: the server refuses re-deciding the rest,
+  // and select-all used to sweep those in and then report a blanket success. A selection
+  // also only counts while its row is on screen, so narrowing a filter can't act on rows
+  // the admin can no longer see.
+  const selectableIds = useMemo(() => new Set(leaves.filter(l => l.status === 'pending').map(l => l.id)), [leaves])
+  const visibleSelected = selectedIds.filter(id => selectableIds.has(id))
+
+  const leaveDecision = useLeaveDecision()
 
   // Fetch working days when dates change
   useEffect(() => {
@@ -184,32 +216,60 @@ export default function LeavesPage() {
     },
   })
 
-  const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: string }) => updateLeaveStatus(id, status),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['leaves'] })
-      queryClient.invalidateQueries({ queryKey: ['employees'] })
-      // Negative balance doesn't block approval (owner policy) — but make it visible.
-      if (typeof data.balance_after === 'number' && data.balance_after < 0) {
-        toast.warning(lang === 'ar'
-          ? `تمت الموافقة — رصيد الموظف الآن ${data.balance_after.toFixed(3)} يوم (بالسالب)`
-          : `Approved — employee balance is now ${data.balance_after.toFixed(3)} days (negative)`)
-      } else {
-        toast.success(t('updatedSuccess'))
+  // One request to the server, which decides each id in turn exactly as a single click
+  // would, and answers per id — so a partial success is reported as one.
+  const bulkStatusMutation = useMutation({
+    mutationFn: (input: { ids: number[]; status: 'approved' | 'rejected'; note?: string; force?: boolean }) =>
+      decideLeavesBulk({ ...input, note: input.note || null }),
+    onSuccess: (data, vars) => {
+      invalidateAfterLeaveDecision(queryClient)
+      setSelectedIds([])
+      setBulkDecision(null)
+      const done = t(vars.status === 'approved' ? 'bulkApprovedCount' : 'bulkRejectedCount', { count: data.succeeded })
+      if (data.failed === 0) {
+        toast.success(done)
+        return
       }
+      const nameOf = (item: BulkDecisionItem) => allLeaves.find(l => l.id === item.id)?.employee?.name ?? `#${item.id}`
+      const failures = data.results.filter(r => !r.ok)
+      toast.warning(`${done} · ${t('bulkFailedCount', { count: data.failed })}`, {
+        description: (
+          <ul className="mt-1 space-y-0.5 text-xs">
+            {failures.slice(0, 5).map(f => (
+              <li key={f.id}><span className="font-medium">{nameOf(f)}</span>: {f.error}</li>
+            ))}
+            {failures.length > 5 && <li>+{failures.length - 5} {t('more')}</li>}
+          </ul>
+        ),
+        duration: 15000,
+      })
     },
+    onError: (err: Error) => toast.error(err.message || t('error')),
   })
 
-  const bulkStatusMutation = useMutation({
-    mutationFn: async ({ ids, status }: { ids: number[]; status: string }) => {
-      await Promise.all(ids.map(id => updateLeaveStatus(id, status)))
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leaves'] })
-      setSelectedIds([])
-      toast.success(t('updatedSuccess'))
-    },
-  })
+  function handleExport() {
+    const typeName = (id: number) => {
+      const lt = leaveTypes.find(x => x.id === id)
+      return (lang === 'ar' ? lt?.name_ar : lt?.name_en) ?? ''
+    }
+    const deptName = (id?: number) => departments.find(d => d.id === id)?.name ?? ''
+    const statusLabel = (s: string) =>
+      s === 'approved' || s === 'rejected' || s === 'cancelled' || s === 'pending' ? t(s) : s
+    const rows = leaves.map(l => ({
+      [t('name')]: l.employee?.name ?? '',
+      [t('department')]: deptName(l.employee?.department_id),
+      [t('leaveType')]: typeName(l.leave_type_id),
+      [t('fromDate')]: l.start_date,
+      [t('toDate')]: l.end_date,
+      [t('daysCount')]: l.days_count,
+      [t('status')]: statusLabel(l.status),
+      [t('notes')]: l.notes ?? '',
+      [t('reviewedBy')]: l.reviewed_by ?? '',
+      [t('reviewedAt')]: decisionDate(l.reviewed_at),
+      [t('decisionNoteLabel')]: l.decision_note ?? '',
+    }))
+    exportToExcel(rows, `leaves-${omanToday()}`, t('leaves'))
+  }
 
   const editMutation = useMutation({
     mutationFn: ({ id, start_date, end_date }: { id: number; start_date: string; end_date: string }) =>
@@ -371,7 +431,62 @@ export default function LeavesPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-full sm:w-56">
+          <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={t('search')}
+            className="ps-8"
+            aria-label={t('search')}
+          />
+        </div>
+        <Select value={filterStatus} onValueChange={v => setFilterStatus(v ?? 'all')}>
+          <SelectTrigger className="w-36" aria-label={t('status')}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t('allStatus')}</SelectItem>
+            <SelectItem value="pending">{t('pendingOnly')}</SelectItem>
+            <SelectItem value="approved">{t('approved')}</SelectItem>
+            <SelectItem value="rejected">{t('rejected')}</SelectItem>
+            <SelectItem value="cancelled">{t('cancelled')}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filterEmployee} onValueChange={v => setFilterEmployee(v ?? 'all')}>
+          <SelectTrigger className="w-44" aria-label={t('selectEmployee')}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t('allEmployees')}</SelectItem>
+            {[...employees].sort((a, b) => a.name.localeCompare(b.name)).map(e => (
+              <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filterDept} onValueChange={v => setFilterDept(v ?? 'all')}>
+          <SelectTrigger className="w-40" aria-label={t('department')}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t('allDepts')}</SelectItem>
+            {departments.map(d => (
+              <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filterType} onValueChange={v => setFilterType(v ?? 'all')}>
+          <SelectTrigger className="w-40" aria-label={t('leaveType')}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t('allLeaveTypes')}</SelectItem>
+            {leaveTypes.map(lt => (
+              <SelectItem key={lt.id} value={String(lt.id)}>{lang === 'ar' ? lt.name_ar : lt.name_en}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={filterYear} onValueChange={v => { setFilterYear(v ?? 'all'); setSelectedIds([]) }}>
           <SelectTrigger className="w-32">
             <SelectValue placeholder={t('year')} />
@@ -394,27 +509,37 @@ export default function LeavesPage() {
             ))}
           </SelectContent>
         </Select>
+        <Button variant="outline" size="sm" className="ms-auto" onClick={handleExport} disabled={leaves.length === 0}>
+          <Download className="h-4 w-4 me-1.5" />
+          {t('exportExcel')}
+        </Button>
       </div>
 
       {/* Bulk Actions Bar */}
-      {selectedIds.length > 0 && (
+      {visibleSelected.length > 0 && (
         <Card className="border-[#1976D2]/30 bg-[#1976D2]/5">
-          <CardContent className="p-3 flex items-center justify-between">
-            <span className="text-sm font-medium">{selectedIds.length} {t('selected')}</span>
+          <CardContent className="p-3 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm font-medium">{visibleSelected.length} {t('selected')}</span>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" className="text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/10" onClick={() => {
-                if (confirm(lang === 'ar' ? `هل تريد الموافقة على ${selectedIds.length} طلب؟` : `Approve ${selectedIds.length} requests?`)) {
-                  bulkStatusMutation.mutate({ ids: selectedIds, status: 'approved' })
-                }
-              }}>
-                {t('approved')}
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/10"
+                disabled={bulkStatusMutation.isPending}
+                onClick={() => setBulkDecision('approve')}
+              >
+                <CheckCircle className="h-3.5 w-3.5 me-1" />
+                {t('approve')}
               </Button>
-              <Button size="sm" variant="outline" className="text-rose-500 border-rose-500/30 hover:bg-rose-500/10" onClick={() => {
-                if (confirm(lang === 'ar' ? `هل تريد رفض ${selectedIds.length} طلب؟` : `Reject ${selectedIds.length} requests?`)) {
-                  bulkStatusMutation.mutate({ ids: selectedIds, status: 'rejected' })
-                }
-              }}>
-                {t('rejected')}
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-rose-500 border-rose-500/30 hover:bg-rose-500/10"
+                disabled={bulkStatusMutation.isPending}
+                onClick={() => setBulkDecision('reject')}
+              >
+                <XCircle className="h-3.5 w-3.5 me-1" />
+                {t('reject')}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setSelectedIds([])}>
                 {t('cancel')}
@@ -432,9 +557,12 @@ export default function LeavesPage() {
                 <TableRow>
                   <TableHead className="w-10 text-center">
                     <Checkbox
-                      checked={selectedIds.length === leaves.length && leaves.length > 0}
+                      aria-label={t('onlyPendingSelectable')}
+                      title={t('onlyPendingSelectable')}
+                      disabled={selectableIds.size === 0}
+                      checked={selectableIds.size > 0 && visibleSelected.length === selectableIds.size}
                       onCheckedChange={(checked) => {
-                        if (checked) setSelectedIds(leaves.map(l => l.id))
+                        if (checked) setSelectedIds([...selectableIds])
                         else setSelectedIds([])
                       }}
                     />
@@ -464,7 +592,8 @@ export default function LeavesPage() {
                       <TableRow key={leave.id}>
                         <TableCell className="text-center" onClick={e => e.stopPropagation()}>
                           <Checkbox
-                            checked={selectedIds.includes(leave.id)}
+                            disabled={leave.status !== 'pending'}
+                            checked={leave.status === 'pending' && selectedIds.includes(leave.id)}
                             onCheckedChange={(checked) => {
                               if (checked) setSelectedIds(prev => [...prev, leave.id])
                               else setSelectedIds(prev => prev.filter(id => id !== leave.id))
@@ -497,7 +626,9 @@ export default function LeavesPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-6 w-6 text-[#4CAF50] hover:bg-[#4CAF50]/10"
-                                onClick={(e) => { e.stopPropagation(); statusMutation.mutate({ id: leave.id, status: 'approved' }) }}
+                                aria-label={t('approve')}
+                                disabled={leaveDecision.isPending}
+                                onClick={(e) => { e.stopPropagation(); leaveDecision.approve(leave) }}
                               >
                                 <CheckCircle className="h-3.5 w-3.5" />
                               </Button>
@@ -505,15 +636,19 @@ export default function LeavesPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-6 w-6 text-[#F44336] hover:bg-[#F44336]/10"
-                                onClick={(e) => { e.stopPropagation(); statusMutation.mutate({ id: leave.id, status: 'rejected' }) }}
+                                aria-label={t('reject')}
+                                disabled={leaveDecision.isPending}
+                                onClick={(e) => { e.stopPropagation(); leaveDecision.reject(leave) }}
                               >
                                 <XCircle className="h-3.5 w-3.5" />
                               </Button>
                             </div>
                           )}
+                          <DecisionTrace {...leave} />
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-1">
+                            <LeaveAttachments leaveId={leave.id} count={leave.attachment_count} />
                             <Button
                               variant="ghost"
                               size="icon"
@@ -541,6 +676,27 @@ export default function LeavesPage() {
           </div>
         </CardContent>
       </Card>
+
+      {leaveDecision.dialog}
+
+      {bulkDecision && (
+        <DecisionDialog
+          open
+          onOpenChange={open => { if (!open) setBulkDecision(null) }}
+          mode={bulkDecision}
+          title={t(bulkDecision === 'approve' ? 'bulkApproveConfirm' : 'bulkRejectConfirm', { count: visibleSelected.length })}
+          overrideLabel={bulkDecision === 'approve' ? t('overrideDeptLimit') : undefined}
+          loading={bulkStatusMutation.isPending}
+          onConfirm={(note, override) =>
+            bulkStatusMutation.mutate({
+              ids: visibleSelected,
+              status: bulkDecision === 'approve' ? 'approved' : 'rejected',
+              note,
+              force: bulkDecision === 'approve' && override,
+            })
+          }
+        />
+      )}
 
       <ConfirmDialog
         open={deleteConfirm.open}

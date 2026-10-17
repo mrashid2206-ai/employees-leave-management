@@ -41,7 +41,9 @@ Covered by `tests/integration/authorization.itest.ts`.
 
 **Health:** `GET /api/health` is unauthenticated and checks Postgres, returning 503 when
 the database is unreachable and reporting the applied `schemaVersion` — useful for
-confirming a deploy actually migrated. Point an uptime monitor at it.
+confirming a deploy actually migrated. It is also 503 (`status: 'degraded'`,
+`migrations: 'failed'`) when this process's boot migration run failed, until a restart
+retries it. Point an uptime monitor at it.
 
 ## 3. Domain model (tables)
 
@@ -131,7 +133,8 @@ Tunable constants: **`src/lib/constants.ts`**.
 `runDaily/runYearly` are exposed two ways:
 - **Admin "run now"** buttons → `/api/automation/daily`, `/api/automation/yearly-reset` (verifyAdmin).
 - **Unattended** → `/api/cron/daily`, `/api/cron/yearly`, authorized by a constant-time
-  `CRON_SECRET` bearer token (`src/lib/cron-auth.ts`). Triggered by
+  `CRON_SECRET` bearer token (`src/lib/cron-auth.ts`), sent in the `Authorization` header
+  only. A `?key=` query string is refused, since URLs end up in access logs. Triggered by
   `.github/workflows/scheduled-automation.yml` at **01:00 Asia/Muscat** daily.
 
 Required for cron: `CRON_SECRET` env on Railway **and** GitHub repo secrets `CRON_SECRET`
@@ -174,6 +177,11 @@ reports that show one leave year ask for just that year (`useLeavesInYear` and f
 server-error hook; it persists every captured error to `error_log`, viewable at
 **Settings → Error log**. Before this, a production 500 only reached stdout and was
 invisible unless someone happened to be tailing Railway logs at that moment.
+
+**Retention:** `retention.ts`, run by the nightly `/api/cron/daily` after the catch-up,
+deletes expired `rate_limits` rows, `error_log` older than 90 days and automation runs
+older than 400 days (their effects cascade). 400 days keeps more than a year of undo
+history. A pruning failure is logged and never fails the cron.
 
 Request validation: `src/server/schemas.ts` + `src/server/validation.ts` (zod at write
 boundaries).
@@ -227,8 +235,8 @@ Recent migrations worth knowing about:
 | `0012_automation_journal` | `automation_runs` + `automation_effects` (undo), and `error_log` |
 | `0013_token_revocation` | `token_version` on `employees` / `admin_users` — makes sessions revocable |
 
-Historical/legacy SQL (`railway-migration.sql`) predates the runner and is kept for reference
-only. The old `supabase/` folder and its client code were never used and have been removed.
+The hand-run `railway-migration.sql` that predated the runner has been deleted: it had
+drifted from `db/migrations` and contradicted it. The old `supabase/` folder and its client code were never used and have been removed.
 
 ## 8. Local development
 
@@ -281,7 +289,12 @@ npx next build
   or undo via SQL filtered on `notes = 'Auto-deducted: absent without leave'`.
 - **All logins return 401 / 500 at boot** — `JWT_SECRET` missing, or DB unreachable. Check
   `env.ts` boot logs.
-- **Cron returns 401** — `CRON_SECRET` mismatch between Railway and GitHub.
+- **Cron returns 401** — `CRON_SECRET` mismatch between Railway and GitHub, or the
+  secret was sent as `?key=` (no longer accepted; use `Authorization: Bearer`).
+- **`/api/health` is 503 with `migrations: 'failed'`** — the boot migration run failed;
+  the `[migrate] FAILED <version>` log line just before `boot migration run failed` says
+  which file and why. Fix it, then redeploy
+  or restart (or `npm run migrate` and restart).
 - **`/api/health/automation` is 503** — the nightly job hasn't completed since
   `lastCompleted`. Check the GitHub Actions tab: GitHub may have disabled the schedule
   (re-enable it there), or the run may be failing. Fewer than 14 missed days are caught up

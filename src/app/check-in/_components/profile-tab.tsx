@@ -24,6 +24,7 @@ import {
   type AttendanceRecord,
 } from '../_hooks/use-portal'
 import { CorrectionDialog } from './correction-dialog'
+import { DecisionNote } from './decision-note'
 
 interface ProfileTabProps {
   empId?: number
@@ -438,6 +439,7 @@ export function ProfileTab({ empId }: ProfileTabProps) {
                   {p.reason && (
                     <p className="text-xs text-muted-foreground mt-2 bg-accent/30 p-2 rounded">{p.reason}</p>
                   )}
+                  <DecisionNote status={p.status} note={p.decision_note} />
                 </CardContent>
               </Card>
             ))

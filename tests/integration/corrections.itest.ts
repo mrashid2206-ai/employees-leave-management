@@ -108,7 +108,7 @@ describe.skipIf(!HAS_TEST_DB)('attendance corrections', () => {
 
     it('allows a new request once the previous one is resolved', async () => {
       const first = await file()
-      await reviewCorrection(String((first as { data: { id: number } }).data.id), 'rejected', ADMIN)
+      await reviewCorrection(String((first as { data: { id: number } }).data.id), 'rejected', ADMIN, 'Badge log shows otherwise')
 
       expect((await file()).ok).toBe(true)
     })
@@ -118,7 +118,9 @@ describe.skipIf(!HAS_TEST_DB)('attendance corrections', () => {
     const fileThen = async (status: 'approved' | 'rejected', over = {}) => {
       const created = await file(over)
       const id = String((created as { data: { id: number } }).data.id)
-      return { id, result: await reviewCorrection(id, status, ADMIN) }
+      // A rejection must give a reason (see the decision tests).
+      const note = status === 'rejected' ? 'Badge log shows otherwise' : null
+      return { id, result: await reviewCorrection(id, status, ADMIN, note) }
     }
 
     it('approving writes the corrected times and computes hours', async () => {
@@ -164,7 +166,7 @@ describe.skipIf(!HAS_TEST_DB)('attendance corrections', () => {
     it('refuses to review the same request twice', async () => {
       const { id } = await fileThen('approved')
 
-      const second = await reviewCorrection(id, 'rejected', ADMIN)
+      const second = await reviewCorrection(id, 'rejected', ADMIN, 'Changed my mind')
       expect(second.ok).toBe(false)
       expect(!second.ok && second.status).toBe(400)
     })

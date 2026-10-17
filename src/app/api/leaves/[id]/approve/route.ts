@@ -12,5 +12,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const valid = parseBody(leaveStatusSchema, await request.json())
   if (!valid.ok) return valid.response
 
-  return respond(await changeLeaveStatus(id, valid.data.status, admin))
+  return respond(
+    await changeLeaveStatus(id, valid.data.status, admin, { note: valid.data.note, force: valid.data.force })
+  )
 }

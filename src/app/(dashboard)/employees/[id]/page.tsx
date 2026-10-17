@@ -27,6 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useState } from 'react'
 import { omanToday } from '@/lib/oman-date'
 import { leaveYears, inLeaveYear } from '@/lib/leave-year'
+import { LeaveAttachments } from '@/components/leave-attachments'
 
 function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -386,7 +387,12 @@ export default function EmployeeCardPage() {
                           <TableCell className="text-center">{leave.start_date}</TableCell>
                           <TableCell className="text-center">{leave.end_date}</TableCell>
                           <TableCell className="text-center font-bold">{leave.days_count}</TableCell>
-                          <TableCell>{leave.notes || '-'}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-between gap-2">
+                              <span>{leave.notes || '-'}</span>
+                              <LeaveAttachments leaveId={leave.id} count={leave.attachment_count} />
+                            </div>
+                          </TableCell>
                         </TableRow>
                       )
                     })

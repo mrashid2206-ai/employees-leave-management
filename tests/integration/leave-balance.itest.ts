@@ -77,7 +77,8 @@ describe.skipIf(!HAS_TEST_DB)('leave balance accounting', () => {
       const res = await createApproved('2026-04-01', '2026-04-03')
       const id = String((res as { data: { id: number } }).data.id)
 
-      await changeLeaveStatus(id, 'rejected', ADMIN)
+      const rejected = await changeLeaveStatus(id, 'rejected', ADMIN, { note: 'Recorded by mistake' })
+      expect(rejected.ok).toBe(true)
 
       expect(await balanceOf(employeeId)).toBe(30)
     })
@@ -123,17 +124,21 @@ describe.skipIf(!HAS_TEST_DB)('leave balance accounting', () => {
     expect(approved.ok).toBe(true)
     expect(await balanceOf(employeeId)).toBe(27)
 
-    const rejected = await changeLeaveStatus(String(leave.id), 'rejected', ADMIN)
+    const rejected = await changeLeaveStatus(String(leave.id), 'rejected', ADMIN, { note: 'Team is short that week' })
     expect(rejected.ok).toBe(true)
     expect(await balanceOf(employeeId)).toBe(30)
   })
 
   it('approve → reject → approve nets exactly one deduction', async () => {
     const leave = await makeLeave('2026-04-01', '2026-04-03')
-    await changeLeaveStatus(String(leave.id), 'approved', ADMIN)
-    await changeLeaveStatus(String(leave.id), 'rejected', ADMIN)
-    await changeLeaveStatus(String(leave.id), 'pending', ADMIN)
-    await changeLeaveStatus(String(leave.id), 'approved', ADMIN)
+    const steps = [
+      await changeLeaveStatus(String(leave.id), 'approved', ADMIN),
+      await changeLeaveStatus(String(leave.id), 'rejected', ADMIN, { note: 'Team is short that week' }),
+      await changeLeaveStatus(String(leave.id), 'pending', ADMIN),
+      await changeLeaveStatus(String(leave.id), 'approved', ADMIN),
+    ]
+    // Every step must actually happen, or the final balance proves nothing.
+    expect(steps.map(s => s.ok)).toEqual([true, true, true, true])
     expect(await balanceOf(employeeId)).toBe(27)
   })
 
