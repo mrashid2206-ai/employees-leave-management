@@ -9,11 +9,20 @@ export async function register() {
   const { validateEnv } = await import('@/lib/env')
   validateEnv()
 
-  if (process.env.RUN_MIGRATIONS_AT_BOOT === 'false') return
+  const { setBootMigrationState } = await import('@/lib/boot-status')
+  if (process.env.RUN_MIGRATIONS_AT_BOOT === 'false') {
+    setBootMigrationState('skipped')
+    return
+  }
   try {
     const { runMigrations } = await import('@/lib/migrate')
     await runMigrations()
+    setBootMigrationState('ok')
   } catch (e) {
+    // Keep serving (so an admin can still reach the app and the logs say why), but
+    // remember it: /api/health reports 503 'degraded' for as long as this process runs
+    // on a schema it failed to bring up to date. A restart retries the migrations.
+    setBootMigrationState('failed')
     const { logger } = await import('@/lib/log')
     logger.error('boot migration run failed', e)
   }
