@@ -1,3 +1,4 @@
+import type { PoolClient } from 'pg'
 import pool from '@/lib/db'
 import { logger } from '@/lib/log'
 
@@ -83,12 +84,28 @@ export async function tokenIsCurrent(
   }
 }
 
-/** Invalidate every existing session for an identity. */
-export async function bumpTokenVersion(kind: Identity, subject: string | number): Promise<void> {
+/**
+ * Invalidate every existing session for an identity.
+ *
+ * THROWS if the bump fails. It used to log and return, so a password reset or an
+ * offboarding reported success while every session it was meant to end stayed valid,
+ * and nobody would ever find out. A revocation that didn't happen has to fail the
+ * request that asked for it.
+ *
+ * Pass the caller's transaction client so the bump commits or rolls back together with
+ * the change that called for it (the new password hash, the deactivation): a failed
+ * bump then leaves nothing half-done for the admin to retry.
+ */
+export async function bumpTokenVersion(
+  kind: Identity,
+  subject: string | number,
+  db: Pick<PoolClient, 'query'> = pool
+): Promise<void> {
   const { table, key } = SOURCE[kind]
   try {
-    await pool.query(`UPDATE ${table} SET token_version = token_version + 1 WHERE ${key} = $1`, [subject])
+    await db.query(`UPDATE ${table} SET token_version = token_version + 1 WHERE ${key} = $1`, [subject])
   } catch (err) {
     logger.error('could not bump token version', err, { kind, subject })
+    throw err
   }
 }

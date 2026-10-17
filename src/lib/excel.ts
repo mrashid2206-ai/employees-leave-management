@@ -1,8 +1,12 @@
 type ExcelRow = Record<string, string | number>
 type ParsedRow = Record<string, string>
 
-// xlsx is large and has unpatched advisories, so it is loaded on demand (only when an
-// admin actually exports/imports) rather than in the initial bundle.
+// xlsx is large, so it is loaded on demand (only when an admin actually exports/imports)
+// rather than in the initial bundle.
+//
+// It is installed from SheetJS's own CDN tarball (see package.json), not the npm
+// registry: npm's `xlsx` stopped at 0.18.5, which has prototype-pollution and ReDoS
+// advisories and no npm fix. 0.20.3 is the same API with both fixed.
 
 export async function exportToExcel<T extends ExcelRow>(data: T[], filename: string, sheetName: string = 'Sheet1') {
   const XLSX = await import('xlsx')

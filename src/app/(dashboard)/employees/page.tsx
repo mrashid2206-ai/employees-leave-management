@@ -190,7 +190,8 @@ export default function EmployeesPage() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Bound the parser's exposure (xlsx@0.18.5 has unpatched ReDoS/proto-pollution advisories).
+    // Bound what the parser is handed. The known xlsx advisories are fixed in the build we
+    // ship now, but this is an untrusted upload parsed in the admin's browser all the same.
     const MAX_IMPORT_BYTES = 2 * 1024 * 1024 // 2 MB
     if (file.size > MAX_IMPORT_BYTES) {
       toast.error(t('fileTooLargeMax2'))
