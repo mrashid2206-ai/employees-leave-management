@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { CheckCircle, XCircle, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { useLanguage, useT } from '@/lib/language-context'
 import { getDepartments, getEmployees } from '@/lib/api'
 import type { Employee, Department } from '@/lib/types'
@@ -53,12 +54,20 @@ export default function PermissionsPage() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => fetch(`/api/permissions/${id}`, { method: 'DELETE' }).then(r => r.json()),
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/permissions/${id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || t('error'))
+      return data
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['permissions'] })
       toast.success(t('deletedSuccess'))
     },
+    onError: (err: Error) => toast.error(err.message || t('error')),
   })
+  // A delete was one click on a small icon next to approve/reject, with no way back.
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number; name: string; date: string }>({ open: false, id: 0, name: '', date: '' })
 
   const filtered = useMemo(() => {
     let data = permissions
@@ -207,7 +216,7 @@ export default function PermissionsPage() {
                             </>
                           )}
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-rose-500 hover:bg-rose-500/10"
-                            onClick={() => deleteMutation.mutate(p.id)}>
+                            onClick={() => setDeleteConfirm({ open: true, id: p.id, name: p.employee?.name || '', date: p.date })}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
@@ -220,6 +229,15 @@ export default function PermissionsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        onOpenChange={(open) => setDeleteConfirm(c => ({ ...c, open }))}
+        title={t('deletePermission')}
+        description={t('deletePermissionConfirm', { name: deleteConfirm.name, date: deleteConfirm.date })}
+        onConfirm={() => deleteMutation.mutate(deleteConfirm.id)}
+        loading={deleteMutation.isPending}
+      />
     </div>
   )
 }

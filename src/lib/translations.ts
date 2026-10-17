@@ -159,6 +159,17 @@ export const translations = {
   enterPassword: { ar: 'أدخل كلمة المرور', en: 'Enter password' },
   loggingIn: { ar: 'جاري تسجيل الدخول...', en: 'Logging in...' },
 
+  // Audit & admin safety
+  balanceReason: { ar: 'سبب تعديل الرصيد', en: 'Reason for the balance change' },
+  balanceReasonPlaceholder: { ar: 'مثال: تصحيح الرصيد الافتتاحي', en: 'e.g. correcting the opening balance' },
+  balanceReasonRequired: { ar: 'يرجى ذكر سبب تعديل رصيد الإجازات', en: 'Please give a reason for changing the leave balance' },
+  deactivateEmployee: { ar: 'تعطيل الموظف', en: 'Deactivate employee' },
+  deactivateEmployeeConfirm: { ar: 'سيتم تعطيل حساب "{name}" وإنهاء جلساته وإلغاء طلبات الإجازة المعلقة.', en: 'This deactivates "{name}", signs them out and cancels their pending leave requests.' },
+  deletePermission: { ar: 'حذف إذن الخروج', en: 'Delete permission' },
+  deletePermissionConfirm: { ar: 'هل أنت متأكد من حذف إذن الخروج لـ "{name}" بتاريخ {date}؟', en: 'Delete the permission for "{name}" on {date}?' },
+  deleteAdmin: { ar: 'حذف المدير', en: 'Delete admin' },
+  thisIsYou: { ar: 'أنت', en: 'You' },
+
   // Apply leave
   applyLeave: { ar: 'طلب إجازة', en: 'Apply for Leave' },
   applyLeaveSubtitle: { ar: 'قم بتعبئة النموذج لتقديم طلب إجازة', en: 'Fill the form to submit a leave request' },

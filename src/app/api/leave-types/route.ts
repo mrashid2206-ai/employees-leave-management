@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
+import { logAudit } from '@/lib/audit'
 import { parseBody } from '@/server/validation'
 import { leaveTypeSchema } from '@/server/schemas'
 
@@ -28,5 +29,6 @@ export async function POST(request: Request) {
     'INSERT INTO leave_types (name_ar, name_en, color) VALUES ($1, $2, $3) RETURNING *',
     [name_ar, name_en, color]
   )
+  await logAudit('leave_type_created', admin.username, 'admin', `Created leave type #${rows[0].id} "${name_en}" / "${name_ar}"`)
   return NextResponse.json(rows[0])
 }

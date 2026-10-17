@@ -4,6 +4,7 @@ import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
 import { tardinessLeaveDeduction } from '@/lib/tardiness-penalty'
 import { TARDINESS_DEDUCTS_LEAVE, TARDINESS_PENALTY_GRACE_MINUTES } from '@/lib/constants'
 import { logger } from '@/lib/log'
+import { logAudit } from '@/lib/audit'
 import { notifyEmployee } from '@/lib/employee-notify'
 import { parseBody } from '@/server/validation'
 import { tardinessCreateSchema } from '@/server/schemas'
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
   const client = await pool.connect()
   const inserted: unknown[] = []
   const skipped: number[] = []
-  const toNotify: { employee_id: number; date: string; minutes_late: number; deduction: number }[] = []
+  const toNotify: { id: number; employee_id: number; date: string; minutes_late: number; deduction: number }[] = []
   try {
     await client.query('BEGIN')
     for (const r of records) {
@@ -70,7 +71,7 @@ export async function POST(request: Request) {
         await client.query('UPDATE employees SET leave_balance = leave_balance - $1, updated_at = NOW() WHERE id = $2', [deduction, r.employee_id])
       }
       inserted.push(rows[0])
-      toNotify.push({ employee_id: r.employee_id, date: r.date, minutes_late: minutesLate, deduction })
+      toNotify.push({ id: rows[0].id, employee_id: r.employee_id, date: r.date, minutes_late: minutesLate, deduction })
     }
     await client.query('COMMIT')
   } catch (err) {
@@ -82,7 +83,11 @@ export async function POST(request: Request) {
   }
 
   // Tell each employee (best-effort, after commit) so the deduction isn't a surprise.
+  // One audit entry per row, not per request: a bulk add touches several balances, and each
+  // employee's activity feed finds its entries by "emp <id>".
   for (const n of toNotify) {
+    await logAudit('tardiness_added', admin.username, 'admin',
+      `Tardiness #${n.id} for emp ${n.employee_id} on ${n.date}: ${n.minutes_late} min late; deducted ${n.deduction} leave day(s)`)
     await notifyEmployee(
       n.employee_id,
       `Late arrival recorded for ${n.date}: ${n.minutes_late} min late${n.deduction > 0 ? `; ${n.deduction} day deducted from your leave balance.` : ' (within grace — no deduction).'}`,
