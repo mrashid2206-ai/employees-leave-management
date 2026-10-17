@@ -1,26 +1,29 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import { omanToday } from '@/lib/oman-date'
-import { leaveYears, inLeaveYear } from '@/lib/leave-year'
+import { leaveYearLabel } from '@/lib/leave-year'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Search, ArrowUpDown, Plus, Trash2, Pencil, Upload, Power } from 'lucide-react'
-import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings, getDepartments, getLeaveTypes, createEmployee, deleteEmployee, updateEmployee, type EmployeeUpdate } from '@/lib/api'
-import type { Employee, ScheduleOverride } from '@/lib/types'
+import { Search, ArrowUpDown, Plus, Trash2, Pencil, Upload, Power, FileSpreadsheet } from 'lucide-react'
+import { getEmployees, getSettings, getDepartments, getLeaveTypes, createEmployee, deleteEmployee, updateEmployee, type EmployeeUpdate } from '@/lib/api'
+import type { Employee, LeaveRequest, ScheduleOverride, TardinessRecord } from '@/lib/types'
 import { ScheduleFields } from '@/components/schedule-fields'
-import { parseExcelFile } from '@/lib/excel'
+import { exportToExcel } from '@/lib/excel'
+import { useCurrentLeaveYear, useLeavesInYear, useTardinessInYear } from '@/components/leave-year-select'
+import { ImportEmployeesDialog } from './_components/import-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { useLanguage, useT } from '@/lib/language-context'
+import { qk } from '@/lib/query-keys'
 import { QueryError } from '@/components/query-error'
 
 function formatMinutesToHHMM(minutes: number): string {
@@ -28,6 +31,9 @@ function formatMinutesToHHMM(minutes: number): string {
   const m = minutes % 60
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
+
+const EMPTY_LEAVES: LeaveRequest[] = []
+const EMPTY_TARDINESS: TardinessRecord[] = []
 
 type SortField = 'name' | 'department' | 'balance' | 'used' | 'remaining' | 'tardiness'
 type SortDir = 'asc' | 'desc'
@@ -61,12 +67,12 @@ export default function EmployeesPage() {
   const createMutation = useMutation({
     mutationFn: createEmployee,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      queryClient.invalidateQueries({ queryKey: qk.employees() })
       setAddOpen(false)
       setNewEmp({ name: '', department_id: '', leave_balance: String(settings?.annual_leave_balance || 30), email: '', phone: '', position: '', join_date: '' })
       toast.success(t('addedSuccess'))
     },
-    onError: () => toast.error(t('error')),
+    onError: (err: Error) => toast.error(err.message || t('error')),
   })
 
   const [editOpen, setEditOpen] = useState(false)
@@ -83,7 +89,7 @@ export default function EmployeesPage() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: EmployeeUpdate }) => updateEmployee(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      queryClient.invalidateQueries({ queryKey: qk.employees() })
       setEditOpen(false)
       toast.success(t('updatedSuccess'))
     },
@@ -93,8 +99,8 @@ export default function EmployeesPage() {
   const deleteMutation = useMutation({
     mutationFn: deleteEmployee,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employees'] })
-      queryClient.invalidateQueries({ queryKey: ['leaves'] })
+      queryClient.invalidateQueries({ queryKey: qk.employees() })
+      queryClient.invalidateQueries({ queryKey: qk.leaves() })
       toast.success(t('deletedSuccess'))
     },
     onError: (err: Error) => toast.error(err.message || t('error')),
@@ -103,9 +109,9 @@ export default function EmployeesPage() {
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) => updateEmployee(id, { is_active }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      queryClient.invalidateQueries({ queryKey: qk.employees() })
       // Deactivating cancels the person's pending leave requests.
-      queryClient.invalidateQueries({ queryKey: ['leaves'] })
+      queryClient.invalidateQueries({ queryKey: qk.leaves() })
       toast.success(t('updatedSuccess'))
     },
     onError: (err: Error) => toast.error(err.message || t('error')),
@@ -184,59 +190,17 @@ export default function EmployeesPage() {
     })
   }
 
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [importOpen, setImportOpen] = useState(false)
 
-  async function handleImportExcel(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    // Bound the parser's exposure (xlsx@0.18.5 has unpatched ReDoS/proto-pollution advisories).
-    const MAX_IMPORT_BYTES = 2 * 1024 * 1024 // 2 MB
-    if (file.size > MAX_IMPORT_BYTES) {
-      toast.error(t('fileTooLargeMax2'))
-      e.target.value = ''
-      return
-    }
-
-    try {
-      const data = await parseExcelFile(file)
-      let imported = 0
-      for (const row of data) {
-        const name = row['Name'] || row['name'] || row['الاسم']
-        const deptName = row['Department'] || row['department'] || row['القسم']
-        const balance = row['Leave Balance'] || row['leave_balance'] || row['الرصيد'] || (settings?.annual_leave_balance || 30)
-
-        if (!name) continue
-
-        // Find department by name
-        const dept = departments.find(d => d.name === deptName)
-        const deptId = dept?.id || departments[0]?.id
-
-        if (deptId) {
-          await fetch('/api/employees', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, department_id: deptId, leave_balance: parseInt(String(balance)) || (settings?.annual_leave_balance || 30) }),
-          })
-          imported++
-        }
-      }
-
-      queryClient.invalidateQueries({ queryKey: ['employees'] })
-      toast.success(`${t('addedSuccess')} (${imported})`)
-    } catch {
-      toast.error(t('error'))
-    }
-
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
-
-  const { data: employees = [], isError: employeesError, refetch: refetchEmployees } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
-  const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
-  const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
-  const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
+  // Used days, by type, and tardiness cover the current leave year, to match the remaining
+  // balance shown beside them, so only that year is fetched.
+  const currentYear = useCurrentLeaveYear()
+  const { data: employees = [], isError: employeesError, refetch: refetchEmployees } = useQuery({ queryKey: qk.employees(), queryFn: getEmployees })
+  const { data: leaves = EMPTY_LEAVES } = useLeavesInYear(currentYear)
+  const { data: tardiness = EMPTY_TARDINESS } = useTardinessInYear(currentYear)
+  const { data: settings } = useQuery({ queryKey: qk.settings(), queryFn: getSettings })
+  const { data: departments = [] } = useQuery({ queryKey: qk.departments(), queryFn: getDepartments })
+  const { data: leaveTypes = [] } = useQuery({ queryKey: qk.leaveTypes(), queryFn: getLeaveTypes })
 
   // What the employee being edited would inherit if their own schedule is left blank:
   // their department's override, falling back to the global schedule.
@@ -252,13 +216,7 @@ export default function EmployeesPage() {
   const today = omanToday()
 
   const employeeRows = useMemo(() => {
-    // Used days, by type, and tardiness cover the current leave year, to match the
-    // remaining balance shown beside them.
-    const currentYear = settings ? leaveYears(settings, 1)[0] : null
-    const yearLeaves = currentYear
-      ? leaves.filter(l => l.status === 'approved' && inLeaveYear(l.start_date, currentYear))
-      : []
-    const yearTardiness = currentYear ? tardiness.filter(t => inLeaveYear(t.date, currentYear)) : []
+    const yearLeaves = leaves.filter(l => l.status === 'approved')
 
     return employees.map((emp, idx) => {
       const empLeaves = yearLeaves.filter(l => l.employee_id === emp.id)
@@ -272,7 +230,7 @@ export default function EmployeesPage() {
           .reduce((sum, l) => sum + l.days_count, 0)
       })
 
-      const empTardiness = yearTardiness.filter(t => t.employee_id === emp.id)
+      const empTardiness = tardiness.filter(t => t.employee_id === emp.id)
       const tardMinutes = empTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
       const remaining = emp.leave_balance
 
@@ -289,7 +247,7 @@ export default function EmployeesPage() {
         isOnLeave,
       }
     })
-  }, [employees, leaves, tardiness, leaveTypes, today, settings])
+  }, [employees, leaves, tardiness, leaveTypes, today])
 
   const filtered = useMemo(() => {
     let result = employeeRows
@@ -315,6 +273,26 @@ export default function EmployeesPage() {
     return result
   }, [employeeRows, search, deptFilter, sortField, sortDir])
 
+  // What the table shows, in its current filter and order, for the current leave year.
+  function handleExport() {
+    const data = filtered.map(emp => ({
+      '#': emp.index,
+      [t('name')]: emp.name,
+      [t('department')]: emp.departmentName,
+      [t('balance')]: emp.leave_balance,
+      [t('used')]: emp.usedDays,
+      [t('annual')]: emp.byType['Annual'] || 0,
+      [t('sick')]: emp.byType['Sick'] || 0,
+      [t('emergency')]: emp.byType['Emergency'] || 0,
+      [t('other')]: emp.byType['Other'] || 0,
+      [t('remaining')]: emp.remaining,
+      [t('tardinessHHMM')]: formatMinutesToHHMM(emp.tardMinutes),
+      [t('status')]: !emp.is_active ? t('inactive') : emp.isOnLeave ? t('onLeave') : t('available'),
+    }))
+    const suffix = currentYear ? `-${leaveYearLabel(currentYear).replace('/', '-')}` : ''
+    exportToExcel(data, `employees${suffix}`, t('employees'))
+  }
+
   function toggleSort(field: SortField) {
     if (sortField === field) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -330,16 +308,20 @@ export default function EmployeesPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t('employees')}</h1>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-            <Upload className="h-4 w-4 ml-2" />
+          <Button variant="outline" onClick={handleExport} disabled={filtered.length === 0}>
+            <FileSpreadsheet className="h-4 w-4 me-2" />
+            {t('exportExcel')}
+          </Button>
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload className="h-4 w-4 me-2" />
             {t('importExcel')}
           </Button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            className="hidden"
-            onChange={handleImportExcel}
+          <ImportEmployeesDialog
+            open={importOpen}
+            onOpenChange={setImportOpen}
+            departments={departments}
+            employees={employees}
+            defaultBalance={settings?.annual_leave_balance || 30}
           />
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
           <DialogTrigger render={<Button />}>

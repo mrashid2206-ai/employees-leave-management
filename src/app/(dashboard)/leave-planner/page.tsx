@@ -4,26 +4,32 @@ import { useQuery } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { getEmployees, getLeaveRequests, getLeaveTypes, getSettings, getDepartments } from '@/lib/api'
+import { getEmployees, getLeaveTypes, getSettings, getDepartments } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
-import { leaveYears, inLeaveYear, leaveYearMonths, MONTH_NAMES } from '@/lib/leave-year'
+import { leaveYearMonths, MONTH_NAMES } from '@/lib/leave-year'
+import { qk } from '@/lib/query-keys'
+import type { LeaveRequest } from '@/lib/types'
+import { useCurrentLeaveYear, useLeavesInYear } from '@/components/leave-year-select'
+
+const EMPTY_LEAVES: LeaveRequest[] = []
 
 export default function LeavePlannerPage() {
   const t = useT()
   const { lang } = useLanguage()
   const [deptFilter, setDeptFilter] = useState<string>('all')
 
-  const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
-  const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
-  const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
+  // The planner is about the current leave year, so only that year's requests are fetched.
+  // Its months come from settings: they were hardcoded March→February, so moving the year
+  // start broke the grid.
+  const currentYear = useCurrentLeaveYear()
+  const { data: employees = [] } = useQuery({ queryKey: qk.employees(), queryFn: getEmployees })
+  const { data: leaves = EMPTY_LEAVES } = useLeavesInYear(currentYear)
+  const { data: leaveTypes = [] } = useQuery({ queryKey: qk.leaveTypes(), queryFn: getLeaveTypes })
+  const { data: settings } = useQuery({ queryKey: qk.settings(), queryFn: getSettings })
+  const { data: departments = [] } = useQuery({ queryKey: qk.departments(), queryFn: getDepartments })
 
   const monthNames = lang === 'ar' ? MONTH_NAMES.ar : MONTH_NAMES.enShort
 
-  // The planner is about the current leave year. Its months come from settings: they were
-  // hardcoded March→February, so moving the year start broke the grid.
-  const currentYear = useMemo(() => (settings ? leaveYears(settings, 1)[0] : null), [settings])
   const months = useMemo(() => (currentYear ? leaveYearMonths(currentYear) : []), [currentYear])
 
   const plannerData = useMemo(() => {
@@ -32,9 +38,7 @@ export default function LeavePlannerPage() {
     if (deptFilter !== 'all') emps = emps.filter(e => e.department_id === parseInt(deptFilter))
 
     return emps.map(emp => {
-      const empLeaves = leaves.filter(
-        l => l.employee_id === emp.id && l.status === 'approved' && inLeaveYear(l.start_date, currentYear)
-      )
+      const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
       const usedDays = empLeaves.reduce((sum, l) => sum + l.days_count, 0)
       const remaining = emp.leave_balance
 
@@ -102,7 +106,7 @@ export default function LeavePlannerPage() {
 
       {/* Legend */}
       <div className="flex gap-4 flex-wrap">
-        {leaveTypes.filter((lt, i, arr) => arr.findIndex(t => t.name_en === lt.name_en) === i).map(lt => (
+        {leaveTypes.map(lt => (
           <div key={lt.id} className="flex items-center gap-1.5 text-sm">
             <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: lt.color }} />
             <span>{lang === 'ar' ? lt.name_ar : lt.name_en}</span>

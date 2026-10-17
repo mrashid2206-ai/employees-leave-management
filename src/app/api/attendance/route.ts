@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
-import { parseBody } from '@/server/validation'
+import { parseBody, parseDateParam } from '@/server/validation'
 import { attendanceUpsertSchema } from '@/server/schemas'
 import { upsertAttendance } from '@/server/services/attendance-service'
 
@@ -10,9 +10,15 @@ export async function GET(request: Request) {
   if (!user) return unauthorized()
   const { searchParams } = new URL(request.url)
   const month = searchParams.get('month') // YYYY-MM format
+  if (month && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+    return NextResponse.json({ error: 'month: must be YYYY-MM' }, { status: 400 })
+  }
+  // A single day, for views that only need today (the dashboard used to download the whole
+  // month and throw all but one day away).
+  const date = parseDateParam(searchParams, 'date')
+  if (!date.ok) return date.response
   // Employees may only read their own attendance; admins may filter by any employee.
   const employeeId = user.role === 'employee' ? String(user.id) : searchParams.get('employee_id')
-
 
   let query = `
     SELECT a.id, a.employee_id, a.date::text as date, a.check_in::text as check_in,
@@ -32,6 +38,10 @@ export async function GET(request: Request) {
     params.push(`${month}-01`)
     params.push(`${month}-${lastDay}`)
     conditions.push(`a.date >= $${params.length - 1} AND a.date <= $${params.length}`)
+  }
+  if (date.data) {
+    params.push(date.data)
+    conditions.push(`a.date = $${params.length}`)
   }
   if (employeeId) {
     params.push(employeeId)

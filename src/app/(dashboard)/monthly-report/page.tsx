@@ -7,7 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Download, Printer } from 'lucide-react'
-import { getEmployees, getDepartments, getLeaveRequests, getLeaveTypes, getTardinessRecords, getHolidays } from '@/lib/api'
+import { getEmployees, getDepartments, getLeaveRequests, getLeaveTypes, getTardinessRecords, getHolidays, getAttendance } from '@/lib/api'
+import { qk } from '@/lib/query-keys'
 import { useLanguage, useT } from '@/lib/language-context'
 import { exportToExcel } from '@/lib/excel'
 import { QueryError } from '@/components/query-error'
@@ -46,22 +47,18 @@ export default function MonthlyReportPage() {
     ? ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
     : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
-  const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
-  const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
-  const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
-  const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
-  const { data: holidays = [] } = useQuery({ queryKey: ['holidays'], queryFn: getHolidays })
-  const { data: attendance = [], isError, refetch } = useQuery<AttendanceRow[]>({
-    queryKey: ['attendance-monthly', monthKey],
-    queryFn: () => fetch(`/api/attendance?month=${monthKey}`).then(r => r.json()),
+  const { data: employees = [] } = useQuery({ queryKey: qk.employees(), queryFn: getEmployees })
+  const { data: departments = [] } = useQuery({ queryKey: qk.departments(), queryFn: getDepartments })
+  const { data: leaves = [] } = useQuery({ queryKey: qk.leaves(), queryFn: getLeaveRequests })
+  const { data: leaveTypes = [] } = useQuery({ queryKey: qk.leaveTypes(), queryFn: getLeaveTypes })
+  const { data: tardiness = [] } = useQuery({ queryKey: qk.tardiness(), queryFn: getTardinessRecords })
+  const { data: holidays = [] } = useQuery({ queryKey: qk.holidays(), queryFn: getHolidays })
+  const { data: attendance = [], isError, refetch } = useQuery({
+    queryKey: qk.attendanceMonth(monthKey),
+    queryFn: () => getAttendance<AttendanceRow>({ month: monthKey }),
   })
 
   const holidaySet = useMemo(() => new Set(holidays.map(h => h.date)), [holidays])
-  const dedupedTypes = useMemo(
-    () => leaveTypes.filter((lt, i, arr) => arr.findIndex(x => x.name_en === lt.name_en) === i),
-    [leaveTypes]
-  )
 
   const rows = useMemo(() => {
     let emps = employees.filter(e => e.is_active)
@@ -92,9 +89,7 @@ export default function MonthlyReportPage() {
         }
         if (daysInMonth === 0) continue
         leaveDays += daysInMonth
-        const typeName = dedupedTypes.find(x => x.id === l.leave_type_id)?.name_en
-          || leaveTypes.find(x => x.id === l.leave_type_id)?.name_en
-          || 'Other'
+        const typeName = leaveTypes.find(x => x.id === l.leave_type_id)?.name_en || 'Other'
         byType[typeName] = (byType[typeName] || 0) + daysInMonth
       }
 
@@ -119,7 +114,7 @@ export default function MonthlyReportPage() {
         balance: emp.leave_balance,
       }
     })
-  }, [employees, attendance, leaves, tardiness, holidaySet, dedupedTypes, leaveTypes, deptFilter, monthStart, monthEnd])
+  }, [employees, attendance, leaves, tardiness, holidaySet, leaveTypes, deptFilter, monthStart, monthEnd])
 
   function handleExport() {
     const data = rows.map(r => {
@@ -132,7 +127,7 @@ export default function MonthlyReportPage() {
         [t('overtime')]: r.overtime,
         [t('leaveDays')]: r.leaveDays,
       }
-      for (const lt of dedupedTypes) {
+      for (const lt of leaveTypes) {
         base[lang === 'ar' ? lt.name_ar : lt.name_en] = r.byType[lt.name_en] || 0
       }
       base[t('lateCount')] = r.lateCount
@@ -205,7 +200,7 @@ export default function MonthlyReportPage() {
                   <TableHead className="text-center">{t('workHours')}</TableHead>
                   <TableHead className="text-center">{t('overtime')}</TableHead>
                   <TableHead className="text-center">{t('leave')}</TableHead>
-                  {dedupedTypes.map(lt => (
+                  {leaveTypes.map(lt => (
                     <TableHead key={lt.id} className="text-center">{lang === 'ar' ? lt.name_ar : lt.name_en}</TableHead>
                   ))}
                   <TableHead className="text-center">{t('tardinessHHMM')}</TableHead>
@@ -216,7 +211,7 @@ export default function MonthlyReportPage() {
               <TableBody>
                 {rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10 + dedupedTypes.length} className="text-center py-8 text-muted-foreground">{t('noData')}</TableCell>
+                    <TableCell colSpan={10 + leaveTypes.length} className="text-center py-8 text-muted-foreground">{t('noData')}</TableCell>
                   </TableRow>
                 ) : rows.map(r => (
                   <TableRow key={r.id}>
@@ -227,7 +222,7 @@ export default function MonthlyReportPage() {
                     <TableCell className="text-center font-mono">{r.workHours}h</TableCell>
                     <TableCell className="text-center font-mono">{r.overtime > 0 ? <span className="text-amber-500">+{r.overtime}h</span> : '-'}</TableCell>
                     <TableCell className="text-center">{r.leaveDays || '-'}</TableCell>
-                    {dedupedTypes.map(lt => (
+                    {leaveTypes.map(lt => (
                       <TableCell key={lt.id} className="text-center">{r.byType[lt.name_en] || 0}</TableCell>
                     ))}
                     <TableCell className="text-center font-mono">{r.lateMinutes > 0 ? hhmm(r.lateMinutes) : '-'}</TableCell>
@@ -243,7 +238,7 @@ export default function MonthlyReportPage() {
                     <TableCell className="text-center font-mono">{totals.workHours}h</TableCell>
                     <TableCell className="text-center font-mono">+{totals.overtime}h</TableCell>
                     <TableCell className="text-center">{totals.leaveDays}</TableCell>
-                    {dedupedTypes.map(lt => <TableCell key={lt.id} />)}
+                    {leaveTypes.map(lt => <TableCell key={lt.id} />)}
                     <TableCell className="text-center font-mono">{hhmm(totals.lateMinutes)}</TableCell>
                     <TableCell className="text-center font-mono text-amber-600">-{totals.deducted.toFixed(3)}</TableCell>
                     <TableCell />

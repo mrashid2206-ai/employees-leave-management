@@ -3,9 +3,10 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { getSettings } from '@/lib/api'
+import { getSettings, getLeaveRequestsInSpan, getTardinessInSpan, getPermissions } from '@/lib/api'
 import { useT } from '@/lib/language-context'
 import { leaveYears, leaveYearLabel, type LeaveYear } from '@/lib/leave-year'
+import { qk } from '@/lib/query-keys'
 
 /**
  * The leave year a report is showing. Defaults to the current one.
@@ -14,11 +15,49 @@ import { leaveYears, leaveYearLabel, type LeaveYear } from '@/lib/leave-year'
  * years": totalling everything was exactly the bug this replaces.
  */
 export function useLeaveYear() {
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
+  const { data: settings } = useQuery({ queryKey: qk.settings(), queryFn: getSettings })
   const years = useMemo(() => (settings ? leaveYears(settings) : []), [settings])
   const [index, setIndex] = useState(0)
   const year: LeaveYear | null = years[index] ?? null
   return { years, year, index, setIndex }
+}
+
+/** The current leave year, for pages that only ever show that one. Null until settings load. */
+export function useCurrentLeaveYear(): LeaveYear | null {
+  const { data: settings } = useQuery({ queryKey: qk.settings(), queryFn: getSettings })
+  return useMemo(() => (settings ? leaveYears(settings, 1)[0] : null), [settings])
+}
+
+// One leave year's rows, fetched as just that year. The reports used to download every
+// leave request and tardiness row ever recorded and filter in the browser, so each page
+// load grew with the company's history. Nothing is fetched until the year is known.
+// Keys sit under qk.leaves()/qk.tardiness(), so every mutation that refreshes the full
+// lists refreshes these too.
+
+const NO_YEAR = { start: '', end: '' }
+
+export function useLeavesInYear(year: LeaveYear | null) {
+  return useQuery({
+    queryKey: qk.leavesInSpan(year ?? NO_YEAR),
+    queryFn: () => getLeaveRequestsInSpan(year!),
+    enabled: !!year,
+  })
+}
+
+export function useTardinessInYear(year: LeaveYear | null) {
+  return useQuery({
+    queryKey: qk.tardinessInSpan(year ?? NO_YEAR),
+    queryFn: () => getTardinessInSpan(year!),
+    enabled: !!year,
+  })
+}
+
+export function usePermissionsInYear(year: LeaveYear | null) {
+  return useQuery({
+    queryKey: qk.permissionsInSpan(year ?? NO_YEAR),
+    queryFn: () => getPermissions(year!),
+    enabled: !!year,
+  })
 }
 
 export function LeaveYearSelect({

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Check, X, Inbox } from 'lucide-react'
 import { toast } from 'sonner'
 import { getLeaveRequests, updateLeaveStatus } from '@/lib/api'
+import { qk } from '@/lib/query-keys'
 import { useLanguage, useT } from '@/lib/language-context'
 
 // Dashboard inbox: approve/reject waiting leave requests in one click, without
@@ -16,14 +17,14 @@ export function PendingApprovals() {
   const { lang } = useLanguage()
   const queryClient = useQueryClient()
 
-  const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
+  const { data: leaves = [] } = useQuery({ queryKey: qk.leaves(), queryFn: getLeaveRequests })
   const pending = leaves.filter(l => l.status === 'pending')
 
   const mutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) => updateLeaveStatus(id, status),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['leaves'] })
-      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      queryClient.invalidateQueries({ queryKey: qk.leaves() })
+      queryClient.invalidateQueries({ queryKey: qk.employees() })
       if (typeof data.balance_after === 'number' && data.balance_after < 0) {
         toast.warning(lang === 'ar'
           ? `تمت الموافقة — رصيد الموظف الآن ${data.balance_after.toFixed(3)} يوم (بالسالب)`
@@ -32,7 +33,7 @@ export function PendingApprovals() {
         toast.success(t('updatedSuccess'))
       }
     },
-    onError: () => toast.error(t('error')),
+    onError: (err: Error) => toast.error(err.message || t('error')),
   })
 
   if (pending.length === 0) return null

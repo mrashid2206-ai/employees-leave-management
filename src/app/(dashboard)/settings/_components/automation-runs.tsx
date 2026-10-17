@@ -8,7 +8,9 @@ import { Badge } from '@/components/ui/badge'
 import { AlertTriangle, History, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage, useT } from '@/lib/language-context'
+import { qk } from '@/lib/query-keys'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { getAutomationRuns, getAutomationHealth, reverseAutomationRun, type AutomationRun } from '@/lib/api'
 
 // History of what the nightly automation actually changed, with a one-click undo.
 //
@@ -17,27 +19,9 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 // against production. Since the automation mutates balances unattended, the recovery path
 // deserves to be a button rather than improvised SQL.
 
-interface AutomationHealth {
-  status: 'ok' | 'stale' | 'no_runs_yet' | 'unknown'
-  lastCompleted: string | null
-  scheduled: boolean
-}
-
 // Mirrors MAX_CATCH_UP_DAYS in src/lib/automation.ts (that module opens a DB pool, so it
 // can't be imported into a client component).
 const MAX_CATCH_UP_DAYS = 14
-
-interface AutomationRun {
-  id: number
-  kind: string
-  target_date: string | null
-  actor: string | null
-  summary: Record<string, number | string>
-  created_at: string
-  reversed_at: string | null
-  reversed_by: string | null
-  effect_count: number
-}
 
 export function AutomationRuns() {
   const t = useT()
@@ -45,29 +29,24 @@ export function AutomationRuns() {
   const queryClient = useQueryClient()
   const [confirmId, setConfirmId] = useState<number | null>(null)
 
-  const { data: runs = [], isLoading } = useQuery<AutomationRun[]>({
-    queryKey: ['automation-runs'],
-    queryFn: () => fetch('/api/automation/runs').then(r => (r.ok ? r.json() : [])),
+  const { data: runs = [], isLoading } = useQuery({
+    queryKey: qk.automationRuns(),
+    queryFn: getAutomationRuns,
   })
 
   // A missed night isn't an error anywhere else, so say it here, where an admin will see it.
   // The endpoint answers 503 when stale; the body is still the status.
-  const { data: health } = useQuery<AutomationHealth | null>({
-    queryKey: ['automation-runs', 'health'],
-    queryFn: () => fetch('/api/health/automation').then(r => r.json()).catch(() => null),
+  const { data: health } = useQuery({
+    queryKey: qk.automationHealth(),
+    queryFn: () => getAutomationHealth().catch(() => null),
   })
 
   const undo = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await fetch(`/api/automation/runs/${id}/reverse`, { method: 'POST' })
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(body.error || 'Undo failed')
-      return body as { reversed: Record<string, number> }
-    },
+    mutationFn: reverseAutomationRun,
     onSuccess: (body) => {
       // Every table the undo touched is now stale.
-      for (const key of ['automation-runs', 'employees', 'attendance', 'tardiness', 'leaves', 'settings']) {
-        queryClient.invalidateQueries({ queryKey: [key] })
+      for (const key of [qk.automationRuns(), qk.employees(), qk.attendance(), qk.tardiness(), qk.leaves(), qk.settings()]) {
+        queryClient.invalidateQueries({ queryKey: key })
       }
       const changed = Object.entries(body.reversed || {})
       toast.success(

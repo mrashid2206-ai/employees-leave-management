@@ -11,29 +11,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Download, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage, useT } from '@/lib/language-context'
+import { qk } from '@/lib/query-keys'
 import { exportToExcel } from '@/lib/excel'
-
-interface AuditEntry {
-  id: number
-  action: string
-  user_id: string
-  user_role: string
-  details: string
-  created_at: string
-}
-
-interface AuditResponse {
-  rows: AuditEntry[]
-  total: number
-  limit: number
-  offset: number
-  truncated: boolean
-  actions: string[]
-  roles: string[]
-}
+import { getAuditLog, type AuditPage as AuditResponse } from '@/lib/api'
+import { QueryError } from '@/components/query-error'
 
 const PAGE_SIZE = 50
-const EMPTY: AuditResponse = { rows: [], total: 0, limit: PAGE_SIZE, offset: 0, truncated: false, actions: [], roles: [] }
+const EMPTY: AuditResponse = { rows: [], total: 0, truncated: false, actions: [], roles: [] }
 
 export default function AuditPage() {
   const t = useT()
@@ -58,13 +42,13 @@ export default function AuditPage() {
     return sp
   }, [actionFilter, roleFilter, search, from, to])
 
-  const { data = EMPTY, isFetching } = useQuery<AuditResponse>({
-    queryKey: ['audit', params.toString(), page],
+  const { data = EMPTY, isFetching, isError, refetch } = useQuery({
+    queryKey: qk.auditPage(params.toString(), page),
     queryFn: () => {
       const sp = new URLSearchParams(params)
       sp.set('limit', String(PAGE_SIZE))
       sp.set('offset', String(page * PAGE_SIZE))
-      return fetch(`/api/audit?${sp}`).then(r => (r.ok ? r.json() : EMPTY))
+      return getAuditLog(sp)
     },
     placeholderData: keepPreviousData,
   })
@@ -94,12 +78,13 @@ export default function AuditPage() {
   async function handleExport() {
     const sp = new URLSearchParams(params)
     sp.set('export', '1')
-    const res = await fetch(`/api/audit?${sp}`)
-    if (!res.ok) {
-      toast.error(t('error'))
+    let payload: AuditResponse
+    try {
+      payload = await getAuditLog(sp)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('error'))
       return
     }
-    const payload: AuditResponse = await res.json()
     if (payload.rows.length === 0) {
       toast.error(t('noData'))
       return
@@ -107,9 +92,9 @@ export default function AuditPage() {
     exportToExcel(
       payload.rows.map(r => ({
         [t('action')]: r.action,
-        [t('user')]: r.user_id,
-        [t('role')]: r.user_role,
-        [t('details')]: r.details,
+        [t('user')]: r.user_id ?? '',
+        [t('role')]: r.user_role ?? '',
+        [t('details')]: r.details ?? '',
         [t('date')]: new Date(r.created_at).toISOString(),
       })),
       `audit-log-${new Date().toISOString().slice(0, 10)}`,
@@ -136,6 +121,7 @@ export default function AuditPage() {
 
   return (
     <div className="space-y-6" dir={dir}>
+      {isError && <QueryError onRetry={() => refetch()} />}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <h1 className="text-2xl font-bold">{t('auditLog2')}</h1>
         <Button variant="outline" size="sm" onClick={handleExport}>

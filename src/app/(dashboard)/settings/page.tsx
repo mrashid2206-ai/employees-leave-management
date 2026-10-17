@@ -17,7 +17,8 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage, useT } from '@/lib/language-context'
-import { getSettings, updateSettings, getDepartments, createDepartment, updateDepartment, deleteDepartment, getHolidays, createHoliday, updateHoliday, deleteHoliday, getEmployees, getLeaveTypes, createLeaveType, updateLeaveType, deleteLeaveType, getAdminUsers, createAdminUser, deleteAdminUser } from '@/lib/api'
+import { qk } from '@/lib/query-keys'
+import { getSettings, updateSettings, getDepartments, createDepartment, updateDepartment, deleteDepartment, getHolidays, createHoliday, updateHoliday, deleteHoliday, getEmployees, getLeaveTypes, createLeaveType, updateLeaveType, deleteLeaveType, getAdminUsers, createAdminUser, deleteAdminUser, getLeaveRequests, seedHolidays, runDailyProcess, runYearlyReset, type AutomationResult } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { DepartmentSchedules } from './_components/department-schedules'
 import { AutomationRuns } from './_components/automation-runs'
@@ -30,28 +31,17 @@ interface SettingsForm extends Partial<Settings> {
   deduct_permission_hours?: boolean
 }
 
-// Result returned by the daily-process / yearly-reset automation endpoints.
-interface ProcessResult {
-  absentMarked?: number
-  leaveDeducted?: number
-  tardinessCreated?: number
-  employeesReset?: number
-  newBalance?: number
-  newYearStart?: string
-  newYearEnd?: string
-}
-
 export default function SettingsPage() {
   const t = useT()
   const { dir, lang } = useLanguage()
   const queryClient = useQueryClient()
 
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
-  const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
-  const { data: holidays = [] } = useQuery({ queryKey: ['holidays'], queryFn: getHolidays })
-  const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
-  const { data: allLeaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: () => fetch('/api/leaves').then(r => r.json()) })
+  const { data: settings } = useQuery({ queryKey: qk.settings(), queryFn: getSettings })
+  const { data: departments = [] } = useQuery({ queryKey: qk.departments(), queryFn: getDepartments })
+  const { data: holidays = [] } = useQuery({ queryKey: qk.holidays(), queryFn: getHolidays })
+  const { data: employees = [] } = useQuery({ queryKey: qk.employees(), queryFn: getEmployees })
+  const { data: leaveTypes = [] } = useQuery({ queryKey: qk.leaveTypes(), queryFn: getLeaveTypes })
+  const { data: allLeaves = [] } = useQuery({ queryKey: qk.leaves(), queryFn: getLeaveRequests })
 
   const [form, setForm] = useState<SettingsForm>({})
   const [deptName, setDeptName] = useState('')
@@ -64,7 +54,7 @@ export default function SettingsPage() {
   const [ltForm, setLtForm] = useState({ name_ar: '', name_en: '', color: '#4CAF50' })
   const [editLt, setEditLt] = useState<{ id: number; name_ar: string; name_en: string; color: string } | null>(null)
   const [processDate, setProcessDate] = useState(omanToday())
-  const [processResult, setProcessResult] = useState<ProcessResult | null>(null)
+  const [processResult, setProcessResult] = useState<AutomationResult | null>(null)
   const [processing, setProcessing] = useState(false)
   const [resetConfirm, setResetConfirm] = useState(false)
   const [activeSection, setActiveSection] = useState('general')
@@ -79,25 +69,20 @@ export default function SettingsPage() {
   }
 
   // Mutations
-  const settingsMutation = useMutation({ mutationFn: (data: Partial<Settings>) => updateSettings(data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['settings'] }); toast.success(t('savedSuccess')) }, onError: () => toast.error(t('error')) })
-  const createDeptMutation = useMutation({ mutationFn: createDepartment, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['departments'] }); setDeptName(''); toast.success(t('addedSuccess')) } })
-  const updateDeptMutation = useMutation({ mutationFn: ({ id, name }: { id: number; name: string }) => updateDepartment(id, name), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['departments'] }); setEditDept(null); toast.success(t('updatedSuccess')) } })
-  const deleteDeptMutation = useMutation({ mutationFn: deleteDepartment, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['departments'] }); toast.success(t('deletedSuccess')) }, onError: (err: Error) => toast.error(err.message) })
-  const createHolidayMutation = useMutation({ mutationFn: createHoliday, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['holidays'] }); setHolidayForm({ name: '', date: '' }); toast.success(t('addedSuccess')) } })
-  const updateHolidayMutation = useMutation({ mutationFn: ({ id, data }: { id: number; data: { name: string; date: string } }) => updateHoliday(id, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['holidays'] }); setEditHoliday(null); toast.success(t('updatedSuccess')) } })
-  const deleteHolidayMutation = useMutation({ mutationFn: deleteHoliday, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['holidays'] }); toast.success(t('deletedSuccess')) } })
+  // Every mutation reports the server's refusal. Most of these had no onError at all, so a
+  // failed save was silent — and deleteHoliday didn't even throw, so it said "Deleted".
+  const showError = (err: Error) => toast.error(err.message || t('error'))
+  const settingsMutation = useMutation({ mutationFn: (data: Partial<Settings>) => updateSettings(data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: qk.settings() }); toast.success(t('savedSuccess')) }, onError: showError })
+  const createDeptMutation = useMutation({ mutationFn: createDepartment, onSuccess: () => { queryClient.invalidateQueries({ queryKey: qk.departments() }); setDeptName(''); toast.success(t('addedSuccess')) }, onError: showError })
+  const updateDeptMutation = useMutation({ mutationFn: ({ id, name }: { id: number; name: string }) => updateDepartment(id, name), onSuccess: () => { queryClient.invalidateQueries({ queryKey: qk.departments() }); setEditDept(null); toast.success(t('updatedSuccess')) }, onError: showError })
+  const deleteDeptMutation = useMutation({ mutationFn: deleteDepartment, onSuccess: () => { queryClient.invalidateQueries({ queryKey: qk.departments() }); toast.success(t('deletedSuccess')) }, onError: showError })
+  const createHolidayMutation = useMutation({ mutationFn: createHoliday, onSuccess: () => { queryClient.invalidateQueries({ queryKey: qk.holidays() }); setHolidayForm({ name: '', date: '' }); toast.success(t('addedSuccess')) }, onError: showError })
+  const updateHolidayMutation = useMutation({ mutationFn: ({ id, data }: { id: number; data: { name: string; date: string } }) => updateHoliday(id, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: qk.holidays() }); setEditHoliday(null); toast.success(t('updatedSuccess')) }, onError: showError })
+  const deleteHolidayMutation = useMutation({ mutationFn: deleteHoliday, onSuccess: () => { queryClient.invalidateQueries({ queryKey: qk.holidays() }); toast.success(t('deletedSuccess')) }, onError: showError })
   const seedHolidaysMutation = useMutation({
-    mutationFn: async (year: number) => {
-      const res = await fetch('/api/holidays/seed', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ year, lang }),
-      })
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Seed failed')
-      return res.json() as Promise<{ year: number; addedCount: number; skippedCount: number; estimatedCount: number }>
-    },
+    mutationFn: (year: number) => seedHolidays(year, lang),
     onSuccess: (r) => {
-      queryClient.invalidateQueries({ queryKey: ['holidays'] })
+      queryClient.invalidateQueries({ queryKey: qk.holidays() })
       setHolidayYear(String(r.year))
       if (r.addedCount === 0) {
         toast.info(lang === 'ar' ? `عطلات ${r.year} مضافة بالفعل` : `${r.year} holidays are already set up`)
@@ -111,25 +96,25 @@ export default function SettingsPage() {
     },
     onError: (err: Error) => toast.error(err.message),
   })
-  const createLtMutation = useMutation({ mutationFn: createLeaveType, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['leaveTypes'] }); setLtForm({ name_ar: '', name_en: '', color: '#4CAF50' }); toast.success(t('addedSuccess')) } })
-  const updateLtMutation = useMutation({ mutationFn: ({ id, data }: { id: number; data: { name_ar: string; name_en: string; color: string } }) => updateLeaveType(id, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['leaveTypes'] }); setEditLt(null); toast.success(t('updatedSuccess')) } })
-  const deleteLtMutation = useMutation({ mutationFn: deleteLeaveType, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['leaveTypes'] }); toast.success(t('deletedSuccess')) }, onError: (err: Error) => toast.error(err.message) })
+  const createLtMutation = useMutation({ mutationFn: createLeaveType, onSuccess: () => { queryClient.invalidateQueries({ queryKey: qk.leaveTypes() }); setLtForm({ name_ar: '', name_en: '', color: '#4CAF50' }); toast.success(t('addedSuccess')) }, onError: showError })
+  const updateLtMutation = useMutation({ mutationFn: ({ id, data }: { id: number; data: { name_ar: string; name_en: string; color: string } }) => updateLeaveType(id, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: qk.leaveTypes() }); setEditLt(null); toast.success(t('updatedSuccess')) }, onError: showError })
+  const deleteLtMutation = useMutation({ mutationFn: deleteLeaveType, onSuccess: () => { queryClient.invalidateQueries({ queryKey: qk.leaveTypes() }); toast.success(t('deletedSuccess')) }, onError: showError })
 
-  async function runDailyProcess() {
+  // Both used to report success whatever the server said: a refused yearly reset (already
+  // run for this year) showed "Saved".
+  async function runDaily() {
     setProcessing(true)
     try {
-      const res = await fetch('/api/automation/daily', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: processDate }) })
-      setProcessResult(await res.json()); queryClient.invalidateQueries(); toast.success(t('addedSuccess'))
-    } catch { toast.error(t('error')) }
+      setProcessResult(await runDailyProcess(processDate)); queryClient.invalidateQueries(); toast.success(t('addedSuccess'))
+    } catch (err) { showError(err as Error) }
     setProcessing(false)
   }
 
-  async function runYearlyReset() {
+  async function runYearly() {
     setProcessing(true)
     try {
-      const res = await fetch('/api/automation/yearly-reset', { method: 'POST' })
-      setProcessResult(await res.json()); queryClient.invalidateQueries(); toast.success(t('savedSuccess')); setResetConfirm(false)
-    } catch { toast.error(t('error')) }
+      setProcessResult(await runYearlyReset()); queryClient.invalidateQueries(); toast.success(t('savedSuccess')); setResetConfirm(false)
+    } catch (err) { showError(err as Error) }
     setProcessing(false)
   }
 
@@ -677,7 +662,7 @@ export default function SettingsPage() {
                       <Label className="text-xs">{t('processDate')}</Label>
                       <Input type="date" value={processDate} onChange={e => setProcessDate(e.target.value)} className="w-48" />
                     </div>
-                    <Button onClick={runDailyProcess} disabled={processing}>
+                    <Button onClick={runDaily} disabled={processing}>
                       <Play className="h-4 w-4 ml-2" />
                       {processing ? '...' : t('runProcess')}
                     </Button>
@@ -723,7 +708,7 @@ export default function SettingsPage() {
                     <div className="p-4 rounded-xl bg-amber-500/10 space-y-3">
                       <p className="text-sm">{t('confirmReset')}</p>
                       <div className="flex gap-2">
-                        <Button variant="destructive" onClick={runYearlyReset} disabled={processing}>
+                        <Button variant="destructive" onClick={runYearly} disabled={processing}>
                           {processing ? '...' : t('confirmDelete')}
                         </Button>
                         <Button variant="outline" onClick={() => setResetConfirm(false)}>{t('cancel')}</Button>
@@ -827,14 +812,14 @@ function AdminUsersSection({ lang }: { lang: string }) {
   const [form, setForm] = useState({ username: '', password: '', name: '' })
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number; name: string }>({ open: false, id: 0, name: '' })
 
-  const { data: admins = [] } = useQuery({ queryKey: ['admin-users'], queryFn: getAdminUsers })
+  const { data: admins = [] } = useQuery({ queryKey: qk.adminUsers(), queryFn: getAdminUsers })
 
   // Errors carry the server's message: deleting yourself or the last active admin is
   // refused with a reason the admin needs to see, not a bare "Error".
   const addMutation = useMutation({
     mutationFn: createAdminUser,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      queryClient.invalidateQueries({ queryKey: qk.adminUsers() })
       setForm({ username: '', password: '', name: '' })
       setShowAdd(false)
       toast.success(t('adminAdded'))
@@ -845,7 +830,7 @@ function AdminUsersSection({ lang }: { lang: string }) {
   const deleteMutation = useMutation({
     mutationFn: deleteAdminUser,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      queryClient.invalidateQueries({ queryKey: qk.adminUsers() })
       toast.success(t('deleted'))
     },
     onError: (err: Error) => toast.error(err.message || t('error')),

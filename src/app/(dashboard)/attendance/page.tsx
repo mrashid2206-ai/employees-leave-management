@@ -15,9 +15,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChevronRight, ChevronLeft, UserCheck, UserX, Clock, Plus, Pencil, Trash2, ShieldCheck, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { Checkbox } from '@/components/ui/checkbox'
-import { getEmployees, getDepartments, getSettings, getLeaveRequests } from '@/lib/api'
+import {
+  getEmployees, getDepartments, getSettings, getLeaveRequests,
+  getAttendance, upsertAttendance, updateAttendance, deleteAttendance, type AttendanceUpsert,
+} from '@/lib/api'
 import { exportToExcel } from '@/lib/excel'
 import { useLanguage, useT } from '@/lib/language-context'
+import { qk } from '@/lib/query-keys'
 import { QueryError } from '@/components/query-error'
 
 const DAY_NAMES_AR = ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت']
@@ -38,14 +42,6 @@ interface AttendanceRecord {
   is_offsite?: boolean
   check_in_ip?: string
   employee?: { id: number; name: string; department_id: number }
-}
-
-interface AttendancePayload {
-  employee_id: number
-  date: string
-  check_in: string
-  check_out: string
-  status: string
 }
 
 export default function AttendancePage() {
@@ -74,28 +70,25 @@ export default function AttendancePage() {
   const firstDayOfWeek = new Date(year, month, 1).getDay()
   const dayNames = lang === 'ar' ? DAY_NAMES_AR : DAY_NAMES_EN
 
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
-  const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
-  const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
-  const { data: records = [], isError: recordsError, refetch: refetchRecords } = useQuery<AttendanceRecord[]>({
-    queryKey: ['attendance', selectedMonth],
-    queryFn: () => fetch(`/api/attendance?month=${selectedMonth}`).then(r => r.json()),
+  const { data: settings } = useQuery({ queryKey: qk.settings(), queryFn: getSettings })
+  const { data: employees = [] } = useQuery({ queryKey: qk.employees(), queryFn: getEmployees })
+  const { data: departments = [] } = useQuery({ queryKey: qk.departments(), queryFn: getDepartments })
+  const { data: leaves = [] } = useQuery({ queryKey: qk.leaves(), queryFn: getLeaveRequests })
+  const { data: records = [], isError: recordsError, refetch: refetchRecords } = useQuery({
+    queryKey: qk.attendanceMonth(selectedMonth),
+    queryFn: () => getAttendance<AttendanceRecord>({ month: selectedMonth }),
   })
 
   function refreshAttendanceQueries() {
-    queryClient.invalidateQueries({ queryKey: ['attendance'] })
+    // The root, so the monthly/overtime/off-site reports and the dashboard refresh too.
+    queryClient.invalidateQueries({ queryKey: qk.attendance() })
     // A reversed auto-absence changes the employee's balance and cancels a leave.
-    queryClient.invalidateQueries({ queryKey: ['leaves'] })
-    queryClient.invalidateQueries({ queryKey: ['employees'] })
+    queryClient.invalidateQueries({ queryKey: qk.leaves() })
+    queryClient.invalidateQueries({ queryKey: qk.employees() })
   }
 
   const createMutation = useMutation({
-    mutationFn: (data: AttendancePayload[]) => fetch('/api/attendance', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }).then(r => r.json()),
+    mutationFn: (data: AttendanceUpsert[]) => upsertAttendance(data),
     onSuccess: () => {
       refreshAttendanceQueries()
       setDialogOpen(false)
@@ -103,11 +96,11 @@ export default function AttendancePage() {
       setEditRecord(null)
       toast.success(t('addedSuccess'))
     },
-    onError: () => toast.error(t('error')),
+    onError: (err: Error) => toast.error(err.message || t('error')),
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => fetch(`/api/attendance/${id}`, { method: 'DELETE' }).then(r => r.json()),
+    mutationFn: deleteAttendance,
     onSuccess: (data) => {
       refreshAttendanceQueries()
       const refunded = data?.refundedDays || 0
@@ -117,18 +110,16 @@ export default function AttendancePage() {
         toast.success(t('deletedSuccess'))
       }
     },
+    onError: (err: Error) => toast.error(err.message || t('error')),
   })
 
   const toggleExcusedMutation = useMutation({
     mutationFn: ({ id, excused }: { id: number; excused: boolean }) =>
-      fetch(`/api/attendance/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ excused_tardiness: excused }),
-      }).then(r => r.json()),
+      updateAttendance(id, { excused_tardiness: excused }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['attendance'] })
+      queryClient.invalidateQueries({ queryKey: qk.attendance() })
     },
+    onError: (err: Error) => toast.error(err.message || t('error')),
   })
 
   const filteredEmployees = useMemo(() => {

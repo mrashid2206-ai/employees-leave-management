@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ChevronRight, ChevronLeft } from 'lucide-react'
 import { getEmployees, getLeaveRequests, getLeaveTypes, getDepartments, getHolidays, getSettings } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
+import { qk } from '@/lib/query-keys'
 
 const DAY_NAMES_AR = ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت']
 const DAY_NAMES_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -21,12 +22,12 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [deptFilter, setDeptFilter] = useState<string>('all')
 
-  const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
-  const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
-  const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
-  const { data: holidays = [] } = useQuery({ queryKey: ['holidays'], queryFn: getHolidays })
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
+  const { data: employees = [] } = useQuery({ queryKey: qk.employees(), queryFn: getEmployees })
+  const { data: leaves = [] } = useQuery({ queryKey: qk.leaves(), queryFn: getLeaveRequests })
+  const { data: leaveTypes = [] } = useQuery({ queryKey: qk.leaveTypes(), queryFn: getLeaveTypes })
+  const { data: departments = [] } = useQuery({ queryKey: qk.departments(), queryFn: getDepartments })
+  const { data: holidays = [] } = useQuery({ queryKey: qk.holidays(), queryFn: getHolidays })
+  const { data: settings } = useQuery({ queryKey: qk.settings(), queryFn: getSettings })
 
   const workDays = (settings?.work_days || '0,1,2,3,4').split(',').map(Number)
   const holidayMap = new Map(holidays.map(h => [h.date, h.name]))
@@ -221,7 +222,7 @@ export default function CalendarPage() {
 
           {/* Legend */}
           <div className="flex gap-4 mt-4 flex-wrap">
-            {leaveTypes.filter((lt, i, arr) => arr.findIndex(t => t.name_en === lt.name_en) === i).map(lt => (
+            {leaveTypes.map(lt => (
               <div key={lt.id} className="flex items-center gap-1.5 text-sm">
                 <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: lt.color }} />
                 <span>{lang === 'ar' ? lt.name_ar : lt.name_en}</span>

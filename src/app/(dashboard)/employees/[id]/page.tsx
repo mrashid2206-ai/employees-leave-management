@@ -9,9 +9,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { ArrowRight, Printer, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
-import { getEmployee, getLeaveRequestsByEmployee, getTardinessByEmployee, getSettings, getLeaveTypes, getDepartments, updateEmployee } from '@/lib/api'
+import {
+  getEmployee, getLeaveRequestsByEmployee, getTardinessByEmployee, getSettings, getLeaveTypes, getDepartments,
+  updateEmployee, resetEmployeePassword, getAuditLog, type AuditEntry,
+} from '@/lib/api'
+import { DEFAULT_EMPLOYEE_PASSWORD } from '@/lib/constants'
 import type { Employee } from '@/lib/types'
 import { useLanguage, useT } from '@/lib/language-context'
+import { qk } from '@/lib/query-keys'
 import dynamic from 'next/dynamic'
 
 const TardinessBarChart = dynamic(() => import('./_components/tardiness-bar-chart'), { ssr: false })
@@ -19,7 +24,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { omanToday } from '@/lib/oman-date'
 import { leaveYears, inLeaveYear } from '@/lib/leave-year'
 
@@ -38,15 +43,6 @@ interface EmployeeUpdatePayload {
   join_date: string | null
 }
 
-interface AuditEntry {
-  id: number
-  action: string
-  user_id: string | null
-  user_role: string | null
-  details: string | null
-  created_at: string
-}
-
 export default function EmployeeCardPage() {
   const params = useParams()
   const router = useRouter()
@@ -54,22 +50,24 @@ export default function EmployeeCardPage() {
   const { dir, lang } = useLanguage()
   const id = Number(params.id)
 
+  // Under the employees/leaves/tardiness roots, so a leave approved or a lateness recorded
+  // anywhere refreshes this card (it used to keep showing the old balance and history).
   const { data: employee } = useQuery({
-    queryKey: ['employee', id],
+    queryKey: qk.employee(id),
     queryFn: () => getEmployee(id),
   })
   const { data: leaves = [] } = useQuery({
-    queryKey: ['employee-leaves', id],
+    queryKey: qk.leavesByEmployee(id),
     queryFn: () => getLeaveRequestsByEmployee(id),
   })
   const { data: tardiness = [] } = useQuery({
-    queryKey: ['employee-tardiness', id],
+    queryKey: qk.tardinessByEmployee(id),
     queryFn: () => getTardinessByEmployee(id),
   })
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
-  const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
+  const { data: settings } = useQuery({ queryKey: qk.settings(), queryFn: getSettings })
+  const { data: leaveTypes = [] } = useQuery({ queryKey: qk.leaveTypes(), queryFn: getLeaveTypes })
 
-  const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
+  const { data: departments = [] } = useQuery({ queryKey: qk.departments(), queryFn: getDepartments })
   const queryClient = useQueryClient()
 
   const [editProfileOpen, setEditProfileOpen] = useState(false)
@@ -78,11 +76,12 @@ export default function EmployeeCardPage() {
   const editMutation = useMutation({
     mutationFn: (data: EmployeeUpdatePayload) => updateEmployee(id, data as Partial<Employee>),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employee', id] })
+      // The root: the roster shows the same name and department.
+      queryClient.invalidateQueries({ queryKey: qk.employees() })
       setEditProfileOpen(false)
       toast.success(t('profileUpdated'))
     },
-    onError: () => toast.error(t('errorTitle')),
+    onError: (err: Error) => toast.error(err.message || t('errorTitle')),
   })
 
   function openEditProfile() {
@@ -113,24 +112,26 @@ export default function EmployeeCardPage() {
     })
   }
 
-  const [activity, setActivity] = useState<AuditEntry[]>([])
-
-  useEffect(() => {
-    if (!employee?.id) return
-    let cancelled = false
-    const empToken = new RegExp(`\\b(?:emp|Employee) ${id}\\b`)
-    fetch('/api/audit')
-      .then(r => (r.ok ? r.json() : []))
-      .then((data: AuditEntry[]) => {
-        if (cancelled) return
-        const empActivity = data.filter(a => a.details != null && empToken.test(a.details))
-        setActivity(empActivity)
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [employee?.id, id])
+  // This read /api/audit as a bare array, but the endpoint has returned { rows, total }
+  // since it gained server-side filters, so .filter threw, the catch swallowed it, and the
+  // feed was always empty. It now asks the server for this employee's entries (audit
+  // messages say "emp <id>", or "Employee <id>" for a password change) and still checks
+  // the id as a whole word client-side, since the search also matches "emp 50" for emp 5.
+  const { data: activity = [] } = useQuery({
+    queryKey: qk.employeeActivity(id),
+    queryFn: async () => {
+      const pages = await Promise.all(
+        [`emp ${id}`, `Employee ${id}`].map(q => getAuditLog(new URLSearchParams({ q })))
+      )
+      const empToken = new RegExp(`\\b(?:emp|Employee) ${id}\\b`)
+      const byId = new Map<number, AuditEntry>()
+      for (const a of pages.flatMap(p => p.rows)) {
+        if (a.details != null && empToken.test(a.details)) byId.set(a.id, a)
+      }
+      return [...byId.values()].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id)
+    },
+    enabled: !!employee?.id,
+  })
 
   if (!employee) return <div className="p-6">{t('loading')}</div>
 
@@ -240,12 +241,14 @@ export default function EmployeeCardPage() {
                 variant="outline"
                 size="sm"
                 onClick={async () => {
-                  await fetch(`/api/employees/${id}/reset-password`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: '123456' }),
-                  })
-                  toast.success(t('passwordResetTo123456'))
+                  try {
+                    // Explicitly the default, as before; see resetEmployeePassword for
+                    // what omitting it would change.
+                    await resetEmployeePassword(id, DEFAULT_EMPLOYEE_PASSWORD)
+                    toast.success(t('passwordResetTo123456'))
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : t('error'))
+                  }
                 }}
               >
                 {t('resetPassword')}

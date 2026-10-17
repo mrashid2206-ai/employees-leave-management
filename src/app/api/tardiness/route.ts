@@ -6,7 +6,7 @@ import { TARDINESS_DEDUCTS_LEAVE, TARDINESS_PENALTY_GRACE_MINUTES } from '@/lib/
 import { logger } from '@/lib/log'
 import { logAudit } from '@/lib/audit'
 import { notifyEmployee } from '@/lib/employee-notify'
-import { parseBody } from '@/server/validation'
+import { parseBody, parseDateRange, rangeConditions } from '@/server/validation'
 import { tardinessCreateSchema } from '@/server/schemas'
 import { resolveSchedule } from '@/lib/schedule'
 
@@ -14,18 +14,28 @@ export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
 
+  // Optional ?from=&to= on the date, so a leave-year report needn't load every year.
+  const range = parseDateRange(new URL(request.url).searchParams)
+  if (!range.ok) return range.response
 
   // Employees may only read their own tardiness; admins see all.
-  const scoped = user.role === 'employee'
+  const params: unknown[] = []
+  const conditions: string[] = []
+  if (user.role === 'employee') {
+    params.push(user.id)
+    conditions.push(`t.employee_id = $${params.length}`)
+  }
+  conditions.push(...rangeConditions('t.date', range.data, params))
+
   const { rows } = await pool.query(`
     SELECT t.id, t.employee_id, t.date::text as date, t.time::text as time,
       t.minutes_late, COALESCE(t.leave_deducted, 0)::float8 as leave_deducted, t.notes, t.created_at, t.updated_at,
       json_build_object('id', e.id, 'name', e.name, 'department_id', e.department_id) as employee
     FROM tardiness_log t
     LEFT JOIN employees e ON t.employee_id = e.id
-    ${scoped ? 'WHERE t.employee_id = $1' : ''}
+    ${conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''}
     ORDER BY t.date DESC, t.id DESC
-  `, scoped ? [user.id] : [])
+  `, params)
   return NextResponse.json(rows)
 }
 

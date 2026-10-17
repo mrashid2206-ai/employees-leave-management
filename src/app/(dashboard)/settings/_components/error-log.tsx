@@ -7,28 +7,20 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
 import { useT } from '@/lib/language-context'
+import { qk } from '@/lib/query-keys'
+import { getErrorLog } from '@/lib/api'
 
 // Server errors, captured by `onRequestError` in src/instrumentation.ts.
 // Before this, a production 500 only reached stdout — invisible unless someone happened
 // to be tailing Railway logs at the moment it happened.
 
-interface ErrorRow {
-  id: number
-  message: string
-  stack: string | null
-  path: string | null
-  method: string | null
-  source: string | null
-  created_at: string
-}
-
 export function ErrorLog() {
   const t = useT()
   const [expanded, setExpanded] = useState<number | null>(null)
 
-  const { data, isLoading } = useQuery<{ rows: ErrorRow[]; total: number }>({
-    queryKey: ['error-log'],
-    queryFn: () => fetch('/api/errors?limit=50').then(r => (r.ok ? r.json() : { rows: [], total: 0 })),
+  const { data, isLoading } = useQuery({
+    queryKey: qk.errorLog(),
+    queryFn: () => getErrorLog(50),
   })
 
   const rows = data?.rows ?? []
