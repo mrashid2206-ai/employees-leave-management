@@ -12,6 +12,7 @@ import { useLanguage, useT } from '@/lib/language-context'
 import { monthEnd, omanMonth, omanYesterday } from '@/lib/oman-date'
 import { apiErrorPayload, useCalendarData, useCancelLeave, useMyCorrections, useMyRequests } from '../_hooks/use-portal'
 import { CorrectionDialog } from './correction-dialog'
+import { RequestAttachments } from './request-attachments'
 
 interface RequestsTabProps {
   empId?: number
@@ -150,6 +151,12 @@ export function RequestsTab({ empId }: RequestsTabProps) {
                 {req.notes && (
                   <p className="text-xs text-muted-foreground mt-2 bg-accent/30 p-2 rounded">{req.notes}</p>
                 )}
+                <RequestAttachments
+                  empId={empId}
+                  leaveId={req.id}
+                  count={req.attachment_count ?? 0}
+                  editable={req.status === 'pending'}
+                />
                 {req.status === 'pending' && (
                   <Button
                     variant="ghost"

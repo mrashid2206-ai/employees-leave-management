@@ -20,6 +20,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { useLanguage, useT } from '@/lib/language-context'
 import { QueryError } from '@/components/query-error'
+import { LeaveAttachments } from '@/components/leave-attachments'
 
 interface CreateLeavePayload {
   employee_id: number
@@ -514,6 +515,7 @@ export default function LeavesPage() {
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-1">
+                            <LeaveAttachments leaveId={leave.id} count={leave.attachment_count} />
                             <Button
                               variant="ghost"
                               size="icon"

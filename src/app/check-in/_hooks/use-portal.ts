@@ -37,6 +37,7 @@ export interface LeaveForecast {
   daysLeftInYear: number
   yearElapsedFraction: number
   status: 'negative' | 'critical' | 'tight' | 'healthy'
+  fiscalYearStart: string
   fiscalYearEnd: string
   annualAllowance: number
 }
@@ -77,6 +78,18 @@ export interface MyLeaveRequest {
   notes?: string | null
   status: string
   leave_type?: LeaveType
+  attachment_count?: number
+}
+
+/** Metadata only; the file itself is fetched by following /api/attachments/{id}. */
+export interface LeaveAttachment {
+  id: number
+  leave_request_id: number
+  filename: string
+  content_type: string
+  size_bytes: number
+  uploaded_by_role: 'admin' | 'employee'
+  created_at: string
 }
 
 export interface EmpInfo {
@@ -251,6 +264,15 @@ async function sendJSON<T>(url: string, method: string, body: unknown): Promise<
   return res.json() as Promise<T>
 }
 
+/** multipart/form-data; the browser sets the boundary, so no Content-Type here. */
+async function sendFile<T>(url: string, file: File): Promise<T> {
+  const body = new FormData()
+  body.append('file', file)
+  const res = await fetch(url, { method: 'POST', body })
+  if (!res.ok) return failWith(res)
+  return res.json() as Promise<T>
+}
+
 async function sendVoid(url: string, method: string, body?: unknown): Promise<void> {
   const res = await fetch(url, {
     method,
@@ -284,6 +306,7 @@ export const portalKeys = {
   calendar: () => ['portal', 'calendar'] as const,
   workingDays: (start: string, end: string) => ['portal', 'working-days', start, end] as const,
   forecast: (id: EmpId) => ['portal', 'leave-forecast', id] as const,
+  attachments: (leaveId: number) => ['portal', 'attachments', leaveId] as const,
 }
 
 /* -------------------------------------------------------------------------- */
@@ -463,6 +486,16 @@ export function useCalendarData(enabled: boolean) {
   })
 }
 
+/** A leave's attachments. Only fetched when there is something to list. */
+export function useLeaveAttachments(leaveId: number, enabled: boolean) {
+  return useQuery({
+    retry,
+    queryKey: portalKeys.attachments(leaveId),
+    queryFn: () => getJSON<LeaveAttachment[]>(`/api/leaves/${leaveId}/attachments`),
+    enabled,
+  })
+}
+
 /** Working-day count for a date range, or null while it is unknown/invalid. */
 export function useWorkingDays(start: string, end: string): WorkingDaysInfo | null {
   const valid = !!start && !!end && new Date(end) >= new Date(start)
@@ -521,6 +554,34 @@ export function useSubmitLeave(empId: EmpId) {
       qc.invalidateQueries({ queryKey: portalKeys.requests(empId) })
       qc.invalidateQueries({ queryKey: portalKeys.info(empId) })
       qc.invalidateQueries({ queryKey: portalKeys.calendar() })
+    },
+  })
+}
+
+export interface UploadAttachmentInput {
+  leaveId: number
+  file: File
+}
+
+export function useUploadAttachment(empId: EmpId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ leaveId, file }: UploadAttachmentInput) =>
+      sendFile<LeaveAttachment>(`/api/leaves/${leaveId}/attachments`, file),
+    onSettled: (_data, _err, { leaveId }) => {
+      qc.invalidateQueries({ queryKey: portalKeys.attachments(leaveId) })
+      qc.invalidateQueries({ queryKey: portalKeys.requests(empId) })
+    },
+  })
+}
+
+export function useDeleteAttachment(empId: EmpId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }: { id: number; leaveId: number }) => sendVoid(`/api/attachments/${id}`, 'DELETE'),
+    onSettled: (_data, _err, { leaveId }) => {
+      qc.invalidateQueries({ queryKey: portalKeys.attachments(leaveId) })
+      qc.invalidateQueries({ queryKey: portalKeys.requests(empId) })
     },
   })
 }
