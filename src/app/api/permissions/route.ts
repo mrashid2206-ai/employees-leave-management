@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   // ("2026-06-01T00:00:00.000Z"), which never equals the YYYY-MM-DD every page compares it
   // with, so "today's permissions" and the portal's open permission were never found.
   let query = `SELECT p.id, p.employee_id, p.date::text AS date, p.leave_time, p.return_time, p.reason,
-      p.status, p.approved_by, p.created_at,
+      p.status, p.approved_by, p.reviewed_at, p.decision_note, p.created_at,
       json_build_object('id', e.id, 'name', e.name) as employee
     FROM permissions p LEFT JOIN employees e ON p.employee_id = e.id`
   const conditions: string[] = []
