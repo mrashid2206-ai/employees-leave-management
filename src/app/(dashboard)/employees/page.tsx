@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Search, ArrowUpDown, Plus, Trash2, Pencil, Upload, Power } from 'lucide-react'
-import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings, getDepartments, getLeaveTypes, createEmployee, deleteEmployee, updateEmployee } from '@/lib/api'
+import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings, getDepartments, getLeaveTypes, createEmployee, deleteEmployee, updateEmployee, type EmployeeUpdate } from '@/lib/api'
 import type { Employee, ScheduleOverride } from '@/lib/types'
 import { ScheduleFields } from '@/components/schedule-fields'
 import { parseExcelFile } from '@/lib/excel'
@@ -70,42 +70,57 @@ export default function EmployeesPage() {
   })
 
   const [editOpen, setEditOpen] = useState(false)
-  const [editEmp, setEditEmp] = useState({ id: 0, name: '', department_id: '', leave_balance: '', email: '', phone: '', position: '', join_date: '' })
+  const [editEmp, setEditEmp] = useState({ id: 0, name: '', department_id: '', leave_balance: '', original_balance: 0, balance_reason: '', email: '', phone: '', position: '', join_date: '' })
+  // A hand edit of the balance is the only balance change with no leave/tardiness/absence
+  // record behind it, so it asks why (the server refuses it otherwise and keeps the reason
+  // in the audit log). Unchanged means "same number", so 29.5 vs "29.50" needs no reason.
+  const editBalanceChanged = editEmp.leave_balance.trim() !== '' && Number(editEmp.leave_balance) !== editEmp.original_balance
   // Per-employee schedule override, kept separate because blank/null is meaningful here
   // (it means "inherit the department's schedule") rather than just an empty field.
   const [editSchedule, setEditSchedule] = useState<ScheduleOverride>({})
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number; name: string }>({ open: false, id: 0, name: '' })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Employee> }) => updateEmployee(id, data),
+    mutationFn: ({ id, data }: { id: number; data: EmployeeUpdate }) => updateEmployee(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] })
       setEditOpen(false)
       toast.success(t('updatedSuccess'))
     },
-    onError: () => toast.error(t('error')),
+    onError: (err: Error) => toast.error(err.message || t('error')),
   })
 
   const deleteMutation = useMutation({
     mutationFn: deleteEmployee,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] })
+      queryClient.invalidateQueries({ queryKey: ['leaves'] })
       toast.success(t('deletedSuccess'))
     },
+    onError: (err: Error) => toast.error(err.message || t('error')),
   })
 
   const toggleActiveMutation = useMutation({
     mutationFn: ({ id, is_active }: { id: number; is_active: boolean }) => updateEmployee(id, { is_active }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] })
+      // Deactivating cancels the person's pending leave requests.
+      queryClient.invalidateQueries({ queryKey: ['leaves'] })
       toast.success(t('updatedSuccess'))
     },
-    onError: () => toast.error(t('error')),
+    onError: (err: Error) => toast.error(err.message || t('error')),
   })
+  // Deactivation cancels pending leave and ends sessions, which reactivating doesn't undo,
+  // so the toggle asks first in that direction (as the delete button always has).
+  const [deactivateConfirm, setDeactivateConfirm] = useState<{ open: boolean; id: number; name: string }>({ open: false, id: 0, name: '' })
 
   function handleEditEmployee() {
     if (!editEmp.name || !editEmp.department_id) {
       toast.error(t('fillRequired'))
+      return
+    }
+    if (editBalanceChanged && !editEmp.balance_reason.trim()) {
+      toast.error(t('balanceReasonRequired'))
       return
     }
     updateMutation.mutate({
@@ -113,7 +128,12 @@ export default function EmployeesPage() {
       data: {
         name: editEmp.name,
         department_id: parseInt(editEmp.department_id),
-        leave_balance: parseInt(editEmp.leave_balance) || (settings?.annual_leave_balance || 30),
+        // Only sent when it actually changed. This used to always send
+        // parseInt(balance), so saving any other field silently truncated a fractional
+        // balance (tardiness deducts fractions of a day) and an empty box reset it to 30.
+        ...(editBalanceChanged
+          ? { leave_balance: Number(editEmp.leave_balance), balance_reason: editEmp.balance_reason.trim() }
+          : {}),
         email: editEmp.email || undefined,
         phone: editEmp.phone || undefined,
         position: editEmp.position || undefined,
@@ -133,6 +153,8 @@ export default function EmployeesPage() {
       name: emp.name,
       department_id: String(emp.department_id),
       leave_balance: String(emp.leave_balance),
+      original_balance: Number(emp.leave_balance),
+      balance_reason: '',
       email: emp.email || '',
       phone: emp.phone || '',
       position: emp.position || '',
@@ -496,7 +518,9 @@ export default function EmployeesPage() {
                           size="icon"
                           className={`h-7 w-7 ${emp.is_active ? 'text-emerald-500 hover:bg-emerald-500/10' : 'text-muted-foreground hover:bg-muted'}`}
                           title={emp.is_active ? (t('deactivate')) : (t('activate'))}
-                          onClick={() => toggleActiveMutation.mutate({ id: emp.id, is_active: !emp.is_active })}
+                          onClick={() => emp.is_active
+                            ? setDeactivateConfirm({ open: true, id: emp.id, name: emp.name })
+                            : toggleActiveMutation.mutate({ id: emp.id, is_active: true })}
                         >
                           <Power className="h-3.5 w-3.5" />
                         </Button>
@@ -555,10 +579,25 @@ export default function EmployeesPage() {
               <Label>{t('leaveBalance')}</Label>
               <Input
                 type="number"
+                step="any"
                 value={editEmp.leave_balance}
                 onChange={e => setEditEmp(f => ({ ...f, leave_balance: e.target.value }))}
               />
             </div>
+            {editBalanceChanged && (
+              <div>
+                <Label>{t('balanceReason')} *</Label>
+                <Input
+                  value={editEmp.balance_reason}
+                  maxLength={500}
+                  placeholder={t('balanceReasonPlaceholder')}
+                  onChange={e => setEditEmp(f => ({ ...f, balance_reason: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {editEmp.original_balance} → {editEmp.leave_balance}
+                </p>
+              </div>
+            )}
             <div>
               <Label>{t('email')}</Label>
               <Input
@@ -625,6 +664,17 @@ export default function EmployeesPage() {
         description={`${t('areYouSure')} "${deleteConfirm.name}"?`}
         onConfirm={() => deleteMutation.mutate(deleteConfirm.id)}
         loading={deleteMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={deactivateConfirm.open}
+        onOpenChange={(open) => setDeactivateConfirm(c => ({ ...c, open }))}
+        title={t('deactivateEmployee')}
+        description={t('deactivateEmployeeConfirm', { name: deactivateConfirm.name })}
+        onConfirm={() => toggleActiveMutation.mutate({ id: deactivateConfirm.id, is_active: false })}
+        loading={toggleActiveMutation.isPending}
+        variant="warning"
+        confirmLabel={t('deactivate')}
       />
     </div>
   )

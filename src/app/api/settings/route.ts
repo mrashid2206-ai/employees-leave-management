@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAdmin, verifyAnyAuth, unauthorized } from '@/lib/api-auth'
+import { logAudit } from '@/lib/audit'
+import { changedFields, formatChanges } from '@/lib/audit-diff'
 import { parseBody } from '@/server/validation'
 import { settingsUpdateSchema } from '@/server/schemas'
 
@@ -65,13 +67,37 @@ export async function PUT(request: Request) {
   const values = safeFields.map(f => body[f])
 
   // Target the actual singleton row (lowest id) rather than a hardcoded id = 1, and
-  // fail loudly if nothing was updated instead of silently returning null.
-  const { rows } = await pool.query(
-    `UPDATE settings SET ${sets} WHERE id = (SELECT id FROM settings ORDER BY id LIMIT 1) RETURNING ${SELECT_COLS}`,
-    values
-  )
-  if (!rows[0]) {
-    return NextResponse.json({ error: 'Settings row not found' }, { status: 500 })
+  // fail loudly if nothing was updated instead of silently returning null. The old row is
+  // read under the same lock so the audit entry's old→new values are exactly what changed.
+  const client = await pool.connect()
+  let before: Record<string, unknown>
+  let after: Record<string, unknown>
+  try {
+    await client.query('BEGIN')
+    const { rows: old } = await client.query(`SELECT ${SELECT_COLS} FROM settings ORDER BY id LIMIT 1 FOR UPDATE`)
+    if (!old[0]) {
+      await client.query('ROLLBACK')
+      return NextResponse.json({ error: 'Settings row not found' }, { status: 500 })
+    }
+    before = old[0]
+    const { rows } = await client.query(
+      `UPDATE settings SET ${sets} WHERE id = $${safeFields.length + 1} RETURNING ${SELECT_COLS}`,
+      [...values, before.id]
+    )
+    after = rows[0]
+    await client.query('COMMIT')
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
   }
-  return NextResponse.json(rows[0])
+
+  // Settings feed the balance rules (annual allowance, fiscal year, permission-time
+  // deductions), so a change to them is as worth tracing as a change to a balance.
+  const changes = changedFields(before, after, safeFields)
+  if (changes.length > 0) {
+    await logAudit('settings_changed', admin.username, 'admin', `Settings changed: ${formatChanges(changes)}`)
+  }
+  return NextResponse.json(after)
 }

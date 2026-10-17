@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server'
-import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
-import { logAudit } from '@/lib/audit'
-import { MIN_PASSWORD_LENGTH } from '@/lib/constants'
+import { respond } from '@/server/result'
+import { createAdminUser } from '@/server/services/admin-user-service'
 
 export async function GET(request: Request) {
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
 
+  // is_self lets the UI hide the delete button on the caller's own row (the API refuses it anyway).
   const { rows } = await pool.query(
-    'SELECT id, username, name, role, is_active, created_at FROM admin_users ORDER BY id'
+    'SELECT id, username, name, role, is_active, created_at, username = $1 AS is_self FROM admin_users ORDER BY id',
+    [admin.username]
   )
   return NextResponse.json(rows)
 }
@@ -18,30 +19,5 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
-
-  const { username, password, name } = await request.json()
-
-  if (!username || !password || !name) {
-    return NextResponse.json({ error: 'Username, password, and name are required' }, { status: 400 })
-  }
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    return NextResponse.json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }, { status: 400 })
-  }
-
-  const hash = await bcrypt.hash(password, 10)
-
-  try {
-    const { rows } = await pool.query(
-      'INSERT INTO admin_users (username, password_hash, name) VALUES ($1, $2, $3) RETURNING id, username, name, role, is_active, created_at',
-      [username.trim().toLowerCase(), hash, name.trim()]
-    )
-    await logAudit('admin_user_created', admin.username, 'admin', `Created admin user: ${username}`)
-    return NextResponse.json(rows[0])
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : ''
-    if (msg.includes('duplicate') || msg.includes('unique')) {
-      return NextResponse.json({ error: 'Username already exists' }, { status: 409 })
-    }
-    return NextResponse.json({ error: 'Failed to create admin user' }, { status: 500 })
-  }
+  return respond(await createAdminUser(await request.json(), admin))
 }

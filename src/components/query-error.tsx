@@ -16,7 +16,7 @@ export function QueryError({ onRetry }: { onRetry?: () => void }) {
       </span>
       {onRetry && (
         <Button variant="outline" size="sm" className="h-7" onClick={onRetry}>
-          <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+          <RefreshCw className="h-3.5 w-3.5 me-1.5" />
           {t('retry')}
         </Button>
       )}

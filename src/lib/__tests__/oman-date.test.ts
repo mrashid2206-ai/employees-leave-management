@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { omanToday, omanYesterday, omanTime, addDays } from '@/lib/oman-date'
+import {
+  omanToday, omanYesterday, omanTime, addDays,
+  omanMonth, addMonths, monthEnd, formatOmanTime, formatOmanDate, formatMonthLabel,
+} from '@/lib/oman-date'
 
 // Oman is UTC+4 with no DST. The bug these guard against: `toISOString()` returns the UTC
 // date, so for the first four hours of every Oman day it reports YESTERDAY. That shipped
@@ -57,5 +60,43 @@ describe('oman date helpers', () => {
     it('is a no-op for zero', () => {
       expect(addDays('2026-06-10', 0)).toBe('2026-06-10')
     })
+  })
+})
+
+// The portal clock and month picker. The clock used toLocaleTimeString() with no zone,
+// i.e. the PHONE's zone, so a device set to another country showed a different time from
+// the one the server then recorded.
+describe('portal display helpers', () => {
+  it('formats the clock in Oman time regardless of the instant', () => {
+    // 03:05:09 UTC is 07:05:09 in Oman.
+    const instant = new Date('2026-10-17T03:05:09Z')
+    expect(formatOmanTime(instant, 'en-US')).toBe('07:05 AM')
+    expect(formatOmanTime(instant, 'en-US', true)).toBe('07:05:09 AM')
+  })
+
+  it('formats the date as Oman sees it just after midnight', () => {
+    // 20:30 UTC on the 17th is already Sunday the 18th in Oman.
+    expect(formatOmanDate(new Date('2026-10-17T20:30:00Z'), 'en-US')).toBe('Sunday, October 18, 2026')
+  })
+
+  it('reports the Oman month', () => {
+    expect(omanMonth(new Date('2026-10-31T20:30:00Z'))).toBe('2026-11')
+    expect(omanMonth(new Date('2026-10-31T19:30:00Z'))).toBe('2026-10')
+  })
+
+  it('shifts months across a year', () => {
+    expect(addMonths('2026-01', -1)).toBe('2025-12')
+    expect(addMonths('2026-12', 1)).toBe('2027-01')
+    expect(addMonths('2026-10', 0)).toBe('2026-10')
+  })
+
+  it('knows the last day of a month', () => {
+    expect(monthEnd('2026-02')).toBe('2026-02-28')
+    expect(monthEnd('2028-02')).toBe('2028-02-29')
+    expect(monthEnd('2026-12')).toBe('2026-12-31')
+  })
+
+  it('labels a month', () => {
+    expect(formatMonthLabel('2026-10', 'en-US')).toBe('October 2026')
   })
 })

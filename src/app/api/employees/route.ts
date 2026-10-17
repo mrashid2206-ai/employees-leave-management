@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
 import { verifyAdmin, unauthorized } from '@/lib/api-auth'
+import { logAudit } from '@/lib/audit'
 import { DEFAULT_EMPLOYEE_PASSWORD } from '@/lib/constants'
 import { parseBody } from '@/server/validation'
 import { employeeCreateSchema } from '@/server/schemas'
@@ -68,5 +69,11 @@ export async function POST(request: Request) {
     RETURNING ${EMPLOYEE_COLUMNS}
   `, [name, department_id, finalBalance, username, hashedPassword, join_date || null, email || null, phone || null, position || null])
 
-  return NextResponse.json(rows[0])
+  // The starting balance is the first figure every later deduction is measured from, so
+  // record it (and that it was pro-rated) rather than leave it to be inferred.
+  const created = rows[0]
+  await logAudit('employee_created', admin.username, 'admin',
+    `Created emp ${created.id} (${name}), username ${username}, starting balance ${created.leave_balance}${join_date ? ` (pro-rated from join date ${join_date})` : ''}`)
+
+  return NextResponse.json(created)
 }

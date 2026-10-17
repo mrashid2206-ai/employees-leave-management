@@ -1,10 +1,13 @@
 'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createCorrectionRequest, type AttendanceCorrection, type Holiday } from '@/lib/api'
+import { toast } from 'sonner'
+import type { AttendanceCorrection, Holiday } from '@/lib/api'
 import type { Employee, LeaveType, Settings } from '@/lib/types'
 import { omanToday } from '@/lib/oman-date'
 import { leaveYears, inLeaveYear } from '@/lib/leave-year'
+import { resolveScheduleFrom, type WorkSchedule } from '@/lib/schedule-core'
+import { t as translate, type Lang } from '@/lib/translations'
 
 /* -------------------------------------------------------------------------- */
 /* Shapes                                                                      */
@@ -51,6 +54,9 @@ export interface AttendanceRecord {
   check_in?: string | null
   check_out?: string | null
   work_hours?: number | string | null
+  overtime_hours?: number | string | null
+  status?: string | null
+  notes?: string | null
   is_holiday_work?: boolean
 }
 
@@ -83,6 +89,8 @@ export interface EmpInfo {
   annual_leave_balance: number
   used_days: number
   remaining: number
+  /** Effective schedule, resolved employee -> department -> settings like the server. */
+  schedule: WorkSchedule
 }
 
 export interface PermissionRecord {
@@ -117,12 +125,21 @@ export interface CalendarData {
   holidays: Holiday[]
 }
 
+/** Mirrors the JSON from POST /api/attendance/check-in. */
 export interface CheckActionResult {
-  action: string
+  action: 'check-in' | 'check-out'
   time: string
-  workHours?: number
   isOffsite?: boolean
+  isHolidayWork?: boolean
+  // check-in only: a same-day approved leave was cancelled and its days refunded.
+  leaveCancelled?: boolean
+  leaveRefundedDays?: number
+  // check-out only.
+  workHours?: number
+  overtime?: number
 }
+
+export type { AttendanceCorrection }
 
 /* -------------------------------------------------------------------------- */
 /* Errors — the portal shows server-supplied reasons, so the payload must survive */
@@ -139,12 +156,61 @@ export interface ApiErrorPayload {
 
 export class ApiError extends Error {
   readonly payload: ApiErrorPayload
+  readonly status?: number
 
-  constructor(payload: ApiErrorPayload) {
+  constructor(payload: ApiErrorPayload, status?: number) {
     super(payload.error ?? payload.message ?? 'request_failed')
     this.name = 'ApiError'
     this.payload = payload
+    this.status = status
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Session expiry                                                              */
+/* -------------------------------------------------------------------------- */
+
+let sessionExpiryStarted = false
+
+/**
+ * The employee token lasts 12h, and the portal is often left open on a phone for days.
+ * Every request then came back 401, each tab swallowed the error into its `= []`
+ * default, and the employee saw "No requests" / "No attendance" — indistinguishable
+ * from their history being gone. Now the first 401 says so and sends them to sign in.
+ *
+ * The cookie is cleared first because /employee-login bounces a signed-in employee to
+ * /check-in, and a revoked-but-unexpired token would otherwise loop between the two.
+ */
+export function handleSessionExpired(): void {
+  if (sessionExpiryStarted || typeof window === 'undefined') return
+  sessionExpiryStarted = true
+  try { sessionStorage.removeItem('emp-user') } catch {}
+  const lang: Lang = document.documentElement.lang === 'en' ? 'en' : 'ar'
+  toast.error(translate('portalSessionExpired', lang))
+  // A moment to read the toast before the page changes.
+  const leave = () => setTimeout(() => window.location.replace('/employee-login'), 1500)
+  fetch('/api/auth/employee-logout', { method: 'POST' }).then(leave, leave)
+}
+
+/**
+ * Only the auth guard's own 401 means "signed out". change-password also answers 401
+ * for a wrong CURRENT password, which must stay an inline error, not a logout. Both
+ * bodies come from one helper (unauthorized() in src/lib/api-auth.ts).
+ */
+function isSessionExpiry(res: Response, payload: ApiErrorPayload): boolean {
+  return res.status === 401 && payload.error === 'Unauthorized'
+}
+
+async function failWith(res: Response): Promise<never> {
+  const payload = await readErrorPayload(res)
+  if (isSessionExpiry(res, payload)) handleSessionExpired()
+  throw new ApiError(payload, res.status)
+}
+
+/** Expired sessions and other client errors won't fix themselves; don't hammer them. */
+function retryTransient(failureCount: number, err: unknown): boolean {
+  if (err instanceof ApiError && err.status !== undefined && err.status < 500) return false
+  return failureCount < 2
 }
 
 /** Safely unwraps whatever a mutation rejected with into a server payload. */
@@ -167,9 +233,11 @@ async function readErrorPayload(res: Response): Promise<ApiErrorPayload> {
   return {}
 }
 
+// Every portal request goes through these three, so the session-expiry handling above
+// covers all of them (queries and mutations alike).
 async function getJSON<T>(url: string): Promise<T> {
   const res = await fetch(url)
-  if (!res.ok) throw new ApiError(await readErrorPayload(res))
+  if (!res.ok) return failWith(res)
   return res.json() as Promise<T>
 }
 
@@ -179,7 +247,7 @@ async function sendJSON<T>(url: string, method: string, body: unknown): Promise<
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new ApiError(await readErrorPayload(res))
+  if (!res.ok) return failWith(res)
   return res.json() as Promise<T>
 }
 
@@ -190,7 +258,7 @@ async function sendVoid(url: string, method: string, body?: unknown): Promise<vo
       ? {}
       : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   })
-  if (!res.ok) throw new ApiError(await readErrorPayload(res))
+  if (!res.ok) return failWith(res)
 }
 
 /* -------------------------------------------------------------------------- */
@@ -205,7 +273,9 @@ export const portalKeys = {
   status: (id: EmpId) => ['portal', 'attendance-status', id] as const,
   requests: (id: EmpId) => ['portal', 'my-requests', id] as const,
   info: (id: EmpId) => ['portal', 'emp-info', id] as const,
-  attendance: (id: EmpId) => ['portal', 'attendance', id] as const,
+  // Month is last so invalidating attendance(id) refreshes every cached month.
+  attendance: (id: EmpId, month?: string) =>
+    (month ? ['portal', 'attendance', id, month] : ['portal', 'attendance', id]) as readonly unknown[],
   tardiness: (id: EmpId) => ['portal', 'tardiness', id] as const,
   permissions: (id: EmpId) => ['portal', 'permissions', id] as const,
   corrections: (id: EmpId) => ['portal', 'corrections', id] as const,
@@ -220,8 +290,11 @@ export const portalKeys = {
 /* Queries                                                                     */
 /* -------------------------------------------------------------------------- */
 
+const retry = retryTransient
+
 export function useLeaveForecast(empId: EmpId) {
   return useQuery({
+    retry,
     queryKey: portalKeys.forecast(empId),
     queryFn: async (): Promise<LeaveForecast> => {
       if (!empId) throw new ApiError({ error: 'no_employee' })
@@ -233,6 +306,7 @@ export function useLeaveForecast(empId: EmpId) {
 
 export function useAttendanceStatus(empId: EmpId) {
   return useQuery({
+    retry,
     queryKey: portalKeys.status(empId),
     queryFn: async (): Promise<AttendanceStatus> => {
       if (!empId) throw new ApiError({ error: 'no_employee' })
@@ -244,6 +318,7 @@ export function useAttendanceStatus(empId: EmpId) {
 
 export function useMyRequests(empId: EmpId) {
   return useQuery({
+    retry,
     queryKey: portalKeys.requests(empId),
     queryFn: async (): Promise<MyLeaveRequest[]> => {
       if (!empId) throw new ApiError({ error: 'no_employee' })
@@ -259,6 +334,7 @@ export function useMyRequests(empId: EmpId) {
  */
 export function useEmpInfo(empId: EmpId) {
   return useQuery({
+    retry,
     queryKey: portalKeys.info(empId),
     queryFn: async (): Promise<EmpInfo> => {
       if (!empId) throw new ApiError({ error: 'no_employee' })
@@ -274,18 +350,43 @@ export function useEmpInfo(empId: EmpId) {
       const usedDays = leaves
         .filter(l => l.status === 'approved' && inLeaveYear(l.start_date, currentYear))
         .reduce((sum, l) => sum + (l.days_count || 0), 0)
-      return { ...emp, annual_leave_balance: totalBalance, used_days: usedDays, remaining: emp.leave_balance }
+      return {
+        ...emp,
+        annual_leave_balance: totalBalance,
+        used_days: usedDays,
+        remaining: emp.leave_balance,
+        schedule: resolveScheduleFrom(emp, emp.department, settings),
+      }
     },
     enabled: !!empId,
   })
 }
 
-export function useMyAttendance(empId: EmpId) {
+/**
+ * Attendance rows, optionally for one YYYY-MM month (the API filters server-side).
+ * Without a month it is the whole history, which the portal no longer needs to fetch.
+ */
+export function useMyAttendance(empId: EmpId, month?: string, enabled = true) {
   return useQuery({
-    queryKey: portalKeys.attendance(empId),
+    retry,
+    queryKey: portalKeys.attendance(empId, month),
     queryFn: async (): Promise<AttendanceRecord[]> => {
       if (!empId) throw new ApiError({ error: 'no_employee' })
-      return getJSON<AttendanceRecord[]>(`/api/attendance?employee_id=${empId}`)
+      const monthParam = month ? `&month=${month}` : ''
+      return getJSON<AttendanceRecord[]>(`/api/attendance?employee_id=${empId}${monthParam}`)
+    },
+    enabled: !!empId && enabled,
+  })
+}
+
+/** The employee's own correction requests (the API scopes an employee to themselves). */
+export function useMyCorrections(empId: EmpId) {
+  return useQuery({
+    retry,
+    queryKey: portalKeys.corrections(empId),
+    queryFn: async (): Promise<AttendanceCorrection[]> => {
+      if (!empId) throw new ApiError({ error: 'no_employee' })
+      return getJSON<AttendanceCorrection[]>('/api/corrections')
     },
     enabled: !!empId,
   })
@@ -293,6 +394,7 @@ export function useMyAttendance(empId: EmpId) {
 
 export function useMyTardiness(empId: EmpId) {
   return useQuery({
+    retry,
     queryKey: portalKeys.tardiness(empId),
     queryFn: async (): Promise<TardinessRow[]> => {
       if (!empId) throw new ApiError({ error: 'no_employee' })
@@ -304,6 +406,7 @@ export function useMyTardiness(empId: EmpId) {
 
 export function useMyPermissions(empId: EmpId) {
   return useQuery({
+    retry,
     queryKey: portalKeys.permissions(empId),
     queryFn: async (): Promise<PermissionRecord[]> => {
       if (!empId) throw new ApiError({ error: 'no_employee' })
@@ -323,6 +426,7 @@ export function activePermissionOf(permissions: PermissionRecord[]): PermissionR
 
 export function useNotifications() {
   return useQuery({
+    retry,
     queryKey: portalKeys.notifications(),
     queryFn: () => getJSON<NotificationItem[]>('/api/employee-notifications'),
     // The bell badge must not go stale while the employee moves between tabs.
@@ -336,6 +440,7 @@ export function useNotifications() {
 
 export function useLeaveTypes() {
   return useQuery({
+    retry,
     queryKey: portalKeys.leaveTypes(),
     queryFn: () => getJSON<LeaveType[]>('/api/leave-types'),
     staleTime: 5 * 60 * 1000,
@@ -345,6 +450,7 @@ export function useLeaveTypes() {
 /** Approved leaves + public holidays for the "who's on leave?" panel. */
 export function useCalendarData(enabled: boolean) {
   return useQuery({
+    retry,
     queryKey: portalKeys.calendar(),
     queryFn: async (): Promise<CalendarData> => {
       const [leaves, holidays] = await Promise.all([
@@ -361,6 +467,7 @@ export function useCalendarData(enabled: boolean) {
 export function useWorkingDays(start: string, end: string): WorkingDaysInfo | null {
   const valid = !!start && !!end && new Date(end) >= new Date(start)
   const { data } = useQuery({
+    retry,
     queryKey: portalKeys.workingDays(start, end),
     queryFn: () => getJSON<WorkingDaysInfo>(`/api/working-days?start=${start}&end=${end}`),
     enabled: valid,
@@ -430,9 +537,9 @@ export function useCancelLeave(empId: EmpId) {
   })
 }
 
+// No date or time: the server stamps both with Oman's clock (the phone's was stored as
+// fact before, wrong zone and all).
 export interface RequestPermissionInput {
-  date: string
-  leave_time: string
   reason: string
 }
 
@@ -447,11 +554,12 @@ export function useRequestPermission(empId: EmpId) {
   })
 }
 
+/** "I'm back" — the server records the return at Oman's current time. */
 export function useMarkReturn(empId: EmpId) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { id: number; return_time: string }) =>
-      sendVoid(`/api/permissions/${input.id}`, 'PUT', { return_time: input.return_time }),
+    mutationFn: (permissionId: number) =>
+      sendVoid(`/api/permissions/${permissionId}`, 'PUT', { returned: true }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: portalKeys.permissions(empId) })
     },
@@ -502,7 +610,9 @@ export function useCreateCorrection(empId: EmpId) {
   return useMutation({
     mutationFn: async (input: CorrectionInput): Promise<AttendanceCorrection> => {
       if (!empId) throw new ApiError({ error: 'no_employee' })
-      return createCorrectionRequest({ employee_id: empId, ...input })
+      // Through sendJSON (not lib/api) so the server's bilingual reason reaches the toast
+      // and an expired session is handled like everywhere else in the portal.
+      return sendJSON<AttendanceCorrection>('/api/corrections', 'POST', { employee_id: empId, ...input })
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: portalKeys.corrections(empId) })

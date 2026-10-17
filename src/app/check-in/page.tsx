@@ -17,7 +17,7 @@ import { PortalHeader } from './_components/portal-header'
 import { PortalNav, type PortalTab } from './_components/portal-nav'
 import { ProfileTab } from './_components/profile-tab'
 import { RequestsTab } from './_components/requests-tab'
-import { apiErrorPayload, useChangePassword, type EmpUser } from './_hooks/use-portal'
+import { apiErrorPayload, handleSessionExpired, useChangePassword, type EmpUser } from './_hooks/use-portal'
 
 /**
  * Employee self-service portal shell. Owns only the session, the forced
@@ -54,7 +54,13 @@ export default function EmployeePortalPage() {
     } else {
       // Fallback: fetch from JWT cookie via API (works even if sessionStorage was cleared)
       fetch('/api/auth/employee-me')
-        .then(r => r.ok ? r.json() : null)
+        .then(r => {
+          // No session at all: without this the shell rendered with no employee, every
+          // tab's queries stayed disabled, and the page sat empty instead of asking the
+          // employee to sign in.
+          if (r.status === 401) { if (!cancelled) handleSessionExpired(); return null }
+          return r.ok ? r.json() : null
+        })
         .then((data: { user?: EmpUser } | null) => {
           if (cancelled || !data?.user) return
           const user: EmpUser = {
@@ -109,7 +115,7 @@ export default function EmployeePortalPage() {
           <ThemeToggle />
           <LanguageToggle />
           <Button variant="ghost" size="sm" className="text-rose-500 text-xs" onClick={handleLogout}>
-            <LogOut className="h-3.5 w-3.5 ml-1" />
+            <LogOut className="h-3.5 w-3.5 me-1" />
             {t('logout')}
           </Button>
         </div>
