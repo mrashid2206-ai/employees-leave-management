@@ -1,4 +1,4 @@
-import pool, { omanToday, omanYesterday } from '@/lib/db'
+import pool, { omanToday, omanYesterday, omanTime, addDays } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 import { logger } from '@/lib/log'
 import { TARDINESS_GRACE_MINUTES, TARDINESS_DEDUCTS_LEAVE, TARDINESS_PENALTY_GRACE_MINUTES } from '@/lib/constants'
@@ -7,7 +7,7 @@ import { notifyEmployee } from '@/lib/employee-notify'
 import { actorLabel, type Actor as ActorType } from '@/server/result'
 import { computeWorkHours, computeOvertime, isNonWorkingWeekday } from '@/lib/attendance-calc'
 import { resolveScheduleMap, globalSchedule, scheduleEndTime } from '@/lib/schedule'
-import { startRun, recordEffect, finishRun } from '@/lib/automation-journal'
+import { startRun, recordEffect, finishRun, daysWithoutDailyRun, completedDailyRange } from '@/lib/automation-journal'
 import { applyAutoAbsenceLeave } from '@/lib/auto-absence'
 
 // Single shared Actor shape (see src/server/result.ts) so services, routes and the
@@ -36,7 +36,7 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
   // Journal every mutation so a misfiring run can be undone from the UI.
   const runId = await startRun('daily', processDate, actor)
 
-  const results = {
+  const results: DayCounts = {
     absentMarked: 0,
     leaveDeducted: 0,
     tardinessCreated: 0,
@@ -44,6 +44,33 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
     date: processDate,
   }
 
+  try {
+    const permissionsClosed = await processDay(runId, processDate, dayIsComplete, results)
+
+    await logAudit('daily_process', actorLabel(actor), actor.role, `Daily process (${processDate}): ${results.absentMarked} absent, ${results.tardinessCreated} tardiness, ${results.missingCheckout} missing checkout, ${permissionsClosed} permissions auto-closed`)
+    await finishRun(runId, { ...results, permissionsClosed })
+
+    return { success: true, ...results, permissionsClosed }
+  } catch (err) {
+    // A crash partway through (a DB blip, say) used to leave the run with no summary and
+    // nothing in the log about why. Mark it failed so the history shows it, and so the
+    // catch-up retries the day. Every step is idempotent, so re-running is safe.
+    logger.error('daily automation failed', err, { date: processDate })
+    await finishRun(runId, { ...results, failed: true, error: err instanceof Error ? err.message : String(err) })
+    throw err
+  }
+}
+
+type DayCounts = Omit<DailyResult, 'success' | 'permissionsClosed'>
+
+// The work for one day. Mutates `results` as it goes, so a failure still reports how far
+// it got. Returns how many permissions it closed.
+async function processDay(
+  runId: number | null,
+  processDate: string,
+  dayIsComplete: boolean,
+  results: DayCounts
+): Promise<number> {
   const { rows: employees } = await pool.query('SELECT id FROM employees WHERE is_active = true')
 
   const { rows: onLeave } = await pool.query(
@@ -99,10 +126,10 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
           ON CONFLICT (employee_id, date) DO NOTHING
           RETURNING id
         `, [emp.id, processDate])
-        results.absentMarked++
-        // Only journal rows this run actually created — ON CONFLICT means a pre-existing
-        // row was left alone, and undoing the run must not delete it.
+        // Only count and journal rows this run actually created. ON CONFLICT means a
+        // pre-existing row was left alone, and undoing the run must not delete it.
         if ((marked.rowCount || 0) > 0) {
+          results.absentMarked++
           await recordEffect(runId, 'absence_marked', emp.id, { date: processDate })
         }
 
@@ -250,13 +277,99 @@ export async function runDailyAutomation(date: string | undefined, actor: ActorT
       })
       permissionsClosed++
     }
-  } catch {} // Table might not exist yet
+  } catch (err) {
+    // Not fatal: the attendance work above is already done. This used to be a bare
+    // `catch {}` (from when the table might not exist), which hid real failures.
+    logger.error('daily automation: closing permissions failed', err, { date: processDate })
+  }
 
-  await logAudit('daily_process', actorLabel(actor), actor.role, `Daily process (${processDate}): ${results.absentMarked} absent, ${results.tardinessCreated} tardiness, ${results.missingCheckout} missing checkout, ${permissionsClosed} permissions auto-closed`)
+  return permissionsClosed
+}
 
-  await finishRun(runId, { ...results, permissionsClosed })
+// How far back the nightly job catches up after missed runs. Past this, a gap means
+// something has been broken for weeks, and charging that much absence unattended is
+// worse than asking an admin to look. Older days can still be run by hand in Settings.
+export const MAX_CATCH_UP_DAYS = 14
 
-  return { success: true, ...results, permissionsClosed }
+// Different from the migration lock (src/lib/migrate.ts) so a deploy can't block it.
+const DAILY_LOCK_KEY = 8273642
+
+/**
+ * Which days the nightly job still owes, oldest first, given today's Oman date.
+ *
+ * Normally just yesterday. After missed runs, every day back to the last completed one,
+ * capped at MAX_CATCH_UP_DAYS. Never a day before the first completed run: on a database
+ * where the automation has never run, the past isn't "missed". Those days were before
+ * the system was in use, and catching up would mark everyone absent for them.
+ */
+export async function daysOwed(today: string = omanToday()): Promise<string[]> {
+  const yesterday = addDays(today, -1)
+  const { first } = await completedDailyRange()
+  if (!first) return [yesterday]
+  const windowStart = addDays(yesterday, -(MAX_CATCH_UP_DAYS - 1))
+  const from = windowStart > first ? windowStart : addDays(first, 1)
+  return daysWithoutDailyRun(from, yesterday)
+}
+
+export type CatchUpResult =
+  | { success: true; skipped: 'already_running'; days: [] }
+  | { success: true; days: DailyResult[] }
+
+/**
+ * The scheduled entry point: process every day still owed.
+ *
+ * The cron used to process only yesterday. A scheduled GitHub Actions run can be dropped
+ * under load, and GitHub disables schedules entirely after 60 days with no repo
+ * activity. A skipped run isn't a failed one, so nothing alerted: that day's
+ * absences, leave charges, tardiness and permission closes silently never happened.
+ *
+ * Takes an advisory lock so two triggers (a retry, or a second scheduler kept as
+ * backup) can't process the same days at the same time. Stops at the first day that
+ * fails, because balances carry over from one day to the next.
+ */
+export async function runDailyCatchUp(actor: ActorType): Promise<CatchUpResult> {
+  const lock = await pool.connect()
+  try {
+    const { rows } = await lock.query('SELECT pg_try_advisory_lock($1) AS got', [DAILY_LOCK_KEY])
+    if (!rows[0].got) return { success: true, skipped: 'already_running', days: [] }
+    try {
+      const days: DailyResult[] = []
+      for (const day of await daysOwed()) {
+        days.push(await runDailyAutomation(day, actor))
+      }
+      return { success: true, days }
+    } finally {
+      await lock.query('SELECT pg_advisory_unlock($1)', [DAILY_LOCK_KEY]).catch(() => {})
+    }
+  } finally {
+    lock.release()
+  }
+}
+
+// The cron fires at 01:00 Oman time and GitHub can start it late. By 04:00, yesterday
+// should be done.
+const DAILY_DUE_BY = '04:00:00'
+
+export interface DailyAutomationHealth {
+  status: 'ok' | 'stale' | 'no_runs_yet'
+  /** Latest day the nightly job has completed. */
+  lastCompleted: string | null
+  /** The day that should be complete by now. */
+  expected: string
+  scheduled: boolean
+}
+
+/** Is the nightly job keeping up? Read by /api/health/automation and the Settings page. */
+export async function dailyAutomationHealth(now: Date = new Date()): Promise<DailyAutomationHealth> {
+  const today = omanToday(now)
+  const expected = addDays(today, omanTime(now) >= DAILY_DUE_BY ? -1 : -2)
+  const { last } = await completedDailyRange()
+  return {
+    status: !last ? 'no_runs_yet' : last < expected ? 'stale' : 'ok',
+    lastCompleted: last,
+    expected,
+    scheduled: !!process.env.CRON_SECRET,
+  }
 }
 
 export type YearlyResult =
