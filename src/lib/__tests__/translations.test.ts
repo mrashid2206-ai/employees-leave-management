@@ -35,6 +35,14 @@ describe('interpolate', () => {
 })
 
 describe('translation table', () => {
+  it('Arabic text is real characters, not escape sequences', () => {
+    // Six audit-page headings were stored double-escaped ('\\u0627...') and rendered on
+    // screen as literal backslash codes for Arabic users.
+    for (const [key, value] of Object.entries(translations)) {
+      expect(value.ar, `${key}.ar`).not.toMatch(/\\u[0-9a-fA-F]{4}|\\[؀-ۿ]/)
+    }
+  })
+
   it('every key has both languages, non-empty', () => {
     for (const [key, value] of Object.entries(translations)) {
       expect(value.ar, `${key}.ar`).toBeTruthy()
