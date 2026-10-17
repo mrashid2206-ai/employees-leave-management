@@ -137,6 +137,21 @@ Tunable constants: **`src/lib/constants.ts`**.
 Required for cron: `CRON_SECRET` env on Railway **and** GitHub repo secrets `CRON_SECRET`
 (same value) + `APP_URL`.
 
+**Missed nights are caught up.** `/api/cron/daily` calls `runDailyCatchUp`, which processes
+every day with no completed run, oldest first, going back up to `MAX_CATCH_UP_DAYS` (14). It
+never goes back before the first run the journal has ever completed, so a fresh database
+doesn't get its past marked absent. A run counts as having done its day only if it
+finished, wasn't marked failed, and ran after the day was over; an admin undo also counts,
+so an undone day isn't silently redone. An advisory lock stops two triggers from
+overlapping, so a second scheduler can be added as a backup without risk.
+
+**Alerting.** A skipped run is not a failed one, so point an uptime monitor at
+`/api/health/automation`. It returns 503 once yesterday should be done (after 04:00 Oman
+time) and isn't. The Settings → automation history shows the same warning, plus a
+**Failed** badge on any run that crashed partway; the next catch-up retries that day.
+This matters because GitHub disables scheduled workflows after 60 days with no repo
+activity.
+
 ## 6. Infrastructure libs (`src/lib/`)
 
 `db.ts` (pool + Oman-TZ helpers `omanNow/omanToday/omanYesterday/omanTime`) ·
@@ -258,3 +273,7 @@ npx next build
 - **All logins return 401 / 500 at boot** — `JWT_SECRET` missing, or DB unreachable. Check
   `env.ts` boot logs.
 - **Cron returns 401** — `CRON_SECRET` mismatch between Railway and GitHub.
+- **`/api/health/automation` is 503** — the nightly job hasn't completed since
+  `lastCompleted`. Check the GitHub Actions tab: GitHub may have disabled the schedule
+  (re-enable it there), or the run may be failing. Fewer than 14 missed days are caught up
+  by the next run; run older days by hand from Settings.

@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { History, Undo2 } from 'lucide-react'
+import { AlertTriangle, History, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage, useT } from '@/lib/language-context'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -16,6 +16,16 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 // every employee absent, deducting a leave day each. The fix was a hand-written UPDATE
 // against production. Since the automation mutates balances unattended, the recovery path
 // deserves to be a button rather than improvised SQL.
+
+interface AutomationHealth {
+  status: 'ok' | 'stale' | 'no_runs_yet' | 'unknown'
+  lastCompleted: string | null
+  scheduled: boolean
+}
+
+// Mirrors MAX_CATCH_UP_DAYS in src/lib/automation.ts (that module opens a DB pool, so it
+// can't be imported into a client component).
+const MAX_CATCH_UP_DAYS = 14
 
 interface AutomationRun {
   id: number
@@ -38,6 +48,13 @@ export function AutomationRuns() {
   const { data: runs = [], isLoading } = useQuery<AutomationRun[]>({
     queryKey: ['automation-runs'],
     queryFn: () => fetch('/api/automation/runs').then(r => (r.ok ? r.json() : [])),
+  })
+
+  // A missed night isn't an error anywhere else, so say it here, where an admin will see it.
+  // The endpoint answers 503 when stale; the body is still the status.
+  const { data: health } = useQuery<AutomationHealth | null>({
+    queryKey: ['automation-runs', 'health'],
+    queryFn: () => fetch('/api/health/automation').then(r => r.json()).catch(() => null),
   })
 
   const undo = useMutation({
@@ -84,6 +101,18 @@ export function AutomationRuns() {
         <p className="text-sm text-muted-foreground">{t('automationHistoryHint')}</p>
       </CardHeader>
       <CardContent className="space-y-2">
+        {health?.status === 'stale' && (
+          <div role="alert" className="p-3 rounded-xl bg-red-500/10 text-red-600 text-sm flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>{t('automationStale', { date: health.lastCompleted ?? '—', days: MAX_CATCH_UP_DAYS })}</span>
+          </div>
+        )}
+        {health && !health.scheduled && (
+          <div role="status" className="p-3 rounded-xl bg-amber-500/10 text-amber-600 text-sm flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>{t('automationNotScheduled')}</span>
+          </div>
+        )}
         {isLoading ? (
           <p className="text-sm text-muted-foreground">{t('loading')}</p>
         ) : runs.length === 0 ? (
@@ -100,6 +129,11 @@ export function AutomationRuns() {
                   {run.reversed_at && (
                     <Badge className="bg-amber-500/10 text-amber-500 border-0 text-[10px]">
                       {t('undone')}
+                    </Badge>
+                  )}
+                  {run.summary?.failed && (
+                    <Badge className="bg-red-500/10 text-red-500 border-0 text-[10px]" title={String(run.summary.error ?? '')}>
+                      {t('runFailed')}
                     </Badge>
                   )}
                 </div>
