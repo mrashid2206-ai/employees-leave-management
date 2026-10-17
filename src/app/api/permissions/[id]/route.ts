@@ -4,8 +4,10 @@ import { verifyAnyAuth, verifyAdmin, unauthorized } from '@/lib/api-auth'
 import { logAudit } from '@/lib/audit'
 import { parseBody } from '@/server/validation'
 import { permissionUpdateSchema } from '@/server/schemas'
+import { respond } from '@/server/result'
+import { decidePermission } from '@/server/services/permission-service'
 
-// Update permission (mark return time, or approve)
+// Update permission (mark return time, or approve/reject)
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
@@ -13,6 +15,16 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const valid = parseBody(permissionUpdateSchema, await request.json())
   if (!valid.ok) return valid.response
   const body = valid.data
+
+  // A decision is admin-only and is checked before anything is written, so a refused
+  // decision (not an admin, already decided, no reason given) can't leave a half-applied
+  // return time behind it.
+  if (body.status) {
+    const admin = await verifyAdmin(request)
+    if (!admin) return NextResponse.json({ error: 'Admin only' }, { status: 403 })
+    const decision = await decidePermission(id, body.status, admin, body.note)
+    if (!decision.ok) return respond(decision)
+  }
 
   if (body.return_time || body.returned) {
     if (user.role === 'employee') {
@@ -33,13 +45,6 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       await pool.query('UPDATE permissions SET return_time = $1 WHERE id = $2', [body.return_time || omanTime(), id])
     }
   }
-  if (body.status) {
-    // Admin approving/rejecting
-    const admin = await verifyAdmin(request)
-    if (!admin) return NextResponse.json({ error: 'Admin only' }, { status: 403 })
-    await pool.query('UPDATE permissions SET status = $1, approved_by = $2 WHERE id = $3', [body.status, admin.username, id])
-  }
-
   const { rows } = await pool.query('SELECT * FROM permissions WHERE id = $1', [id])
   return NextResponse.json(rows[0])
 }

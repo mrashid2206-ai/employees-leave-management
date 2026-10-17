@@ -10,8 +10,13 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { QueryError } from '@/components/query-error'
 import { useLanguage, useT } from '@/lib/language-context'
 import { monthEnd, omanMonth, omanYesterday } from '@/lib/oman-date'
-import { apiErrorPayload, useCalendarData, useCancelLeave, useMyCorrections, useMyRequests } from '../_hooks/use-portal'
+import { apiErrorPayload, useCalendarData, useCancelLeave, useMyCorrections, useMyPermissions, useMyRequests } from '../_hooks/use-portal'
 import { CorrectionDialog } from './correction-dialog'
+import { DecisionNote } from './decision-note'
+
+// The full permission history lives under Profile → records; here, next to the other
+// requests, the latest few are enough to see what was decided and why.
+const RECENT_PERMISSIONS = 5
 
 interface RequestsTabProps {
   empId?: number
@@ -27,8 +32,10 @@ export function RequestsTab({ empId }: RequestsTabProps) {
 
   const requestsQuery = useMyRequests(empId)
   const correctionsQuery = useMyCorrections(empId)
+  const permissionsQuery = useMyPermissions(empId)
   const myRequests = requestsQuery.data ?? []
   const corrections = correctionsQuery.data ?? []
+  const recentPermissions = (permissionsQuery.data ?? []).slice(0, RECENT_PERMISSIONS)
   const calendarQuery = useCalendarData(showCalendar)
   const cancelLeave = useCancelLeave(empId)
 
@@ -150,6 +157,7 @@ export function RequestsTab({ empId }: RequestsTabProps) {
                 {req.notes && (
                   <p className="text-xs text-muted-foreground mt-2 bg-accent/30 p-2 rounded">{req.notes}</p>
                 )}
+                <DecisionNote status={req.status} note={req.decision_note} />
                 {req.status === 'pending' && (
                   <Button
                     variant="ghost"
@@ -209,6 +217,39 @@ export function RequestsTab({ empId }: RequestsTabProps) {
               {c.reason && (
                 <p className="text-xs text-muted-foreground mt-2 bg-accent/30 p-2 rounded">{c.reason}</p>
               )}
+              <DecisionNote status={c.status} note={c.decision_note} />
+            </CardContent>
+          </Card>
+        ))
+      )}
+
+      {/* Permissions (leaving the office mid-day). A refused one used to show only a red
+          badge, with no way to learn why. */}
+      <h2 className="font-bold text-lg pt-2">{t('myPermissions')} ({permissionsQuery.data?.length ?? 0})</h2>
+      {permissionsQuery.isError ? (
+        <QueryError onRetry={() => permissionsQuery.refetch()} />
+      ) : permissionsQuery.isPending ? (
+        <div className="text-center py-6 text-muted-foreground text-sm">{t('loading')}</div>
+      ) : recentPermissions.length === 0 ? (
+        <Card className="border-0 shadow-md">
+          <CardContent className="p-6 text-center text-muted-foreground text-sm">
+            {t('noPermissions')}
+          </CardContent>
+        </Card>
+      ) : (
+        recentPermissions.map(p => (
+          <Card key={p.id} className="border-0 shadow-md" data-testid="permission-row">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold font-mono" dir="ltr">
+                  {p.date} · {p.leave_time?.slice(0, 5)}{p.return_time ? ` → ${p.return_time.slice(0, 5)}` : ''}
+                </span>
+                {getStatusBadge(p.status)}
+              </div>
+              {p.reason && (
+                <p className="text-xs text-muted-foreground mt-2 bg-accent/30 p-2 rounded">{p.reason}</p>
+              )}
+              <DecisionNote status={p.status} note={p.decision_note} />
             </CardContent>
           </Card>
         ))

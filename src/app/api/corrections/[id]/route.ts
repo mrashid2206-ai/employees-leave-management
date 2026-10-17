@@ -13,5 +13,5 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const valid = parseBody(correctionReviewSchema, await request.json())
   if (!valid.ok) return valid.response
 
-  return respond(await reviewCorrection(id, valid.data.status, admin))
+  return respond(await reviewCorrection(id, valid.data.status, admin, valid.data.note))
 }

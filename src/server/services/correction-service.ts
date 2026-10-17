@@ -1,6 +1,6 @@
 import pool, { omanToday } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
-import { notifyEmployee } from '@/lib/employee-notify'
+import { checkDecisionNote, normalizeNote, notifyDecision } from '@/server/decision'
 import { isOffDayFor, computeWorkHours, computeOvertime } from '@/lib/attendance-calc'
 import { resolveSchedule } from '@/lib/schedule'
 import { ok, fail, type ServiceResult, type Actor, actorLabel } from '@/server/result'
@@ -52,8 +52,12 @@ export async function createCorrection(input: CorrectionInput, actor: Actor): Pr
 export async function reviewCorrection(
   id: string,
   status: 'approved' | 'rejected',
-  actor: Actor
+  actor: Actor,
+  rawNote?: string | null
 ): Promise<ServiceResult<unknown>> {
+  const note = normalizeNote(rawNote)
+  const noteProblem = checkDecisionNote(status, note)
+  if (noteProblem) return noteProblem
 
   const client = await pool.connect()
   try {
@@ -108,20 +112,24 @@ export async function reviewCorrection(
     }
 
     const { rows } = await client.query(
-      'UPDATE attendance_corrections SET status = $1, reviewed_by = $2, reviewed_at = NOW() WHERE id = $3 RETURNING *',
-      [status, actorLabel(actor), id]
+      `UPDATE attendance_corrections
+          SET status = $1, reviewed_by = $2, reviewed_at = NOW(), decision_note = $4
+        WHERE id = $3
+        RETURNING id, employee_id, date::text AS date, requested_check_in::text AS requested_check_in,
+                  requested_check_out::text AS requested_check_out, reason, status,
+                  reviewed_by, reviewed_at, decision_note, created_at`,
+      [status, actorLabel(actor), id, note]
     )
 
     await client.query('COMMIT')
 
-    await logAudit('attendance_correction', actorLabel(actor), actor.role, `Correction #${id} ${status} for emp ${req.employee_id} on ${dateStr}`)
-    await notifyEmployee(
-      req.employee_id,
-      `Your attendance correction request for ${dateStr} was ${status}.`,
-      status === 'approved'
-        ? `تمت الموافقة على طلب تصحيح الحضور بتاريخ ${dateStr}.`
-        : `تم رفض طلب تصحيح الحضور بتاريخ ${dateStr}.`
+    await logAudit(
+      'attendance_correction',
+      actorLabel(actor),
+      actor.role,
+      `Correction #${id} ${status} for emp ${req.employee_id} on ${dateStr}` + (note ? ` — note: ${note}` : '')
     )
+    await notifyDecision(req.employee_id, 'correction', status, { date: dateStr }, note, id)
 
     return ok(rows[0])
   } catch (err) {

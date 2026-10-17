@@ -1,41 +1,25 @@
 'use client'
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Check, X, Inbox } from 'lucide-react'
-import { toast } from 'sonner'
-import { getLeaveRequests, updateLeaveStatus } from '@/lib/api'
+import { getLeaveRequests } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
+import { useLeaveDecision } from './leave-decision'
 
-// Dashboard inbox: approve/reject waiting leave requests in one click, without
-// navigating to the Leaves page and filtering.
+// Dashboard inbox: approve waiting leave requests in one click (reject asks for the
+// reason), without navigating to the Leaves page and filtering.
 export function PendingApprovals() {
   const t = useT()
   const { lang } = useLanguage()
-  const queryClient = useQueryClient()
 
   const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
   const pending = leaves.filter(l => l.status === 'pending')
+  const decision = useLeaveDecision()
 
-  const mutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: string }) => updateLeaveStatus(id, status),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['leaves'] })
-      queryClient.invalidateQueries({ queryKey: ['employees'] })
-      if (typeof data.balance_after === 'number' && data.balance_after < 0) {
-        toast.warning(lang === 'ar'
-          ? `تمت الموافقة — رصيد الموظف الآن ${data.balance_after.toFixed(3)} يوم (بالسالب)`
-          : `Approved — employee balance is now ${data.balance_after.toFixed(3)} days (negative)`)
-      } else {
-        toast.success(t('updatedSuccess'))
-      }
-    },
-    onError: () => toast.error(t('error')),
-  })
-
-  if (pending.length === 0) return null
+  if (pending.length === 0) return decision.dialog || null
 
   return (
     <Card className="border-0 shadow-lg ring-1 ring-amber-500/30">
@@ -60,18 +44,19 @@ export function PendingApprovals() {
               <Button
                 size="sm"
                 className="h-7 bg-emerald-600 hover:bg-emerald-700"
-                disabled={mutation.isPending}
-                onClick={() => mutation.mutate({ id: req.id, status: 'approved' })}
+                disabled={decision.isPending}
+                onClick={() => decision.approve(req)}
               >
-                <Check className="h-3.5 w-3.5 mr-1" />
+                <Check className="h-3.5 w-3.5 me-1" />
                 {t('approve')}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 className="h-7 text-rose-500 hover:bg-rose-500/10"
-                disabled={mutation.isPending}
-                onClick={() => mutation.mutate({ id: req.id, status: 'rejected' })}
+                disabled={decision.isPending}
+                aria-label={t('reject')}
+                onClick={() => decision.reject(req)}
               >
                 <X className="h-3.5 w-3.5" />
               </Button>
@@ -84,6 +69,7 @@ export function PendingApprovals() {
           </p>
         )}
       </CardContent>
+      {decision.dialog}
     </Card>
   )
 }
