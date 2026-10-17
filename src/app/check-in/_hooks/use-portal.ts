@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createCorrectionRequest, type AttendanceCorrection, type Holiday } from '@/lib/api'
 import type { Employee, LeaveType, Settings } from '@/lib/types'
 import { omanToday } from '@/lib/oman-date'
+import { leaveYears, inLeaveYear } from '@/lib/leave-year'
 
 /* -------------------------------------------------------------------------- */
 /* Shapes                                                                      */
@@ -267,8 +268,11 @@ export function useEmpInfo(empId: EmpId) {
         getJSON<MyLeaveRequest[]>(`/api/leaves/my-requests?employee_id=${empId}`),
       ])
       const totalBalance = settings.annual_leave_balance ?? 30
+      // This leave year only, like the balance beside it. Every year's leave used to be
+      // counted, so after a reset "used" looked like more than the allowance.
+      const [currentYear] = leaveYears(settings, 1)
       const usedDays = leaves
-        .filter(l => l.status === 'approved')
+        .filter(l => l.status === 'approved' && inLeaveYear(l.start_date, currentYear))
         .reduce((sum, l) => sum + (l.days_count || 0), 0)
       return { ...emp, annual_leave_balance: totalBalance, used_days: usedDays, remaining: emp.leave_balance }
     },

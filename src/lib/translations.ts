@@ -537,6 +537,8 @@ export const translations = {
   automationHistoryHint: { ar: 'ما غيّرته كل عملية تلقائية، مع إمكانية التراجع عنها بالكامل.', en: 'What each automated run changed, and a one-click undo.' },
   dailyProcess: { ar: 'العملية اليومية', en: 'Daily' },
   undone: { ar: 'تم التراجع', en: 'Undone' },
+  leaveYear: { ar: 'سنة الإجازات', en: 'Leave year' },
+  currentLeaveYear: { ar: 'الحالية', en: 'current' },
   undo: { ar: 'تراجع', en: 'Undo' },
   changes: { ar: 'تغيير', en: 'changes' },
   undoRunTitle: { ar: 'التراجع عن هذه العملية؟', en: 'Undo this run?' },
