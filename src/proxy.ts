@@ -55,6 +55,24 @@ export async function proxy(request: NextRequest) {
     }
   }
 
+  // An employee who is already signed in has no business on the login form — send them
+  // to the portal. Only the signature/expiry is checked here (no DB in the proxy), so a
+  // revoked-but-unexpired token also lands on /check-in; the portal then gets a 401,
+  // clears the cookie and comes back here, which is why this can't loop.
+  if (pathname === '/employee-login') {
+    const empToken = request.cookies.get('emp-auth-token')?.value
+    if (empToken) {
+      try {
+        const { payload } = await jwtVerify(empToken, getJwtSecret())
+        if (payload.role === 'employee') {
+          return addSecurityHeaders(NextResponse.redirect(new URL('/check-in', request.url)))
+        }
+      } catch {
+        /* expired or invalid — show the login form */
+      }
+    }
+  }
+
   // Allow fully public paths
   if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
     const response = NextResponse.next()

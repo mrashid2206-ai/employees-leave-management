@@ -92,11 +92,14 @@ export const tardinessCreateSchema = z.union([
 ])
 
 // ---- Permissions ----------------------------------------------------------------
+// date / leave_time / return_time are optional because the server stamps them with Oman
+// time for employees (the phone's clock and zone were being stored as fact). Admins may
+// still pass them explicitly; see the permission routes.
 export const permissionCreateSchema = z
   .object({
     employee_id: id,
-    date: dateStr,
-    leave_time: timeStr,
+    date: dateStr.optional(),
+    leave_time: timeStr.optional(),
     reason: z.string().nullish(),
   })
   .passthrough()
@@ -104,6 +107,8 @@ export const permissionCreateSchema = z
 export const permissionUpdateSchema = z
   .object({
     return_time: timeStr.optional(),
+    // "I'm back, stamp it now" — what the portal sends instead of a time of its own.
+    returned: z.literal(true).optional(),
     status: z.enum(['approved', 'rejected', 'pending']).optional(),
   })
   .passthrough()

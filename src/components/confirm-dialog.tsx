@@ -20,8 +20,10 @@ interface ConfirmDialogProps {
   onConfirm: () => void
   loading?: boolean
   variant?: 'danger' | 'warning'
-  /** Button text; defaults to "Confirm Delete" for the common case. */
+  /** Defaults to "Confirm Delete" — every caller used to be a deletion. */
   confirmLabel?: string
+  /** A non-destructive confirmation (e.g. "check in now?") shouldn't be painted red. */
+  confirmVariant?: 'destructive' | 'default'
 }
 
 export function ConfirmDialog({
@@ -33,6 +35,7 @@ export function ConfirmDialog({
   loading,
   variant = 'danger',
   confirmLabel,
+  confirmVariant = 'destructive',
 }: ConfirmDialogProps) {
   const t = useT()
   return (
@@ -52,7 +55,7 @@ export function ConfirmDialog({
             {t('cancel')}
           </Button>
           <Button
-            variant="destructive"
+            variant={confirmVariant}
             onClick={() => { onConfirm(); onOpenChange(false); }}
             disabled={loading}
           >

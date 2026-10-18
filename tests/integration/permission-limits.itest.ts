@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest'
 import pool from '@/lib/db'
+import { addMonths, omanMonth } from '@/lib/oman-date'
 import { HAS_TEST_DB, resetDb, closePool, employeeToken, adminToken, authedRequest } from './helpers'
 
 // Permissions (leaving mid-day and returning) previously had no limit of any kind, while
@@ -23,58 +24,68 @@ describe.skipIf(!HAS_TEST_DB)('permission monthly limit', () => {
     await closePool()
   })
 
-  const ask = (date: string, cookie: string, asAdmin = false) =>
+  // An employee's permission is always dated today (the server stamps it in Oman time),
+  // so earlier months are seeded directly rather than requested.
+  const ask = (cookie: string, asAdmin = false) =>
     import('@/app/api/permissions/route').then(({ POST }) =>
       POST(
         authedRequest(`${BASE}/api/permissions`, asAdmin ? { admin: cookie } : { employee: cookie }, {
           method: 'POST',
-          body: JSON.stringify({ employee_id: empId, date, leave_time: '10:00', reason: 'errand' }),
+          body: JSON.stringify({ employee_id: empId, reason: 'errand' }),
         })
       )
     )
 
+  const seed = (date: string, status = 'pending') =>
+    pool.query(
+      "INSERT INTO permissions (employee_id, date, leave_time, status) VALUES ($1, $2, '10:00', $3)",
+      [empId, date, status]
+    )
+
   it('allows requests up to the cap', async () => {
-    expect((await ask('2026-06-01', empCookie)).status).toBe(200)
-    expect((await ask('2026-06-08', empCookie)).status).toBe(200)
+    expect((await ask(empCookie)).status).toBe(200)
+    expect((await ask(empCookie)).status).toBe(200)
   })
 
   it('refuses the one that exceeds the cap', async () => {
-    await ask('2026-06-01', empCookie)
-    await ask('2026-06-08', empCookie)
+    await ask(empCookie)
+    await ask(empCookie)
 
-    const third = await ask('2026-06-15', empCookie)
+    const third = await ask(empCookie)
     expect(third.status).toBe(409)
     expect((await third.json()).error).toContain('limit')
   })
 
-  it('counts per calendar month, so the next month starts fresh', async () => {
-    await ask('2026-06-01', empCookie)
-    await ask('2026-06-08', empCookie)
-    expect((await ask('2026-06-15', empCookie)).status).toBe(409)
-
-    expect((await ask('2026-07-01', empCookie)).status).toBe(200)
+  it('counts per calendar month, so a previous month does not count', async () => {
+    // Two last month: this month is still fresh.
+    const lastMonth = `${addMonths(omanMonth(), -1)}-15`
+    await seed(lastMonth)
+    await seed(lastMonth)
+    expect((await ask(empCookie)).status).toBe(200)
+    expect((await ask(empCookie)).status).toBe(200)
+    expect((await ask(empCookie)).status).toBe(409)
   })
 
   it('does not count rejected requests against the cap', async () => {
-    await ask('2026-06-01', empCookie)
-    await ask('2026-06-08', empCookie)
-    await pool.query("UPDATE permissions SET status = 'rejected' WHERE date = '2026-06-01'")
+    await ask(empCookie)
+    await ask(empCookie)
+    await pool.query("UPDATE permissions SET status = 'rejected' WHERE id = (SELECT MIN(id) FROM permissions)")
 
-    expect((await ask('2026-06-15', empCookie)).status).toBe(200)
+    expect((await ask(empCookie)).status).toBe(200)
   })
 
   it('does not hold an admin to the cap', async () => {
-    await ask('2026-06-01', empCookie)
-    await ask('2026-06-08', empCookie)
+    await ask(empCookie)
+    await ask(empCookie)
 
-    expect((await ask('2026-06-15', adminCookie, true)).status).toBe(200)
+    expect((await ask(adminCookie, true)).status).toBe(200)
   })
 
   it('treats 0 as unlimited', async () => {
     await pool.query('UPDATE settings SET max_permissions_per_month = 0')
 
-    for (const d of ['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05']) {
-      expect((await ask(d, empCookie)).status).toBe(200)
+    for (let i = 0; i < 5; i++) {
+      expect((await ask(empCookie)).status).toBe(200)
     }
   })
 })

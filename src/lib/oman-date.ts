@@ -42,6 +42,69 @@ export function omanTime(date: Date = new Date()): string {
   return timeFormatter.format(date)
 }
 
+/** The current month in Oman, as YYYY-MM (the shape /api/attendance?month= takes). */
+export function omanMonth(date: Date = new Date()): string {
+  return omanToday(date).slice(0, 7)
+}
+
+/** Shift a YYYY-MM month by whole months. */
+export function addMonths(month: string, months: number): string {
+  const [y, m] = month.split('-').map(Number)
+  const total = y * 12 + (m - 1) + months
+  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`
+}
+
+/** Last calendar day of a YYYY-MM month, as YYYY-MM-DD. */
+export function monthEnd(month: string): string {
+  return addDays(`${addMonths(month, 1)}-01`, -1)
+}
+
+// Display formatters, cached per locale: the portal clock re-formats every second.
+const displayFormatters = new Map<string, Intl.DateTimeFormat>()
+function displayFormatter(key: string, locale: string, opts: Intl.DateTimeFormatOptions) {
+  const cacheKey = `${key}|${locale}`
+  let f = displayFormatters.get(cacheKey)
+  if (!f) {
+    f = new Intl.DateTimeFormat(locale, { ...opts, timeZone: OMAN_TZ })
+    displayFormatters.set(cacheKey, f)
+  }
+  return f
+}
+
+/**
+ * Oman wall-clock time for display, in the UI's locale ("07:42 AM" / "٠٧:٤٢ ص").
+ * toLocaleTimeString() without a timeZone uses the PHONE's zone, so an employee whose
+ * device was set to another country saw a clock that disagreed with the time the
+ * server then recorded.
+ */
+export function formatOmanTime(date: Date, locale: string, withSeconds = false): string {
+  return displayFormatter(withSeconds ? 'time-s' : 'time', locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    ...(withSeconds ? { second: '2-digit' as const } : {}),
+    hour12: true,
+  }).format(date)
+}
+
+/** Oman calendar date for display, e.g. "Saturday, October 17, 2026". */
+export function formatOmanDate(date: Date, locale: string): string {
+  return displayFormatter('date', locale, {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }).format(date)
+}
+
+/** A YYYY-MM month for display, e.g. "October 2026". */
+export function formatMonthLabel(month: string, locale: string): string {
+  const [y, m] = month.split('-').map(Number)
+  // Noon UTC on the 15th is the same month in every zone, Oman included.
+  return displayFormatter('month', locale, { year: 'numeric', month: 'long' }).format(
+    new Date(Date.UTC(y, m - 1, 15, 12))
+  )
+}
+
 /**
  * Shift a YYYY-MM-DD string by whole days.
  *

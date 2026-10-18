@@ -1,32 +1,10 @@
 import pool from '@/lib/db'
+import { buildSchedule as build, type WorkSchedule } from '@/lib/schedule-core'
 
 // A single employee's effective work schedule. Resolved employee -> department ->
-// global settings, so an unset level simply inherits the one above it.
-export interface WorkSchedule {
-  workStartTime: string // 'HH:MM:SS'
-  workStartMinutes: number
-  workDays: number[]
-  workHoursPerDay: number
-}
-
-const DEFAULTS = { start: '08:00:00', days: '0,1,2,3,4', hours: 8 }
-
-interface RawSchedule {
-  work_start_time: string | null
-  work_days: string | null
-  work_hours_per_day: number | null
-}
-
-function build(raw: RawSchedule | undefined): WorkSchedule {
-  const workStartTime = raw?.work_start_time || DEFAULTS.start
-  const [h, m] = workStartTime.split(':').map(Number)
-  return {
-    workStartTime,
-    workStartMinutes: h * 60 + m,
-    workDays: (raw?.work_days || DEFAULTS.days).split(',').map(Number).filter(n => !Number.isNaN(n)),
-    workHoursPerDay: raw?.work_hours_per_day || DEFAULTS.hours,
-  }
-}
+// global settings, so an unset level simply inherits the one above it. The shape and the
+// defaults live in schedule-core so the employee portal resolves it identically.
+export type { WorkSchedule }
 
 // COALESCE gives the inheritance chain; the LATERAL join keeps employees even when the
 // settings row is missing (rather than silently returning nothing, as CROSS JOIN would).

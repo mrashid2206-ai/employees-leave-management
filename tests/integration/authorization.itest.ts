@@ -372,6 +372,55 @@ describe.skipIf(!HAS_TEST_DB)('authorization', () => {
     })
   })
 
+  describe('a browser holding both an admin and an employee session', () => {
+    // An admin who is also an employee can be signed into both in one browser. The
+    // portal's "my" requests used to be answered as the admin: the bell came back empty
+    // and "my" lists came back as everyone's. The portal now marks its requests.
+    const both = (url: string, portal: boolean) => new Request(url, {
+      headers: {
+        cookie: `auth-token=${adminCookie}; emp-auth-token=${empCookie}`,
+        ...(portal ? { 'x-auth-context': 'employee' } : {}),
+      },
+    })
+
+    beforeEach(async () => {
+      await pool.query(
+        `INSERT INTO tardiness_log (employee_id, date, time, minutes_late)
+         VALUES ($1, '2026-01-05', '08:30', 30), ($2, '2026-01-05', '08:30', 30)`,
+        [me, other]
+      )
+      await pool.query(
+        `INSERT INTO employee_notifications (employee_id, message) VALUES ($1, 'mine'), ($2, 'theirs')`,
+        [me, other]
+      )
+    })
+
+    it('portal requests are answered as the employee', async () => {
+      const { GET: tardiness } = await import('@/app/api/tardiness/route')
+      const rows = await (await tardiness(both(`${BASE}/api/tardiness`, true))).json()
+      expect(rows.map((r: { employee_id: number }) => r.employee_id)).toEqual([me])
+
+      const { GET: notifications } = await import('@/app/api/employee-notifications/route')
+      const mine = await (await notifications(both(`${BASE}/api/employee-notifications`, true))).json()
+      expect(mine.map((n: { message: string }) => n.message)).toEqual(['mine'])
+    })
+
+    it('dashboard requests are still answered as the admin', async () => {
+      const { GET } = await import('@/app/api/tardiness/route')
+      const rows = await (await GET(both(`${BASE}/api/tardiness`, false))).json()
+      expect(rows).toHaveLength(2)
+    })
+
+    it('the header narrows access but never grants it', async () => {
+      // An admin session alone, asking to be treated as an employee, gets nothing.
+      const { GET } = await import('@/app/api/tardiness/route')
+      const res = await GET(new Request(`${BASE}/api/tardiness`, {
+        headers: { cookie: `auth-token=${adminCookie}`, 'x-auth-context': 'employee' },
+      }))
+      expect(res.status).toBe(401)
+    })
+  })
+
   describe('token shape', () => {
     it('an employee token cannot be used as an admin token', async () => {
       // Same secret, different role claim — the role must actually be checked.
