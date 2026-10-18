@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useMemo, useRef } from 'react'
 import { omanToday } from '@/lib/oman-date'
+import { leaveYears, inLeaveYear } from '@/lib/leave-year'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -229,8 +230,16 @@ export default function EmployeesPage() {
   const today = omanToday()
 
   const employeeRows = useMemo(() => {
+    // Used days, by type, and tardiness cover the current leave year, to match the
+    // remaining balance shown beside them.
+    const currentYear = settings ? leaveYears(settings, 1)[0] : null
+    const yearLeaves = currentYear
+      ? leaves.filter(l => l.status === 'approved' && inLeaveYear(l.start_date, currentYear))
+      : []
+    const yearTardiness = currentYear ? tardiness.filter(t => inLeaveYear(t.date, currentYear)) : []
+
     return employees.map((emp, idx) => {
-      const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
+      const empLeaves = yearLeaves.filter(l => l.employee_id === emp.id)
       const usedDays = empLeaves.reduce((sum, l) => sum + l.days_count, 0)
 
       // By type
@@ -241,7 +250,7 @@ export default function EmployeesPage() {
           .reduce((sum, l) => sum + l.days_count, 0)
       })
 
-      const empTardiness = tardiness.filter(t => t.employee_id === emp.id)
+      const empTardiness = yearTardiness.filter(t => t.employee_id === emp.id)
       const tardMinutes = empTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
       const remaining = emp.leave_balance
 
@@ -258,7 +267,7 @@ export default function EmployeesPage() {
         isOnLeave,
       }
     })
-  }, [employees, leaves, tardiness, leaveTypes, today])
+  }, [employees, leaves, tardiness, leaveTypes, today, settings])
 
   const filtered = useMemo(() => {
     let result = employeeRows

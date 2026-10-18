@@ -223,6 +223,8 @@ export const translations = {
   planned: { ar: 'مخطط', en: 'Planned' },
   taken: { ar: 'مأخوذة', en: 'Taken' },
   fiscalYear: { ar: 'السنة المالية', en: 'Fiscal Year' },
+  leaveYear: { ar: 'سنة الإجازات', en: 'Leave year' },
+  currentLeaveYear: { ar: 'الحالية', en: 'current' },
   automation: { ar: 'الأتمتة', en: 'Automation' },
   runDailyProcess: { ar: 'تشغيل المعالجة اليومية', en: 'Run Daily Process' },
   yearlyReset: { ar: 'إعادة تعيين سنوية', en: 'Yearly Reset' },

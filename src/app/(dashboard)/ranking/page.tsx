@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge'
 import { Trophy, Medal, Award } from 'lucide-react'
 import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
+import { inLeaveYear } from '@/lib/leave-year'
+import { useLeaveYear, LeaveYearSelect } from '@/components/leave-year-select'
 
 function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -22,18 +24,25 @@ export default function RankingPage() {
   const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
   const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
+  const { years, year, index: yearIndex, setIndex: setYearIndex } = useLeaveYear()
 
   const rankings = useMemo(() => {
     const activeEmps = employees.filter(e => e.is_active)
-    if (!settings) return []
+    if (!settings || !year) return []
 
+    // Scored over one leave year. The leave penalty is measured against a year's allowance,
+    // so counting every year's leave made long-serving staff look worse every year.
     const maxPossibleDays = settings.annual_leave_balance
-    const workHoursPerDay = settings.work_hours_per_day
+    const yearLeaves = leaves.filter(l => l.status === 'approved' && inLeaveYear(l.start_date, year))
+    const yearTardiness = tardiness.filter(t => inLeaveYear(t.date, year))
 
     return activeEmps.map(emp => {
-      const empLeaves = leaves.filter(l => l.employee_id === emp.id && l.status === 'approved')
+      // Their own day length (employee, then department, then the global setting): minutes
+      // late weigh more on a 6-hour day than an 8-hour one.
+      const workHoursPerDay = emp.work_hours_per_day ?? emp.department?.work_hours_per_day ?? settings.work_hours_per_day
+      const empLeaves = yearLeaves.filter(l => l.employee_id === emp.id)
       const usedDays = empLeaves.reduce((sum, l) => sum + Number(l.days_count), 0)
-      const empTardiness = tardiness.filter(t => t.employee_id === emp.id)
+      const empTardiness = yearTardiness.filter(t => t.employee_id === emp.id)
       const tardMinutes = empTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
       const tardCount = empTardiness.length
 
@@ -58,7 +67,7 @@ export default function RankingPage() {
         department: emp.department?.name || '',
       }
     }).sort((a, b) => b.score - a.score)
-  }, [employees, leaves, tardiness, settings])
+  }, [employees, leaves, tardiness, settings, year])
 
   function getScoreColor(score: number) {
     if (score >= 80) return 'text-[#4CAF50]'
@@ -84,7 +93,10 @@ export default function RankingPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">{t('commitmentRanking')}</h1>
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <h1 className="text-2xl font-bold">{t('commitmentRanking')}</h1>
+        <LeaveYearSelect years={years} index={yearIndex} onChange={setYearIndex} />
+      </div>
 
       {/* Scoring Legend */}
       <Card className="border-0 shadow-md">
