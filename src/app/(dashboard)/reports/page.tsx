@@ -10,9 +10,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Download, Printer, FileSpreadsheet } from 'lucide-react'
 import { exportToExcel } from '@/lib/excel'
 import { useLanguage, useT } from '@/lib/language-context'
-import { getEmployees, getLeaveRequests, getTardinessRecords, getDepartments, getLeaveTypes, getHolidays } from '@/lib/api'
-import { inLeaveYear, leaveYearMonths, MONTH_NAMES } from '@/lib/leave-year'
-import { useLeaveYear, LeaveYearSelect } from '@/components/leave-year-select'
+import { getEmployees, getDepartments, getLeaveTypes, getHolidays } from '@/lib/api'
+import { leaveYearMonths, MONTH_NAMES } from '@/lib/leave-year'
+import { qk } from '@/lib/query-keys'
+import type { LeaveRequest, TardinessRecord } from '@/lib/types'
+import { useLeaveYear, LeaveYearSelect, useLeavesInYear, useTardinessInYear } from '@/components/leave-year-select'
+
+const EMPTY_LEAVES: LeaveRequest[] = []
+const EMPTY_TARDINESS: TardinessRecord[] = []
 
 function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -33,23 +38,16 @@ export default function ReportsPage() {
   const [deptFilter, setDeptFilter] = useState<string>('all')
   const { years, year, index: yearIndex, setIndex: setYearIndex } = useLeaveYear()
 
-  const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
-  const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
-  const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
-  const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
-  const { data: holidays = [] } = useQuery({ queryKey: ['holidays'], queryFn: getHolidays })
+  const { data: employees = [] } = useQuery({ queryKey: qk.employees(), queryFn: getEmployees })
+  // One leave year at a time, fetched as just that year. Balances reset each year, so
+  // totals across years can't be read against the balance next to them.
+  const { data: leaves = EMPTY_LEAVES } = useLeavesInYear(year)
+  const { data: yearTardiness = EMPTY_TARDINESS } = useTardinessInYear(year)
+  const { data: departments = [] } = useQuery({ queryKey: qk.departments(), queryFn: getDepartments })
+  const { data: leaveTypes = [] } = useQuery({ queryKey: qk.leaveTypes(), queryFn: getLeaveTypes })
+  const { data: holidays = [] } = useQuery({ queryKey: qk.holidays(), queryFn: getHolidays })
 
-  // One leave year at a time. Balances reset each year, so totals across years can't be
-  // read against the balance next to them.
-  const yearLeaves = useMemo(
-    () => (year ? leaves.filter(l => l.status === 'approved' && inLeaveYear(l.start_date, year)) : []),
-    [leaves, year]
-  )
-  const yearTardiness = useMemo(
-    () => (year ? tardiness.filter(t => inLeaveYear(t.date, year)) : []),
-    [tardiness, year]
-  )
+  const yearLeaves = useMemo(() => leaves.filter(l => l.status === 'approved'), [leaves])
   // The balance is today's figure, so it only belongs next to the current year's usage.
   const showBalance = !!year?.isCurrent
   const months = useMemo(() => (year ? leaveYearMonths(year) : []), [year])
@@ -125,14 +123,13 @@ export default function ReportsPage() {
   }, [filteredEmployees, yearLeaves, holidaySet, months])
 
   function exportCSV() {
-    const dedupedTypes = leaveTypes.filter((lt, i, arr) => arr.findIndex(t => t.name_en === lt.name_en) === i)
-    const headers = [t('name'), t('department'), t('balance'), t('used'), ...dedupedTypes.map(lt => lang === 'ar' ? lt.name_ar : lt.name_en), t('remaining'), t('tardinessHHMM') + ' (' + t('minutes') + ')']
+    const headers = [t('name'), t('department'), t('balance'), t('used'), ...leaveTypes.map(lt => lang === 'ar' ? lt.name_ar : lt.name_en), t('remaining'), t('tardinessHHMM') + ' (' + t('minutes') + ')']
     const rows = summaryData.map(emp => [
       emp.name,
       emp.department,
       showBalance ? emp.balance : '',
       emp.usedDays,
-      ...dedupedTypes.map(lt => emp.byType[lt.name_en] || 0),
+      ...leaveTypes.map(lt => emp.byType[lt.name_en] || 0),
       showBalance ? emp.remaining : '',
       emp.tardMinutes,
     ])
@@ -207,7 +204,7 @@ export default function ReportsPage() {
                       <TableHead className="text-center">{t('department')}</TableHead>
                       <TableHead className="text-center">{t('balance')}</TableHead>
                       <TableHead className="text-center">{t('used')}</TableHead>
-                      {leaveTypes.filter((lt, i, arr) => arr.findIndex(t => t.name_en === lt.name_en) === i).map(lt => (
+                      {leaveTypes.map(lt => (
                         <TableHead key={lt.id} className="text-center">
                           <div className="flex items-center justify-center gap-1">
                             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: lt.color }} />
@@ -226,7 +223,7 @@ export default function ReportsPage() {
                         <TableCell className="text-center">{emp.department}</TableCell>
                         <TableCell className="text-center">{showBalance ? emp.balance : '—'}</TableCell>
                         <TableCell className="text-center">{emp.usedDays}</TableCell>
-                        {leaveTypes.filter((lt, i, arr) => arr.findIndex(t => t.name_en === lt.name_en) === i).map(lt => (
+                        {leaveTypes.map(lt => (
                           <TableCell key={lt.id} className="text-center">
                             {emp.byType[lt.name_en] || 0}
                           </TableCell>

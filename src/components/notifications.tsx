@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Bell, AlertTriangle, Clock, CalendarOff } from 'lucide-react'
 import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings } from '@/lib/api'
+import { qk } from '@/lib/query-keys'
 import { useLanguage, useT } from '@/lib/language-context'
 import { omanToday } from '@/lib/oman-date'
 import {
@@ -24,10 +25,10 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false)
   const t = useT()
   const { dir } = useLanguage()
-  const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
-  const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
+  const { data: employees = [] } = useQuery({ queryKey: qk.employees(), queryFn: getEmployees })
+  const { data: leaves = [] } = useQuery({ queryKey: qk.leaves(), queryFn: getLeaveRequests })
+  const { data: tardiness = [] } = useQuery({ queryKey: qk.tardiness(), queryFn: getTardinessRecords })
+  const { data: settings } = useQuery({ queryKey: qk.settings(), queryFn: getSettings })
 
   const notifications: Notification[] = []
   const today = omanToday()

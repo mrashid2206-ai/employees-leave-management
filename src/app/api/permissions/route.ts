@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import pool, { omanToday, omanTime } from '@/lib/db'
 import { verifyAnyAuth, unauthorized, forbidden } from '@/lib/api-auth'
-import { parseBody } from '@/server/validation'
+import { parseBody, parseDateParam, parseDateRange, rangeConditions } from '@/server/validation'
 import { permissionCreateSchema } from '@/server/schemas'
 
 export async function GET(request: Request) {
@@ -10,20 +10,30 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const employeeId = searchParams.get('employee_id')
-  const date = searchParams.get('date')
+  const date = parseDateParam(searchParams, 'date')
+  if (!date.ok) return date.response
+  const range = parseDateRange(searchParams)
+  if (!range.ok) return range.response
 
-  let query = 'SELECT p.*, json_build_object(\'id\', e.id, \'name\', e.name) as employee FROM permissions p LEFT JOIN employees e ON p.employee_id = e.id'
+  // date as text: a bare DATE column reaches the client as a timestamp
+  // ("2026-06-01T00:00:00.000Z"), which never equals the YYYY-MM-DD every page compares it
+  // with, so "today's permissions" and the portal's open permission were never found.
+  let query = `SELECT p.id, p.employee_id, p.date::text AS date, p.leave_time, p.return_time, p.reason,
+      p.status, p.approved_by, p.reviewed_at, p.decision_note, p.created_at,
+      json_build_object('id', e.id, 'name', e.name) as employee
+    FROM permissions p LEFT JOIN employees e ON p.employee_id = e.id`
   const conditions: string[] = []
-  const params: (string | number)[] = []
+  const params: unknown[] = []
 
   if (employeeId) {
     params.push(employeeId)
     conditions.push(`p.employee_id = $${params.length}`)
   }
-  if (date) {
-    params.push(date)
+  if (date.data) {
+    params.push(date.data)
     conditions.push(`p.date = $${params.length}`)
   }
+  conditions.push(...rangeConditions('p.date', range.data, params))
 
   // Employees can only see their own
   if (user.role === 'employee') {

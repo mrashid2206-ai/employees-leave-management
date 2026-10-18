@@ -8,6 +8,7 @@ import { Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { getDepartments, getSettings, updateDepartment } from '@/lib/api'
 import { useLanguage, useT } from '@/lib/language-context'
+import { qk } from '@/lib/query-keys'
 import { ScheduleFields } from '@/components/schedule-fields'
 import type { DepartmentUpdate } from '@/lib/types'
 
@@ -18,14 +19,14 @@ export function DepartmentSchedules() {
   const { lang } = useLanguage()
   const queryClient = useQueryClient()
 
-  const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
+  const { data: departments = [] } = useQuery({ queryKey: qk.departments(), queryFn: getDepartments })
+  const { data: settings } = useQuery({ queryKey: qk.settings(), queryFn: getSettings })
   const [drafts, setDrafts] = useState<Record<number, DepartmentUpdate>>({})
 
   const mutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: DepartmentUpdate }) => updateDepartment(id, data),
     onSuccess: (_res, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['departments'] })
+      queryClient.invalidateQueries({ queryKey: qk.departments() })
       setDrafts(d => {
         const next = { ...d }
         delete next[vars.id]

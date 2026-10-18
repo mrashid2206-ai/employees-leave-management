@@ -160,9 +160,18 @@ activity.
 `db.ts` (pool + Oman-TZ helpers `omanNow/omanToday/omanYesterday/omanTime`) ·
 `migrate.ts` + `db/migrations/*.sql` (versioned runner) · `env.ts` (boot validation,
 fail-fast in prod) · `log.ts` (JSON logging) · `rate-limit.ts` (Postgres-backed, survives
-deploys) · `jwt.ts` · `audit.ts` · `email.ts` · `api.ts` (typed client) ·
-`query-keys.ts` (`qk.*` factory) · `schedule.ts` (employee→department→global work schedule) ·
-`leave-forecast.ts` · `oman-holidays.ts` · `tardiness-penalty.ts`.
+deploys) · `jwt.ts` · `audit.ts` · `email.ts` · `api.ts` (typed client; every helper
+throws the server's error on a non-2xx, so admin pages call it rather than `fetch`) ·
+`query-keys.ts` (`qk.*` factory, hierarchical: every view of a table sits under that
+table's root, so invalidating `qk.attendance()` refreshes the attendance page, the reports
+and the dashboard alike) · `schedule.ts` (employee→department→global work schedule) ·
+`leave-forecast.ts` · `oman-holidays.ts` · `tardiness-penalty.ts` · `employee-import.ts`
+(spreadsheet rows → validated employee payloads, for the employees page's import).
+
+**List endpoints take a date range.** `GET /api/leaves` (on start_date), `/api/tardiness`,
+`/api/permissions` and `/api/corrections` (on date) accept an inclusive `?from=&to=`;
+reports that show one leave year ask for just that year (`useLeavesInYear` and friends in
+`src/components/leave-year-select.tsx`). `GET /api/attendance` also takes `?date=`.
 
 **Error visibility:** `onRequestError` in `src/instrumentation.ts` is Next's global
 server-error hook; it persists every captured error to `error_log`, viewable at

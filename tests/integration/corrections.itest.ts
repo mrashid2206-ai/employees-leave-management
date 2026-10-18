@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest'
 import pool from '@/lib/db'
 import { addDays, omanToday } from '@/lib/oman-date'
 import { createCorrection, reviewCorrection } from '@/server/services/correction-service'
-import { HAS_TEST_DB, resetDb, addEmployee, closePool, ADMIN } from './helpers'
+import { HAS_TEST_DB, resetDb, addEmployee, closePool, balanceOf, ADMIN } from './helpers'
+import { applyAutoAbsenceLeave } from '@/lib/auto-absence'
 
 // Attendance corrections were completely untested despite being the riskiest write in the
 // system: approving one REWRITES an attendance row and recomputes work hours and overtime
@@ -161,6 +162,45 @@ describe.skipIf(!HAS_TEST_DB)('attendance corrections', () => {
       const row = await attendanceRow()
       expect(row.check_in).toBe('09:15:00')
       expect(row.check_out).toBe('17:00:00')
+    })
+
+    describe('a day the system marked absent', () => {
+      // The automation marks the day absent and charges a leave day for it. Approving a
+      // correction says the employee was in fact at work, so the day must come back.
+      beforeEach(async () => {
+        await pool.query("INSERT INTO attendance (employee_id, date, status) VALUES ($1, $2, 'absent')", [empId, DATE])
+        const client = await pool.connect()
+        try {
+          await client.query('BEGIN')
+          expect(await applyAutoAbsenceLeave(client, empId, DATE)).not.toBeNull()
+          await client.query('COMMIT')
+        } finally {
+          client.release()
+        }
+        expect(await balanceOf(empId)).toBe(29)
+      })
+
+      it('approving the correction refunds the absence charge, once', async () => {
+        const { result } = await fileThen('approved')
+        expect(result.ok).toBe(true)
+        expect((await attendanceRow()).status).toBe('present')
+        expect(await balanceOf(empId)).toBe(30)
+
+        const { rows } = await pool.query(
+          'SELECT status FROM leave_requests WHERE employee_id = $1 AND start_date = $2',
+          [empId, DATE]
+        )
+        expect(rows.map(r => r.status)).toEqual(['cancelled'])
+
+        const { rows: audit } = await pool.query("SELECT details FROM audit_log WHERE action = 'attendance_correction'")
+        expect(audit[0].details).toContain('refunded 1')
+      })
+
+      it('rejecting it keeps the charge', async () => {
+        await fileThen('rejected')
+        expect((await attendanceRow()).status).toBe('absent')
+        expect(await balanceOf(empId)).toBe(29)
+      })
     })
 
     it('refuses to review the same request twice', async () => {

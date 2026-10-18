@@ -7,11 +7,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Download, Printer } from 'lucide-react'
-import { getEmployees, getTardinessRecords, getDepartments } from '@/lib/api'
+import { getEmployees, getDepartments } from '@/lib/api'
 import { useT } from '@/lib/language-context'
 import { exportToExcel } from '@/lib/excel'
-import { inLeaveYear } from '@/lib/leave-year'
-import { useLeaveYear, LeaveYearSelect } from '@/components/leave-year-select'
+import { qk } from '@/lib/query-keys'
+import type { TardinessRecord } from '@/lib/types'
+import { useLeaveYear, LeaveYearSelect, useTardinessInYear } from '@/components/leave-year-select'
+
+const EMPTY_TARDINESS: TardinessRecord[] = []
 
 function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -24,16 +27,15 @@ export default function TardinessSummaryPage() {
   const [deptFilter, setDeptFilter] = useState<string>('all')
   const { years, year, index: yearIndex, setIndex: setYearIndex } = useLeaveYear()
 
-  const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
-  const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
+  const { data: employees = [] } = useQuery({ queryKey: qk.employees(), queryFn: getEmployees })
+  // One leave year at a time, fetched as just that year: tardiness deducts leave, and leave
+  // resets each year.
+  const { data: yearTardiness = EMPTY_TARDINESS } = useTardinessInYear(year)
+  const { data: departments = [] } = useQuery({ queryKey: qk.departments(), queryFn: getDepartments })
 
   const reportData = useMemo(() => {
     let emps = employees.filter(e => e.is_active)
     if (deptFilter !== 'all') emps = emps.filter(e => e.department_id === parseInt(deptFilter))
-
-    // One leave year at a time: tardiness deducts leave, and leave resets each year.
-    const yearTardiness = year ? tardiness.filter(t => inLeaveYear(t.date, year)) : []
 
     return emps.map(emp => {
       const empTardiness = yearTardiness.filter(t => t.employee_id === emp.id)
@@ -47,7 +49,7 @@ export default function TardinessSummaryPage() {
         totalMinutes,
       }
     }).sort((a, b) => b.totalMinutes - a.totalMinutes)
-  }, [employees, tardiness, deptFilter, year])
+  }, [employees, yearTardiness, deptFilter])
 
   const totalLateCount = reportData.reduce((s, r) => s + r.tardCount, 0)
   const totalMinutes = reportData.reduce((s, r) => s + r.totalMinutes, 0)

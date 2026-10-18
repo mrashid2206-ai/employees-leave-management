@@ -48,7 +48,8 @@ export async function POST(request: Request) {
   }
 
   // Calculate pro-rated leave balance if join_date is provided
-  let finalBalance = leave_balance || 30
+  // ?? not ||: an opening balance of 0 is a real figure and used to become 30.
+  let finalBalance = leave_balance ?? 30
   if (join_date) {
     const { rows: settings } = await pool.query('SELECT annual_leave_balance, year_end::text as year_end FROM settings LIMIT 1')
     if (settings[0]) {

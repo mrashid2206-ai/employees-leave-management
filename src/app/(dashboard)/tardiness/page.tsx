@@ -16,6 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { getEmployees, getTardinessRecords, createBulkTardiness, deleteTardinessRecord, getSettings } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { useLanguage, useT } from '@/lib/language-context'
+import { qk } from '@/lib/query-keys'
 import { QueryError } from '@/components/query-error'
 
 function timeToMinutes(time: string, workStartTime: string = '08:00'): number {
@@ -47,9 +48,9 @@ export default function TardinessPage() {
     ? new Date(parseInt(filterYear), parseInt(filterMonth), 0).getDate()
     : 31
 
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
-  const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: allRecords = [], isError: tardinessError, refetch: refetchTardiness } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
+  const { data: settings } = useQuery({ queryKey: qk.settings(), queryFn: getSettings })
+  const { data: employees = [] } = useQuery({ queryKey: qk.employees(), queryFn: getEmployees })
+  const { data: allRecords = [], isError: tardinessError, refetch: refetchTardiness } = useQuery({ queryKey: qk.tardiness(), queryFn: getTardinessRecords })
 
   const defaultArrivalTime = useMemo(() => {
     const startTime = settings?.work_start_time || '08:00'
@@ -71,8 +72,8 @@ export default function TardinessPage() {
   const createMutation = useMutation({
     mutationFn: createBulkTardiness,
     onSuccess: (records, submitted) => {
-      queryClient.invalidateQueries({ queryKey: ['tardiness'] })
-      queryClient.invalidateQueries({ queryKey: ['employees'] }) // lateness costs leave
+      queryClient.invalidateQueries({ queryKey: qk.tardiness() })
+      queryClient.invalidateQueries({ queryKey: qk.employees() }) // lateness costs leave
       setOpen(false)
       setSelectedEmployees([])
       setForm({ date: '', time: defaultArrivalTime, notes: '' })
@@ -87,15 +88,17 @@ export default function TardinessPage() {
         toast.success(t('addedSuccess'))
       }
     },
-    onError: () => toast.error(t('error')),
+    onError: (err: Error) => toast.error(err.message || t('error')),
   })
 
   const deleteMutation = useMutation({
     mutationFn: deleteTardinessRecord,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tardiness'] })
+      queryClient.invalidateQueries({ queryKey: qk.tardiness() })
+      queryClient.invalidateQueries({ queryKey: qk.employees() }) // the deduction is refunded
       toast.success(t('deletedSuccess'))
     },
+    onError: (err: Error) => toast.error(err.message || t('error')),
   })
 
   function handleSubmit() {

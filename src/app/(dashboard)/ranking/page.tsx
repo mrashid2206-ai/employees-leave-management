@@ -6,10 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Trophy, Medal, Award } from 'lucide-react'
-import { getEmployees, getLeaveRequests, getTardinessRecords, getSettings } from '@/lib/api'
+import { getEmployees, getSettings } from '@/lib/api'
+import { qk } from '@/lib/query-keys'
+import type { LeaveRequest, TardinessRecord } from '@/lib/types'
 import { useLanguage, useT } from '@/lib/language-context'
-import { inLeaveYear } from '@/lib/leave-year'
-import { useLeaveYear, LeaveYearSelect } from '@/components/leave-year-select'
+import { useLeaveYear, LeaveYearSelect, useLeavesInYear, useTardinessInYear } from '@/components/leave-year-select'
+
+const EMPTY_LEAVES: LeaveRequest[] = []
+const EMPTY_TARDINESS: TardinessRecord[] = []
 
 function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -20,21 +24,21 @@ function formatMinutesToHHMM(minutes: number): string {
 export default function RankingPage() {
   const t = useT()
   const { lang } = useLanguage()
-  const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
-  const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
   const { years, year, index: yearIndex, setIndex: setYearIndex } = useLeaveYear()
+  const { data: employees = [] } = useQuery({ queryKey: qk.employees(), queryFn: getEmployees })
+  // Scored over one leave year, and only that year is fetched. The leave penalty is
+  // measured against a year's allowance, so counting every year's leave made long-serving
+  // staff look worse every year.
+  const { data: leaves = EMPTY_LEAVES } = useLeavesInYear(year)
+  const { data: yearTardiness = EMPTY_TARDINESS } = useTardinessInYear(year)
+  const { data: settings } = useQuery({ queryKey: qk.settings(), queryFn: getSettings })
 
   const rankings = useMemo(() => {
     const activeEmps = employees.filter(e => e.is_active)
     if (!settings || !year) return []
 
-    // Scored over one leave year. The leave penalty is measured against a year's allowance,
-    // so counting every year's leave made long-serving staff look worse every year.
     const maxPossibleDays = settings.annual_leave_balance
-    const yearLeaves = leaves.filter(l => l.status === 'approved' && inLeaveYear(l.start_date, year))
-    const yearTardiness = tardiness.filter(t => inLeaveYear(t.date, year))
+    const yearLeaves = leaves.filter(l => l.status === 'approved')
 
     return activeEmps.map(emp => {
       // Their own day length (employee, then department, then the global setting): minutes
@@ -67,7 +71,7 @@ export default function RankingPage() {
         department: emp.department?.name || '',
       }
     }).sort((a, b) => b.score - a.score)
-  }, [employees, leaves, tardiness, settings, year])
+  }, [employees, leaves, yearTardiness, settings, year])
 
   function getScoreColor(score: number) {
     if (score >= 80) return 'text-[#4CAF50]'

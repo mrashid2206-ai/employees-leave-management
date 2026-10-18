@@ -212,8 +212,13 @@ export default function LeavesPage() {
     mutationFn: deleteLeaveRequest,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leaves'] })
+      // Deleting an approved leave refunds its days.
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
       toast.success(t('deletedSuccess'))
     },
+    // deleteLeaveRequest throws the server's reason now; without this a refused delete
+    // was silent.
+    onError: (err: Error) => toast.error(err.message || t('error')),
   })
 
   // One request to the server, which decides each id in turn exactly as a single click

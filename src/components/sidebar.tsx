@@ -27,6 +27,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { getLeaveRequests } from '@/lib/api'
+import { qk } from '@/lib/query-keys'
 import type { TranslationKey } from '@/lib/translations'
 
 const navItems: { href: string; labelKey: TranslationKey; icon: typeof LayoutDashboard }[] = [
@@ -57,7 +58,7 @@ function NavContent({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
   const t = useT()
 
   // Surface waiting approvals directly in the nav so admins don't discover them by chance.
-  const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests, refetchInterval: 120000 })
+  const { data: leaves = [] } = useQuery({ queryKey: qk.leaves(), queryFn: getLeaveRequests, refetchInterval: 120000 })
   const pendingCount = leaves.filter(l => l.status === 'pending').length
 
   return (

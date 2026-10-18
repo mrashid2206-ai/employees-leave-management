@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Check, X, Inbox } from 'lucide-react'
 import { getLeaveRequests } from '@/lib/api'
+import { qk } from '@/lib/query-keys'
 import { useLanguage, useT } from '@/lib/language-context'
 import { useLeaveDecision } from './leave-decision'
 
@@ -15,7 +16,7 @@ export function PendingApprovals() {
   const t = useT()
   const { lang } = useLanguage()
 
-  const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
+  const { data: leaves = [] } = useQuery({ queryKey: qk.leaves(), queryFn: getLeaveRequests })
   const pending = leaves.filter(l => l.status === 'pending')
   const decision = useLeaveDecision()
 

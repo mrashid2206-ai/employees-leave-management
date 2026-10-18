@@ -41,6 +41,7 @@ yarn-error.log*
 # Claude Code: per-machine permissions and a runtime lock, not project config
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.claude/worktrees/
 
 # typescript
 *.tsbuildinfo

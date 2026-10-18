@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Download, Printer, MapPin, Users, LogIn, LogOut } from 'lucide-react'
-import { getEmployees, getDepartments } from '@/lib/api'
+import { getEmployees, getDepartments, getAttendance } from '@/lib/api'
+import { qk } from '@/lib/query-keys'
 import { useLanguage, useT } from '@/lib/language-context'
 import { exportToExcel } from '@/lib/excel'
 
@@ -76,11 +77,11 @@ export default function OffsiteReportPage() {
 
   const monthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`
 
-  const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
-  const { data: allRecords = [] } = useQuery<AttendanceRecord[]>({
-    queryKey: ['attendance-offsite', monthKey],
-    queryFn: () => fetch(`/api/attendance?month=${monthKey}`).then(r => r.json()),
+  const { data: employees = [] } = useQuery({ queryKey: qk.employees(), queryFn: getEmployees })
+  const { data: departments = [] } = useQuery({ queryKey: qk.departments(), queryFn: getDepartments })
+  const { data: allRecords = [] } = useQuery({
+    queryKey: qk.attendanceMonth(monthKey),
+    queryFn: () => getAttendance<AttendanceRecord>({ month: monthKey }),
   })
 
   const monthNames = lang === 'ar'

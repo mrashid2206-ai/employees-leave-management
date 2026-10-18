@@ -10,13 +10,14 @@ import {
   Users, CalendarOff, Wallet, Clock, TrendingUp, TrendingDown,
   AlertTriangle, CalendarDays, UserCheck, Timer
 } from 'lucide-react'
-import { getSettings, getEmployees, getLeaveRequests, getTardinessRecords, getLeaveTypes, getDepartments } from '@/lib/api'
+import { getSettings, getEmployees, getLeaveTypes, getDepartments, getAttendance } from '@/lib/api'
 import dynamic from 'next/dynamic'
 import { AnimatedCounter } from '@/components/animated-counter'
 import { useLanguage, useT } from '@/lib/language-context'
-import type { Employee } from '@/lib/types'
+import type { Employee, LeaveRequest, TardinessRecord } from '@/lib/types'
 import { omanToday } from '@/lib/oman-date'
-import { leaveYears, inLeaveYear } from '@/lib/leave-year'
+import { qk } from '@/lib/query-keys'
+import { useCurrentLeaveYear, useLeavesInYear, useTardinessInYear, usePermissionsInYear } from '@/components/leave-year-select'
 
 import { PendingApprovals } from './_components/pending-approvals'
 
@@ -32,15 +33,12 @@ interface AttendanceRecord {
   employee?: { id: number; name: string; department_id: number }
 }
 
-interface PermissionRecord {
-  id: number
-  status: string
-}
-
 // Stable empty-array fallbacks so react-query defaults don't create a fresh
 // literal each render (keeps useMemo dependencies referentially stable).
 const EMPTY_EMPLOYEES: Employee[] = []
 const EMPTY_ATTENDANCE: AttendanceRecord[] = []
+const EMPTY_LEAVES: LeaveRequest[] = []
+const EMPTY_TARDINESS: TardinessRecord[] = []
 
 function formatMinutesToHHMM(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -54,36 +52,31 @@ function Skeleton({ className = '' }: { className?: string }) {
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
-  const { data: employees = EMPTY_EMPLOYEES, isLoading } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
-  const { data: leaves = [] } = useQuery({ queryKey: ['leaves'], queryFn: getLeaveRequests })
-  const { data: tardiness = [] } = useQuery({ queryKey: ['tardiness'], queryFn: getTardinessRecords })
-  const { data: leaveTypes = [] } = useQuery({ queryKey: ['leaveTypes'], queryFn: getLeaveTypes })
-  const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
-  const { data: permissions = [] } = useQuery<PermissionRecord[]>({
-    queryKey: ['permissions'],
-    queryFn: () => fetch('/api/permissions').then(r => r.ok ? r.json() : []),
-  })
-  const { data: todayAttendance = EMPTY_ATTENDANCE } = useQuery<AttendanceRecord[]>({
-    queryKey: ['today-attendance'],
-    // Oman's month, not UTC's: between 00:00 and 04:00 Oman time on the 1st, UTC is still
-    // in the previous month, and "today" was looked up in the wrong one.
-    queryFn: () => fetch('/api/attendance?month=' + omanToday().slice(0, 7)).then(r => r.json()),
+  // Single Oman-local (Asia/Muscat) "today" used for every today comparison below. Oman's,
+  // not UTC's: between 00:00 and 04:00 Oman time UTC is still on the previous day.
+  const today = omanToday()
+
+  // Everything here is about the current leave year (the one the balances belong to), so
+  // only that year is fetched. Usage used to add up every year, and "used" kept growing
+  // after each reset.
+  const currentYear = useCurrentLeaveYear()
+  const { data: settings } = useQuery({ queryKey: qk.settings(), queryFn: getSettings })
+  const { data: employees = EMPTY_EMPLOYEES, isLoading } = useQuery({ queryKey: qk.employees(), queryFn: getEmployees })
+  const { data: leaves = EMPTY_LEAVES } = useLeavesInYear(currentYear)
+  const { data: tardiness = EMPTY_TARDINESS } = useTardinessInYear(currentYear)
+  const { data: leaveTypes = [] } = useQuery({ queryKey: qk.leaveTypes(), queryFn: getLeaveTypes })
+  const { data: departments = [] } = useQuery({ queryKey: qk.departments(), queryFn: getDepartments })
+  const { data: permissions = [] } = usePermissionsInYear(currentYear)
+  // Just today's rows: this used to download the whole month and discard all but one day.
+  const { data: todayAttendance = EMPTY_ATTENDANCE } = useQuery({
+    queryKey: qk.attendanceDay(today),
+    queryFn: () => getAttendance<AttendanceRecord>({ date: today }),
   })
 
   const t = useT()
   const { lang } = useLanguage()
 
-  // Single Oman-local (Asia/Muscat) "today" used for every today comparison below.
-  const today = omanToday()
-
-  // Usage figures cover the current leave year, the one the balances belong to. They used
-  // to add up every year, so "used" kept growing after each reset.
-  const currentYear = settings ? leaveYears(settings, 1)[0] : null
-  const yearLeaves = currentYear
-    ? leaves.filter(l => l.status === 'approved' && inLeaveYear(l.start_date, currentYear))
-    : []
-  const yearTardiness = currentYear ? tardiness.filter(t => inLeaveYear(t.date, currentYear)) : []
+  const yearLeaves = leaves.filter(l => l.status === 'approved')
 
   const activeEmployees = employees.filter(e => e.is_active)
   const pendingPermissions = permissions.filter(p => p.status === 'pending').length
@@ -101,7 +94,7 @@ export default function DashboardPage() {
   const employeeStats = activeEmployees.map(emp => {
     const empLeaves = yearLeaves.filter(l => l.employee_id === emp.id)
     const usedDays = empLeaves.reduce((sum, l) => sum + l.days_count, 0)
-    const empTardiness = yearTardiness.filter(t => t.employee_id === emp.id)
+    const empTardiness = tardiness.filter(t => t.employee_id === emp.id)
     const tardMinutes = empTardiness.reduce((sum, t) => sum + t.minutes_late, 0)
     const remaining = emp.leave_balance
     const isOnLeave = empLeaves.some(l => l.start_date <= today && l.end_date >= today)

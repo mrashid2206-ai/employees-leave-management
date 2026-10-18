@@ -8,29 +8,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { CheckCircle, XCircle, Trash2 } from 'lucide-react'
+import { CheckCircle, XCircle, Trash2, FileSpreadsheet } from 'lucide-react'
+import { QueryError } from '@/components/query-error'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { DecisionDialog } from '@/components/decision-dialog'
 import { DecisionTrace } from '@/components/decision-trace'
 import { useLanguage, useT } from '@/lib/language-context'
-import { decidePermission, getDepartments, getEmployees } from '@/lib/api'
+import { qk } from '@/lib/query-keys'
+import { decidePermission, getDepartments, getEmployees, getPermissions, deletePermission, type Permission } from '@/lib/api'
+import { exportToExcel } from '@/lib/excel'
 import type { Employee, Department } from '@/lib/types'
 
-interface Permission {
-  id: number
-  employee_id: number
-  employee?: { name: string }
-  date: string
-  leave_time: string
-  return_time: string | null
-  reason: string | null
-  status: string
-  /** The reviewer — the column predates the rejection path and kept its name. */
-  approved_by?: string | null
-  reviewed_at?: string | null
-  decision_note?: string | null
-}
 
 export default function PermissionsPage() {
   const t = useT()
@@ -39,12 +28,12 @@ export default function PermissionsPage() {
   const [deptFilter, setDeptFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
 
-  const { data: permissions = [] } = useQuery<Permission[]>({
-    queryKey: ['permissions'],
-    queryFn: () => fetch('/api/permissions').then(r => r.json()),
+  const { data: permissions = [], isError, refetch } = useQuery({
+    queryKey: qk.permissions(),
+    queryFn: () => getPermissions(),
   })
-  const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
-  const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
+  const { data: departments = [] } = useQuery({ queryKey: qk.departments(), queryFn: getDepartments })
+  const { data: employees = [] } = useQuery({ queryKey: qk.employees(), queryFn: getEmployees })
 
   // The response used to be parsed and treated as success whatever its status, so a
   // refused decision still showed "updated".
@@ -53,26 +42,21 @@ export default function PermissionsPage() {
     mutationFn: ({ id, status, note }: { id: number; status: 'approved' | 'rejected'; note?: string }) =>
       decidePermission(id, status, note || null),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['permissions'] })
+      queryClient.invalidateQueries({ queryKey: qk.permissions() })
       setRejectTarget(null)
       toast.success(t('updatedSuccess'))
     },
     onError: (err: Error) => {
       // e.g. another admin already decided it: refresh so the row shows the real state.
-      queryClient.invalidateQueries({ queryKey: ['permissions'] })
+      queryClient.invalidateQueries({ queryKey: qk.permissions() })
       toast.error(err.message || t('error'))
     },
   })
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await fetch(`/api/permissions/${id}`, { method: 'DELETE' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || t('error'))
-      return data
-    },
+    mutationFn: deletePermission,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['permissions'] })
+      queryClient.invalidateQueries({ queryKey: qk.permissions() })
       toast.success(t('deletedSuccess'))
     },
     onError: (err: Error) => toast.error(err.message || t('error')),
@@ -105,8 +89,26 @@ export default function PermissionsPage() {
     return `${h}h ${m}m`
   }
 
+  const statusLabel = (status: string) =>
+    status === 'approved' ? t('approved') : status === 'rejected' ? t('rejected') : t('pending')
+
+  // The list as filtered on screen, not the whole table.
+  function handleExport() {
+    const data = filtered.map(p => ({
+      [t('name')]: p.employee?.name || '',
+      [t('date')]: p.date,
+      [t('leftAt')]: p.leave_time?.slice(0, 5) || '',
+      [t('returned')]: p.return_time?.slice(0, 5) || '',
+      [t('duration')]: calcAbsentHours(p.leave_time, p.return_time),
+      [t('reason')]: p.reason || '',
+      [t('status')]: statusLabel(p.status),
+    }))
+    exportToExcel(data, `permissions-${omanToday()}`, t('permissions'))
+  }
+
   return (
     <div className="space-y-6" dir={dir}>
+      {isError && <QueryError onRetry={() => refetch()} />}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold">{t('permissions')}</h1>
@@ -114,7 +116,11 @@ export default function PermissionsPage() {
             <p className="text-sm text-amber-500 mt-1">{pendingCount} {t('pendingRequests2')}</p>
           )}
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
+          <Button variant="outline" onClick={handleExport} disabled={filtered.length === 0}>
+            <FileSpreadsheet className="h-4 w-4 me-2" />
+            {t('exportExcel')}
+          </Button>
           <Select value={statusFilter} onValueChange={v => setStatusFilter(v ?? 'all')}>
             <SelectTrigger className="w-36">
               <SelectValue />
