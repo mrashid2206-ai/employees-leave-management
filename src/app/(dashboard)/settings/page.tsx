@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { omanToday } from '@/lib/oman-date'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLanguage, useT } from '@/lib/language-context'
-import { getSettings, updateSettings, getDepartments, createDepartment, updateDepartment, deleteDepartment, getHolidays, createHoliday, updateHoliday, deleteHoliday, getEmployees, getLeaveTypes, createLeaveType, updateLeaveType, deleteLeaveType } from '@/lib/api'
+import { getSettings, updateSettings, getDepartments, createDepartment, updateDepartment, deleteDepartment, getHolidays, createHoliday, updateHoliday, deleteHoliday, getEmployees, getLeaveTypes, createLeaveType, updateLeaveType, deleteLeaveType, getAdminUsers, createAdminUser, deleteAdminUser } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { DepartmentSchedules } from './_components/department-schedules'
 import { AutomationRuns } from './_components/automation-runs'
@@ -39,12 +39,6 @@ interface ProcessResult {
   newBalance?: number
   newYearStart?: string
   newYearEnd?: string
-}
-
-interface AdminUser {
-  id: number
-  username: string
-  name: string
 }
 
 export default function SettingsPage() {
@@ -828,38 +822,41 @@ export default function SettingsPage() {
 
 function AdminUsersSection({ lang }: { lang: string }) {
   const t = useT()
-  const [admins, setAdmins] = useState<AdminUser[]>([])
+  const queryClient = useQueryClient()
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ username: '', password: '', name: '' })
-  const [loading, setLoading] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: number; name: string }>({ open: false, id: 0, name: '' })
 
-  useEffect(() => {
-    fetch('/api/admin-users')
-      .then(r => (r.ok ? r.json() : []))
-      .then(setAdmins)
-      .catch(err => console.error('failed to load admin users', err))
-  }, [])
+  const { data: admins = [] } = useQuery({ queryKey: ['admin-users'], queryFn: getAdminUsers })
 
-  async function handleAdd() {
+  // Errors carry the server's message: deleting yourself or the last active admin is
+  // refused with a reason the admin needs to see, not a bare "Error".
+  const addMutation = useMutation({
+    mutationFn: createAdminUser,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      setForm({ username: '', password: '', name: '' })
+      setShowAdd(false)
+      toast.success(t('adminAdded'))
+    },
+    onError: (err: Error) => toast.error(err.message || t('error')),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteAdminUser,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      toast.success(t('deleted'))
+    },
+    onError: (err: Error) => toast.error(err.message || t('error')),
+  })
+
+  function handleAdd() {
     if (!form.username || !form.password || !form.name) {
       toast.error(t('allFieldsRequired'))
       return
     }
-    setLoading(true)
-    try {
-      const res = await fetch('/api/admin-users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      })
-      const data = await res.json()
-      if (!res.ok) { toast.error(data.error); setLoading(false); return }
-      setAdmins(prev => [...prev, data])
-      setForm({ username: '', password: '', name: '' })
-      setShowAdd(false)
-      toast.success(t('adminAdded'))
-    } catch { toast.error('Error') }
-    setLoading(false)
+    addMutation.mutate(form)
   }
 
   return (
@@ -892,7 +889,7 @@ function AdminUsersSection({ lang }: { lang: string }) {
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" onClick={handleAdd} disabled={loading}>{loading ? '...' : (t('add'))}</Button>
+                <Button size="sm" onClick={handleAdd} disabled={addMutation.isPending}>{addMutation.isPending ? '...' : (t('add'))}</Button>
                 <Button size="sm" variant="outline" onClick={() => setShowAdd(false)}>{t('cancel')}</Button>
               </div>
             </div>
@@ -910,26 +907,19 @@ function AdminUsersSection({ lang }: { lang: string }) {
                   <Badge className="bg-blue-500/20 text-blue-500 border-0">{t('admin')}</Badge>
                   <span className="text-sm font-medium">{a.name}</span>
                   <span className="text-xs text-muted-foreground">@{a.username}</span>
+                  {a.is_self && <Badge variant="outline" className="text-[10px]">{t('thisIsYou')}</Badge>}
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-rose-500 hover:bg-rose-500/10"
-                  onClick={async () => {
-                    if (!confirm(lang === 'ar' ? `هل أنت متأكد من حذف "${a.name}"؟` : `Are you sure you want to delete "${a.name}"?`)) return
-                    try {
-                      const res = await fetch(`/api/admin-users/${a.id}`, { method: 'DELETE' })
-                      if (res.ok) {
-                        setAdmins(prev => prev.filter(x => x.id !== a.id))
-                        toast.success(t('deleted'))
-                      } else {
-                        toast.error('Error')
-                      }
-                    } catch { toast.error('Error') }
-                  }}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                {!a.is_self && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-rose-500 hover:bg-rose-500/10"
+                    title={t('deleteAdmin')}
+                    onClick={() => setDeleteConfirm({ open: true, id: a.id, name: a.name })}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </div>
             ))}
           </div>
@@ -941,6 +931,15 @@ function AdminUsersSection({ lang }: { lang: string }) {
           </p>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        onOpenChange={(open) => setDeleteConfirm(c => ({ ...c, open }))}
+        title={t('deleteAdmin')}
+        description={`${t('areYouSure')} "${deleteConfirm.name}"?`}
+        onConfirm={() => deleteMutation.mutate(deleteConfirm.id)}
+        loading={deleteMutation.isPending}
+      />
     </div>
   )
 }

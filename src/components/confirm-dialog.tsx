@@ -20,6 +20,8 @@ interface ConfirmDialogProps {
   onConfirm: () => void
   loading?: boolean
   variant?: 'danger' | 'warning'
+  /** Button text; defaults to "Confirm Delete" for the common case. */
+  confirmLabel?: string
 }
 
 export function ConfirmDialog({
@@ -30,6 +32,7 @@ export function ConfirmDialog({
   onConfirm,
   loading,
   variant = 'danger',
+  confirmLabel,
 }: ConfirmDialogProps) {
   const t = useT()
   return (
@@ -53,7 +56,7 @@ export function ConfirmDialog({
             onClick={() => { onConfirm(); onOpenChange(false); }}
             disabled={loading}
           >
-            {loading ? '...' : t('confirmDelete')}
+            {loading ? '...' : (confirmLabel ?? t('confirmDelete'))}
           </Button>
         </DialogFooter>
       </DialogContent>

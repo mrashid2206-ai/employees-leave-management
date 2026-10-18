@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import pool from '@/lib/db'
 import { verifyAnyAuth, verifyAdmin, unauthorized } from '@/lib/api-auth'
+import { logAudit } from '@/lib/audit'
 import { parseBody } from '@/server/validation'
 import { permissionUpdateSchema } from '@/server/schemas'
 
@@ -37,6 +38,16 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const admin = await verifyAdmin(request)
   if (!admin) return unauthorized()
   const { id } = await params
-  await pool.query('DELETE FROM permissions WHERE id = $1', [id])
+  // Approved permission time can be deducted from worked hours, so removing one changes
+  // what an employee is credited with: keep a trace of whose, which day, and its state.
+  const { rows } = await pool.query(
+    'DELETE FROM permissions WHERE id = $1 RETURNING employee_id, date::text AS date, leave_time::text AS leave_time, status',
+    [id]
+  )
+  if (rows.length > 0) {
+    const p = rows[0]
+    await logAudit('permission_deleted', admin.username, 'admin',
+      `Deleted permission #${id} for emp ${p.employee_id} on ${p.date} at ${String(p.leave_time).slice(0, 5)} (${p.status})`)
+  }
   return NextResponse.json({ success: true })
 }

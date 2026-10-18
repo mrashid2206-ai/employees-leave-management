@@ -2,7 +2,12 @@ import type { Settings, Employee, LeaveRequest, TardinessRecord, LeaveType, Depa
 
 async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, options)
-  if (!res.ok) throw new Error(`API error: ${res.status}`)
+  if (!res.ok) {
+    // Prefer the server's own message (often bilingual, e.g. why a balance edit or an
+    // admin deletion was refused) so the UI can show it rather than a bare status code.
+    const data = await res.json().catch(() => null)
+    throw new Error(data?.error || `API error: ${res.status}`)
+  }
   return res.json()
 }
 
@@ -119,7 +124,10 @@ export async function getEmployee(id: number): Promise<Employee> {
   return fetchJSON(`/api/employees/${id}`)
 }
 
-export async function updateEmployee(id: number, employee: Partial<Employee>): Promise<Employee> {
+/** balance_reason is required by the server whenever leave_balance actually changes. */
+export type EmployeeUpdate = Partial<Employee> & { balance_reason?: string }
+
+export async function updateEmployee(id: number, employee: EmployeeUpdate): Promise<Employee> {
   return fetchJSON(`/api/employees/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -144,7 +152,7 @@ export async function createEmployee(employee: {
 }
 
 export async function deleteEmployee(id: number): Promise<void> {
-  await fetch(`/api/employees/${id}`, { method: 'DELETE' })
+  await fetchJSON(`/api/employees/${id}`, { method: 'DELETE' })
 }
 
 // Leave Requests
@@ -283,4 +291,32 @@ export async function checkLeaveConflict(
       exclude_request_id: excludeRequestId,
     }),
   })
+}
+
+// Admin users
+export interface AdminUser {
+  id: number
+  username: string
+  name: string
+  role: string
+  is_active: boolean
+  created_at: string
+  /** The signed-in admin's own row: the server refuses to delete it. */
+  is_self: boolean
+}
+
+export async function getAdminUsers(): Promise<AdminUser[]> {
+  return fetchJSON('/api/admin-users')
+}
+
+export async function createAdminUser(data: { username: string; password: string; name: string }): Promise<AdminUser> {
+  return fetchJSON('/api/admin-users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteAdminUser(id: number): Promise<void> {
+  await fetchJSON(`/api/admin-users/${id}`, { method: 'DELETE' })
 }
