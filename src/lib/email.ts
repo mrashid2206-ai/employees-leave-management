@@ -1,9 +1,15 @@
 import nodemailer from 'nodemailer'
 
+const port = parseInt(process.env.SMTP_PORT || '587')
+
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: false,
+  port,
+  // 465 is TLS from the first byte. Anything else (587) starts in plaintext and upgrades
+  // with STARTTLS. requireTLS makes that upgrade mandatory, so a server or attacker that
+  // drops STARTTLS can't get SMTP_PASS sent in the clear.
+  secure: port === 465,
+  requireTLS: port !== 465,
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,

@@ -5,6 +5,7 @@ import { verifyAdmin, unauthorized } from '@/lib/api-auth'
 import { DEFAULT_EMPLOYEE_PASSWORD } from '@/lib/constants'
 import { parseBody } from '@/server/validation'
 import { employeeCreateSchema } from '@/server/schemas'
+import { EMPLOYEE_COLUMNS } from '@/server/employee-columns'
 
 export async function GET(request: Request) {
   // Admin only: the full roster exposes PII (email/phone/leave_balance) and every
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
   const { rows } = await pool.query(`
     INSERT INTO employees (name, department_id, leave_balance, username, password_hash, must_change_password, join_date, email, phone, position)
     VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8, $9)
-    RETURNING *
+    RETURNING ${EMPLOYEE_COLUMNS}
   `, [name, department_id, finalBalance, username, hashedPassword, join_date || null, email || null, phone || null, position || null])
 
   return NextResponse.json(rows[0])

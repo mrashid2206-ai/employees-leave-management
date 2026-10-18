@@ -36,8 +36,8 @@ describe.skipIf(!HAS_TEST_DB)('leave request rules', () => {
       {
         employee_id: empId,
         leave_type_id: annualId,
-        start_date: '2026-09-01',
-        end_date: '2026-09-03',
+        start_date: '2030-08-27',
+        end_date: '2030-08-29',
         status: 'approved',
         ...over,
       },
@@ -46,7 +46,7 @@ describe.skipIf(!HAS_TEST_DB)('leave request rules', () => {
 
   describe('date validity', () => {
     it('refuses an end date before the start date', async () => {
-      const res = await create({ start_date: '2026-09-10', end_date: '2026-09-01' })
+      const res = await create({ start_date: '2030-09-05', end_date: '2030-08-27' })
       expect(res.ok).toBe(false)
       expect(!res.ok && res.status).toBe(400)
     })
@@ -69,15 +69,15 @@ describe.skipIf(!HAS_TEST_DB)('leave request rules', () => {
     it(`caps emergency leave at ${EMERGENCY_LEAVE_MAX_DAYS} days per year`, async () => {
       const first = await create({
         leave_type_id: emergencyId,
-        start_date: '2026-09-01',
-        end_date: `2026-09-0${EMERGENCY_LEAVE_MAX_DAYS}`,
+        start_date: '2030-08-27',
+        end_date: `2030-08-${26 + EMERGENCY_LEAVE_MAX_DAYS}`,
       })
       expect(first.ok).toBe(true)
 
       const overCap = await create({
         leave_type_id: emergencyId,
-        start_date: '2026-10-01',
-        end_date: '2026-10-01',
+        start_date: '2030-09-26',
+        end_date: '2030-09-26',
       })
       expect(overCap.ok).toBe(false)
       expect(!overCap.ok && overCap.body.error).toContain('Emergency leave limit')
@@ -86,39 +86,39 @@ describe.skipIf(!HAS_TEST_DB)('leave request rules', () => {
     it('counts PENDING emergency days toward the cap, not just approved', async () => {
       await create({
         leave_type_id: emergencyId,
-        start_date: '2026-09-01',
-        end_date: `2026-09-0${EMERGENCY_LEAVE_MAX_DAYS}`,
+        start_date: '2030-08-27',
+        end_date: `2030-08-${26 + EMERGENCY_LEAVE_MAX_DAYS}`,
         status: 'pending',
       })
-      const res = await create({ leave_type_id: emergencyId, start_date: '2026-10-01', end_date: '2026-10-01' })
+      const res = await create({ leave_type_id: emergencyId, start_date: '2030-09-26', end_date: '2030-09-26' })
       expect(res.ok).toBe(false)
     })
 
     it(`requires notes for sick leave over ${SICK_LEAVE_NOTES_THRESHOLD} days`, async () => {
       const withoutNotes = await create({
         leave_type_id: sickId,
-        start_date: '2026-09-01',
-        end_date: '2026-09-06', // 6 days
+        start_date: '2030-08-27',
+        end_date: '2030-09-01', // 6 days
       })
       expect(withoutNotes.ok).toBe(false)
       expect(!withoutNotes.ok && withoutNotes.body.error).toContain('notes')
 
       const withNotes = await create({
         leave_type_id: sickId,
-        start_date: '2026-09-01',
-        end_date: '2026-09-06',
+        start_date: '2030-08-27',
+        end_date: '2030-09-01',
         notes: 'medical certificate #123',
       })
       expect(withNotes.ok).toBe(true)
     })
 
     it('allows short sick leave without notes', async () => {
-      const res = await create({ leave_type_id: sickId, start_date: '2026-09-01', end_date: '2026-09-02' })
+      const res = await create({ leave_type_id: sickId, start_date: '2030-08-27', end_date: '2030-08-28' })
       expect(res.ok).toBe(true)
     })
 
     it(`refuses more than ${MAX_CONSECUTIVE_LEAVE_DAYS} consecutive days`, async () => {
-      const res = await create({ start_date: '2026-09-01', end_date: '2026-10-15' }) // 45 days
+      const res = await create({ start_date: '2030-08-27', end_date: '2030-10-10' }) // 45 days
       expect(res.ok).toBe(false)
       expect(!res.ok && res.body.error).toContain('Maximum consecutive')
     })
@@ -126,32 +126,32 @@ describe.skipIf(!HAS_TEST_DB)('leave request rules', () => {
 
   describe('conflicts', () => {
     it('refuses a request overlapping an existing one', async () => {
-      expect((await create({ start_date: '2026-09-01', end_date: '2026-09-05' })).ok).toBe(true)
+      expect((await create({ start_date: '2030-08-27', end_date: '2030-08-31' })).ok).toBe(true)
 
-      const overlap = await create({ start_date: '2026-09-04', end_date: '2026-09-08' })
+      const overlap = await create({ start_date: '2030-08-30', end_date: '2030-09-03' })
       expect(overlap.ok).toBe(false)
       expect(!overlap.ok && overlap.status).toBe(409)
     })
 
     it('allows a request that merely touches the day after', async () => {
-      expect((await create({ start_date: '2026-09-01', end_date: '2026-09-03' })).ok).toBe(true)
-      expect((await create({ start_date: '2026-09-04', end_date: '2026-09-06' })).ok).toBe(true)
+      expect((await create({ start_date: '2030-08-27', end_date: '2030-08-29' })).ok).toBe(true)
+      expect((await create({ start_date: '2030-08-30', end_date: '2030-09-01' })).ok).toBe(true)
     })
 
     it('ignores a cancelled leave when checking overlap', async () => {
-      const first = await create({ start_date: '2026-09-01', end_date: '2026-09-05' })
+      const first = await create({ start_date: '2030-08-27', end_date: '2030-08-31' })
       const id = (first as { data: { id: number } }).data.id
       await pool.query("UPDATE leave_requests SET status = 'cancelled' WHERE id = $1", [id])
 
-      expect((await create({ start_date: '2026-09-01', end_date: '2026-09-05' })).ok).toBe(true)
+      expect((await create({ start_date: '2030-08-27', end_date: '2030-08-31' })).ok).toBe(true)
     })
 
     it('refuses leave on a day the employee actually worked', async () => {
       await pool.query(
-        "INSERT INTO attendance (employee_id, date, check_in, status) VALUES ($1, '2026-09-02', '08:00', 'present')",
+        "INSERT INTO attendance (employee_id, date, check_in, status) VALUES ($1, '2030-08-28', '08:00', 'present')",
         [empId]
       )
-      const res = await create({ start_date: '2026-09-01', end_date: '2026-09-03' })
+      const res = await create({ start_date: '2030-08-27', end_date: '2030-08-29' })
       expect(res.ok).toBe(false)
       expect(!res.ok && res.status).toBe(409)
       expect(!res.ok && res.body.error).toContain('attendance records')
@@ -165,21 +165,21 @@ describe.skipIf(!HAS_TEST_DB)('leave request rules', () => {
       const b = await addEmployee('Colleague B', 'colleague.b')
       for (const id of [a, b]) {
         await createLeave(
-          { employee_id: id, leave_type_id: annualId, start_date: '2026-09-01', end_date: '2026-09-05', status: 'approved' },
+          { employee_id: id, leave_type_id: annualId, start_date: '2030-08-27', end_date: '2030-08-31', status: 'approved' },
           ADMIN
         )
       }
     })
 
     it('blocks an employee once the department is at its limit', async () => {
-      const res = await create({ start_date: '2026-09-02', end_date: '2026-09-03' }, EMPLOYEE(empId))
+      const res = await create({ start_date: '2030-08-28', end_date: '2030-08-29' }, EMPLOYEE(empId))
       expect(res.ok).toBe(false)
       expect(!res.ok && res.status).toBe(409)
     })
 
     it('warns an admin rather than blocking, and honours force', async () => {
       // An admin must be able to override — the cap is guidance for them, not a wall.
-      const forced = await create({ start_date: '2026-09-02', end_date: '2026-09-03', force: true })
+      const forced = await create({ start_date: '2030-08-28', end_date: '2030-08-29', force: true })
       expect(forced.ok).toBe(true)
     })
   })
@@ -201,19 +201,19 @@ describe.skipIf(!HAS_TEST_DB)('leave request rules', () => {
 
   describe('day counting', () => {
     it('subtracts public holidays from the days charged', async () => {
-      await pool.query("INSERT INTO holidays (name, date) VALUES ('Test Holiday', '2026-09-02')")
-      const res = await create({ start_date: '2026-09-01', end_date: '2026-09-03' }) // 3 days - 1 holiday
+      await pool.query("INSERT INTO holidays (name, date) VALUES ('Test Holiday', '2030-08-28')")
+      const res = await create({ start_date: '2030-08-27', end_date: '2030-08-29' }) // 3 days - 1 holiday
       expect(res.ok).toBe(true)
       expect(parseFloat(String((res as { data: { days_count: string } }).data.days_count))).toBe(2)
     })
 
     it('records a same-day half day as 0.5', async () => {
-      const res = await create({ start_date: '2026-09-01', end_date: '2026-09-01', is_half_day: true })
+      const res = await create({ start_date: '2030-08-27', end_date: '2030-08-27', is_half_day: true })
       expect(parseFloat(String((res as { data: { days_count: string } }).data.days_count))).toBe(0.5)
     })
 
     it('ignores the half-day flag on a multi-day request', async () => {
-      const res = await create({ start_date: '2026-09-01', end_date: '2026-09-03', is_half_day: true })
+      const res = await create({ start_date: '2030-08-27', end_date: '2030-08-29', is_half_day: true })
       expect(parseFloat(String((res as { data: { days_count: string } }).data.days_count))).toBe(3)
     })
   })

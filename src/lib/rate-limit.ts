@@ -49,3 +49,37 @@ export async function resetRateLimit(key: string): Promise<void> {
     // best-effort
   }
 }
+
+const LOGIN_WINDOW_MS = 15 * 60 * 1000
+
+/**
+ * Login throttling, checked in three buckets per 15 minutes:
+ *  - username + IP: 5. Stops one source guessing one account.
+ *  - IP: 20. Stops one source spraying many usernames.
+ *  - username: 50. Caps a distributed attack on one account.
+ *
+ * The username cap used to be 5. That meant anyone who knew a username (`admin`, or an
+ * employee's name-based login) could lock its owner out for 15 minutes with five wrong
+ * guesses. Keying the strict limit on username + IP keeps the protection without
+ * handing out that lockout.
+ *
+ * On a successful login, call `reset()`. It clears only the username + IP bucket, so a
+ * correct guess can't be used to wipe the wider counters.
+ */
+export async function checkLoginRateLimit(
+  scope: string,
+  username: string,
+  ip: string
+): Promise<{ allowed: boolean; reset: () => Promise<void> }> {
+  const user = username.trim().toLowerCase()
+  const pairKey = `${scope}:${user}@${ip}`
+  const [pair, byIp, byUser] = await Promise.all([
+    checkRateLimit(pairKey, 5, LOGIN_WINDOW_MS),
+    checkRateLimit(`${scope}-ip:${ip}`, 20, LOGIN_WINDOW_MS),
+    checkRateLimit(`${scope}-user:${user}`, 50, LOGIN_WINDOW_MS),
+  ])
+  return {
+    allowed: pair.allowed && byIp.allowed && byUser.allowed,
+    reset: () => resetRateLimit(pairKey),
+  }
+}

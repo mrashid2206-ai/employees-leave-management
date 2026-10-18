@@ -1,8 +1,8 @@
-import { SignJWT, jwtVerify } from 'jose'
-import { cookies } from 'next/headers'
+import { SignJWT } from 'jose'
 import bcrypt from 'bcryptjs'
 import pool from '@/lib/db'
 import { getJwtSecret } from '@/lib/jwt'
+import { bootstrapAdminAllowed } from '@/lib/token-version'
 
 async function signAdminToken(user: { username: string; role: string; name: string; token_version?: number }) {
   // tv makes the session revocable (src/lib/token-version.ts).
@@ -35,31 +35,13 @@ export async function authenticate(username: string, password: string) {
   }
 
   // Bootstrap admin: only the username 'admin', with the password supplied via the
-  // ADMIN_PASSWORD env var (never a committed literal). This is reachable only when
-  // no matching admin_users row exists (e.g. fresh DB) so a real admin can be created.
-  // If ADMIN_PASSWORD is unset, bootstrap is disabled entirely.
-  const bootstrapPassword = process.env.ADMIN_PASSWORD
-  if (bootstrapPassword && trimmedUser === 'admin' && trimmedPass === bootstrapPassword) {
+  // ADMIN_PASSWORD env var (never a committed literal), and only while no active admin
+  // account exists, so a real admin can be created. See bootstrapAdminAllowed().
+  if (trimmedUser === 'admin' && trimmedPass === process.env.ADMIN_PASSWORD && (await bootstrapAdminAllowed())) {
     const user = { username: 'admin', role: 'admin', name: 'Admin' }
     const token = await signAdminToken(user)
     return { token, user }
   }
 
   return null
-}
-
-export async function verifyToken(token: string) {
-  try {
-    const { payload } = await jwtVerify(token, getJwtSecret())
-    return payload as { username: string; role: string; name: string }
-  } catch {
-    return null
-  }
-}
-
-export async function getSession() {
-  const cookieStore = await cookies()
-  const token = cookieStore.get('auth-token')?.value
-  if (!token) return null
-  return verifyToken(token)
 }

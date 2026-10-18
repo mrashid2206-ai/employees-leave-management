@@ -1,25 +1,13 @@
 import { NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
-import { checkRateLimit, resetRateLimit } from '@/lib/rate-limit'
-
-function clientIp(request: Request): string {
-  return (
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    request.headers.get('x-real-ip') ||
-    'unknown'
-  )
-}
+import { checkLoginRateLimit } from '@/lib/rate-limit'
+import { clientIp } from '@/lib/client-ip'
 
 export async function POST(request: Request) {
   const { username, password } = await request.json()
 
-  // Rate limit per-username (5/15min) AND per-IP (20/15min) so rotating the
-  // username during a password-spray still trips the IP bucket.
-  const rateKey = `admin-login:${(username || '').trim().toLowerCase()}`
-  const ipKey = `admin-login-ip:${clientIp(request)}`
-  const userLimit = await checkRateLimit(rateKey, 5, 900000)
-  const ipLimit = await checkRateLimit(ipKey, 20, 900000)
-  if (!userLimit.allowed || !ipLimit.allowed) {
+  const limit = await checkLoginRateLimit('admin-login', username || '', clientIp(request))
+  if (!limit.allowed) {
     return NextResponse.json({ error: 'Too many login attempts. Try again in 15 minutes.' }, { status: 429 })
   }
 
@@ -28,7 +16,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid username or password / اسم المستخدم أو كلمة المرور غير صحيحة', hint: 'employee_portal' }, { status: 401 })
   }
 
-  resetRateLimit(rateKey)
+  await limit.reset()
 
   const response = NextResponse.json({ user: result.user })
   response.cookies.set('auth-token', result.token, {

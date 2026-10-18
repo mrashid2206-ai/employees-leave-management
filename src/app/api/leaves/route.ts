@@ -9,6 +9,26 @@ import { createLeave } from '@/server/services/leave-service'
 export async function GET(request: Request) {
   const user = await verifyAnyAuth(request)
   if (!user) return unauthorized()
+
+  // Employees call this for the "who's on leave?" panel, so they get approved leave only,
+  // with just enough to show who is away and when. Notes (which carry medical details for
+  // sick leave) and pending/rejected requests are other people's business. An employee's
+  // own requests, notes included, come from /api/leaves/my-requests.
+  if (user.role === 'employee') {
+    const { rows } = await pool.query(`
+      SELECT lr.id, lr.start_date::text as start_date, lr.end_date::text as end_date,
+        lr.days_count::float8 as days_count, lr.status,
+        json_build_object('name', e.name) as employee,
+        json_build_object('name_ar', lt.name_ar, 'name_en', lt.name_en, 'color', lt.color) as leave_type
+      FROM leave_requests lr
+      JOIN employees e ON lr.employee_id = e.id
+      LEFT JOIN leave_types lt ON lr.leave_type_id = lt.id
+      WHERE lr.status = 'approved' AND e.is_active = true
+      ORDER BY lr.start_date DESC
+    `)
+    return NextResponse.json(rows)
+  }
+
   const { rows } = await pool.query(`
     SELECT lr.id, lr.employee_id, lr.leave_type_id,
       lr.start_date::text as start_date, lr.end_date::text as end_date,

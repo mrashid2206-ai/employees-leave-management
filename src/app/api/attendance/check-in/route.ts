@@ -7,14 +7,7 @@ import { resolveSchedule } from '@/lib/schedule'
 import { notifyEmployee } from '@/lib/employee-notify'
 import { parseBody } from '@/server/validation'
 import { checkInSchema } from '@/server/schemas'
-
-function clientIpOf(request: Request): string {
-  return (
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    request.headers.get('x-real-ip') ||
-    'unknown'
-  )
-}
+import { clientIp as clientIpOf } from '@/lib/client-ip'
 
 export async function POST(request: Request) {
   const user = await verifyAnyAuth(request)

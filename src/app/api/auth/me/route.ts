@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { getSession } from '@/lib/auth'
+import { verifyAdmin, unauthorized } from '@/lib/api-auth'
 
-export async function GET() {
-  const session = await getSession()
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-  return NextResponse.json({ user: session })
+// verifyAdmin, not a bare signature check: a logged-out or revoked session must stop
+// getting an identity back here too.
+export async function GET(request: Request) {
+  const admin = await verifyAdmin(request)
+  if (!admin) return unauthorized()
+  return NextResponse.json({ user: { username: admin.username, role: admin.role, name: admin.name } })
 }
