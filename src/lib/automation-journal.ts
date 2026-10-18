@@ -82,6 +82,44 @@ export async function finishRun(runId: number | null, summary: Record<string, un
   }
 }
 
+// When does a daily run count as having DONE its date? Used to work out which days the
+// nightly job still owes (see runDailyCatchUp in src/lib/automation.ts).
+//  - It finished: finishRun wrote a summary, and the summary isn't marked failed.
+//  - It ran after its date was over. A run made while the day was still in progress
+//    skips absence marking, so it can't stand in for the real one.
+//  - Or an admin undid it. That's deliberate, so the catch-up must not quietly redo it.
+const RUN_DONE = `(r.reversed_at IS NOT NULL OR (
+  r.summary <> '{}'::jsonb
+  AND NOT (r.summary ? 'failed')
+  AND (r.created_at AT TIME ZONE 'Asia/Muscat')::date > r.target_date
+))`
+
+/** Days in [from, to] with no completed daily run, oldest first. */
+export async function daysWithoutDailyRun(from: string, to: string): Promise<string[]> {
+  if (from > to) return []
+  const { rows } = await pool.query(
+    `SELECT gs::date::text AS day
+       FROM generate_series($1::date, $2::date, interval '1 day') gs
+      WHERE NOT EXISTS (
+        SELECT 1 FROM automation_runs r
+         WHERE r.kind = 'daily' AND r.target_date = gs::date AND ${RUN_DONE}
+      )
+      ORDER BY 1`,
+    [from, to]
+  )
+  return rows.map(r => r.day as string)
+}
+
+/** First and latest day a daily run has completed, or nulls if none ever has. */
+export async function completedDailyRange(): Promise<{ first: string | null; last: string | null }> {
+  const { rows } = await pool.query(
+    `SELECT MIN(r.target_date)::text AS first, MAX(r.target_date)::text AS last
+       FROM automation_runs r
+      WHERE r.kind = 'daily' AND ${RUN_DONE}`
+  )
+  return { first: rows[0]?.first ?? null, last: rows[0]?.last ?? null }
+}
+
 export async function listRuns(limit = 30): Promise<AutomationRunRow[]> {
   const { rows } = await pool.query(
     `SELECT r.*, (SELECT COUNT(*)::int FROM automation_effects e WHERE e.run_id = r.id) AS effect_count
