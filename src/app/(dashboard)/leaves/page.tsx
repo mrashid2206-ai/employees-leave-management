@@ -23,6 +23,7 @@ import { DecisionDialog } from '@/components/decision-dialog'
 import { DecisionTrace, decisionDate } from '@/components/decision-trace'
 import { useLanguage, useT } from '@/lib/language-context'
 import { QueryError } from '@/components/query-error'
+import { LeaveAttachments } from '@/components/leave-attachments'
 import { exportToExcel } from '@/lib/excel'
 import { omanToday } from '@/lib/oman-date'
 import { invalidateAfterLeaveDecision, useLeaveDecision } from '../_components/leave-decision'
@@ -647,6 +648,7 @@ export default function LeavesPage() {
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-1">
+                            <LeaveAttachments leaveId={leave.id} count={leave.attachment_count} />
                             <Button
                               variant="ghost"
                               size="icon"

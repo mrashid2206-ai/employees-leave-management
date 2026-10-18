@@ -87,6 +87,8 @@ export interface LeaveRequest extends DecisionFields {
   updated_at: string
   employee?: Employee
   leave_type?: LeaveType
+  /** Present on admin and owner views only (see GET /api/leaves). */
+  attachment_count?: number
 }
 
 export interface TardinessRecord {
