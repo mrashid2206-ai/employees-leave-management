@@ -11,6 +11,9 @@ import {
   MAX_CONSECUTIVE_LEAVE_DAYS,
 } from '@/lib/constants'
 import { ok, fail, type ServiceResult, type Actor, actorLabel } from '@/server/result'
+import { checkDecisionNote, normalizeNote, notifyDecision } from '@/server/decision'
+import { logger } from '@/lib/log'
+import type { PoolClient } from 'pg'
 
 // All leave business rules live here: creation validation, the approve/reject state
 // machine, admin edits and deletion — every path that can move an employee's balance.
@@ -171,10 +174,15 @@ export async function createLeave(input: LeaveCreateInput, actor: Actor): Promis
       return fail(409, 'Employee already has a pending or approved leave for these dates')
     }
 
+    // An admin creating a leave already decided records themselves as the reviewer, the
+    // same trace a decision from the queue leaves.
+    const decidedNow = finalStatus === 'approved' || finalStatus === 'rejected'
     const { rows } = await client.query(
-      `INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, days_count, notes, status, is_half_day)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [employee_id, leave_type_id, start_date, end_date, finalDays, notes || null, finalStatus, isHalfDay]
+      `INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, days_count, notes, status, is_half_day,
+                                   reviewed_by, reviewed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $10::boolean THEN NOW() END) RETURNING *`,
+      [employee_id, leave_type_id, start_date, end_date, finalDays, notes || null, finalStatus, isHalfDay,
+        decidedNow ? actorLabel(actor) : null, decidedNow]
     )
     createdLeave = rows[0]
 
@@ -224,25 +232,71 @@ export async function createLeave(input: LeaveCreateInput, actor: Actor): Promis
   }
 }
 
+// Advisory-lock namespace for "approving a leave in department N" (paired with the id).
+const DEPT_ABSENCE_LOCK = 8273642
+
+// How many OTHER active employees of this leave's department already have approved leave
+// overlapping it, against the configured maximum. Null when the employee has no
+// department. Must run inside the approving transaction.
+async function departmentAbsence(
+  client: PoolClient,
+  leave: LeaveRecord
+): Promise<{ absentCount: number; maxAbsent: number } | null> {
+  const { rows: emp } = await client.query('SELECT department_id FROM employees WHERE id = $1', [leave.employee_id])
+  const deptId = emp[0]?.department_id
+  if (deptId == null) return null
+
+  // Serialise approvals within one department until this transaction ends: two admins
+  // approving two colleagues at the same moment would otherwise each count the other as
+  // not yet on leave, and both get through a limit that only had room for one.
+  await client.query('SELECT pg_advisory_xact_lock($1, $2)', [DEPT_ABSENCE_LOCK, deptId])
+
+  const { rows: settings } = await client.query('SELECT max_absent_same_dept FROM settings ORDER BY id LIMIT 1')
+  // Same default as createLeave, so filing and approving agree on the number.
+  const maxAbsent = settings[0]?.max_absent_same_dept || 2
+  const { rows } = await client.query(
+    "SELECT COUNT(DISTINCT employee_id) as cnt FROM leave_requests WHERE employee_id != $1 AND status = 'approved' AND start_date <= $2 AND end_date >= $3 AND employee_id IN (SELECT id FROM employees WHERE department_id = $4 AND is_active = true)",
+    [leave.employee_id, leave.end_date, leave.start_date, deptId]
+  )
+  return { absentCount: parseInt(rows[0].cnt), maxAbsent }
+}
+
+export interface LeaveDecisionOptions {
+  /** The admin's remark. Required to reject; shown to the employee. */
+  note?: string | null
+  /** Approve even though the department's absence limit is reached. */
+  force?: boolean
+}
+
+// Dates come back as text: a DATE read into a JS Date is local midnight, and printing it
+// (in the employee's notification) or serialising it (toISOString, in the API response)
+// shifts it by the server's offset from UTC.
+const LEAVE_COLUMNS = `id, employee_id, leave_type_id, start_date::text AS start_date, end_date::text AS end_date,
+  days_count, is_half_day, notes, status, reviewed_by, reviewed_at, decision_note, created_at, updated_at`
+
 export async function changeLeaveStatus(
   id: string,
   status: string,
-  actor: Actor
+  actor: Actor,
+  opts: LeaveDecisionOptions = {}
 ): Promise<ServiceResult<Record<string, unknown>>> {
   if (!['approved', 'rejected', 'pending'].includes(status)) {
     return fail(400, 'Invalid status')
   }
-
+  const note = normalizeNote(opts.note)
+  const noteProblem = checkDecisionNote(status, note)
+  if (noteProblem) return noteProblem
 
   const client = await pool.connect()
   let rows: LeaveRecord[]
   let currentLeave: LeaveRecord
   let previousStatus: string
   let balanceAfter: number | null = null
+  let limitOverridden = false
   try {
     await client.query('BEGIN')
 
-    const { rows: lockedLeave } = await client.query('SELECT * FROM leave_requests WHERE id = $1 FOR UPDATE', [id])
+    const { rows: lockedLeave } = await client.query(`SELECT ${LEAVE_COLUMNS} FROM leave_requests WHERE id = $1 FOR UPDATE`, [id])
     if (lockedLeave.length === 0) {
       await client.query('ROLLBACK')
       return fail(404, 'Not found')
@@ -278,15 +332,39 @@ export async function changeLeaveStatus(
           { attendanceConflict: true, dates: att.map(r => r.date) }
         )
       }
+
+      // The department absence limit. createLeave checks it when a request is filed, but
+      // a request filed while the department had room can be approved after others have
+      // been — approval is the moment the absence becomes real, so it is checked again
+      // here, with the same admin override createLeave offers (`force`). Without this a
+      // bulk approval of a busy week went straight past the limit.
+      const limit = await departmentAbsence(client, currentLeave)
+      if (limit && limit.absentCount >= limit.maxAbsent) {
+        if (!opts.force) {
+          await client.query('ROLLBACK')
+          return fail(
+            409,
+            `Warning: ${limit.absentCount}/${limit.maxAbsent} employees from this department are already on leave for these dates. Approve again with the override to proceed. / تحذير: ${limit.absentCount}/${limit.maxAbsent} من موظفي هذا القسم في إجازة خلال هذه التواريخ. أعد الموافقة مع التجاوز للمتابعة.`,
+            { warning: true, deptLimit: true, absentCount: limit.absentCount, maxAbsent: limit.maxAbsent }
+          )
+        }
+        limitOverridden = true
+      }
     }
 
     // Lock the employee row so the balance mutation is race-free. By owner policy an
     // insufficient/negative balance does NOT block approval.
     await client.query('SELECT leave_balance FROM employees WHERE id = $1 FOR UPDATE', [currentLeave.employee_id])
 
+    // A decision records who made it, when and why. Sending a request back to pending
+    // un-decides it, so the previous decision's trace is cleared (the audit log keeps it).
+    const decided = status === 'approved' || status === 'rejected'
     const result = await client.query(
-      'UPDATE leave_requests SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
-      [status, id]
+      `UPDATE leave_requests
+          SET status = $1, updated_at = NOW(),
+              reviewed_by = $3, reviewed_at = CASE WHEN $4::boolean THEN NOW() END, decision_note = $5
+        WHERE id = $2 RETURNING ${LEAVE_COLUMNS}`,
+      [status, id, decided ? actorLabel(actor) : null, decided, decided ? note : null]
     )
     rows = result.rows
 
@@ -312,15 +390,32 @@ export async function changeLeaveStatus(
     client.release()
   }
 
-  await logAudit('leave_status_change', actorLabel(actor), actor.role, `Leave #${id} changed to ${status} for emp ${currentLeave.employee_id}`)
-
-  const statusEn = status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : 'updated'
-  const statusAr = status === 'approved' ? 'تمت الموافقة' : status === 'rejected' ? 'تم الرفض' : 'تم التحديث'
-  await notifyEmployee(
-    currentLeave.employee_id,
-    `Your leave request (${currentLeave.start_date} to ${currentLeave.end_date}) has been ${statusEn}`,
-    `طلب إجازتك (${currentLeave.start_date} إلى ${currentLeave.end_date}) ${statusAr}`
+  await logAudit(
+    'leave_status_change',
+    actorLabel(actor),
+    actor.role,
+    `Leave #${id} changed to ${status} for emp ${currentLeave.employee_id}` +
+      (limitOverridden ? ' (department absence limit overridden)' : '') +
+      (note ? ` — note: ${note}` : '')
   )
+
+  if (status === 'approved' || status === 'rejected') {
+    await notifyDecision(
+      currentLeave.employee_id,
+      'leave',
+      status,
+      { start: currentLeave.start_date, end: currentLeave.end_date },
+      note,
+      id
+    )
+  } else {
+    // Back to pending isn't a decision; the bell says so, without a push.
+    await notifyEmployee(
+      currentLeave.employee_id,
+      `Your leave request (${currentLeave.start_date} to ${currentLeave.end_date}) is pending review again.`,
+      `طلب إجازتك (${currentLeave.start_date} إلى ${currentLeave.end_date}) عاد إلى قيد المراجعة.`
+    )
+  }
 
   // Best-effort email; never blocks the decision.
   try {
@@ -351,6 +446,64 @@ export async function changeLeaveStatus(
   }
 
   return ok({ ...rows[0], balance_after: balanceAfter })
+}
+
+export interface BulkDecisionItem {
+  id: number
+  ok: boolean
+  /** Why this one was refused (the same message a single decision would return). */
+  error?: string
+  status?: number
+  /** Refused only because of the department limit — the override would let it through. */
+  warning?: boolean
+  balance_after?: number | null
+}
+
+export interface BulkDecisionResult {
+  results: BulkDecisionItem[]
+  succeeded: number
+  failed: number
+}
+
+/**
+ * Decide many leave requests at once. Each id goes through changeLeaveStatus, one after
+ * another — the same transaction, balance deduction, attendance-conflict check and
+ * department limit as deciding it alone — and each gets its own result, so one refusal
+ * neither aborts the rest nor hides behind a blanket "updated". Sequential on purpose:
+ * the department limit depends on the approvals before it.
+ */
+export async function bulkChangeLeaveStatus(
+  ids: number[],
+  status: 'approved' | 'rejected',
+  actor: Actor,
+  opts: LeaveDecisionOptions = {}
+): Promise<ServiceResult<BulkDecisionResult>> {
+  const note = normalizeNote(opts.note)
+  const noteProblem = checkDecisionNote(status, note)
+  if (noteProblem) return noteProblem
+
+  const results: BulkDecisionItem[] = []
+  for (const id of [...new Set(ids)]) {
+    try {
+      const r = await changeLeaveStatus(String(id), status, actor, { note, force: opts.force })
+      if (r.ok) {
+        results.push({ id, ok: true, balance_after: (r.data.balance_after as number | null) ?? null })
+      } else {
+        results.push({
+          id,
+          ok: false,
+          status: r.status,
+          error: String(r.body.error ?? 'Failed'),
+          ...(r.body.warning ? { warning: true } : {}),
+        })
+      }
+    } catch (e) {
+      logger.error('bulk leave decision failed', e)
+      results.push({ id, ok: false, status: 500, error: 'Unexpected error / خطأ غير متوقع' })
+    }
+  }
+  const succeeded = results.filter(r => r.ok).length
+  return ok({ results, succeeded, failed: results.length - succeeded })
 }
 
 export async function editLeaveDates(

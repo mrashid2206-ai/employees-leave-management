@@ -11,8 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CheckCircle, XCircle, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { DecisionDialog } from '@/components/decision-dialog'
+import { DecisionTrace } from '@/components/decision-trace'
 import { useLanguage, useT } from '@/lib/language-context'
-import { getDepartments, getEmployees } from '@/lib/api'
+import { decidePermission, getDepartments, getEmployees } from '@/lib/api'
 import type { Employee, Department } from '@/lib/types'
 
 interface Permission {
@@ -24,6 +26,10 @@ interface Permission {
   return_time: string | null
   reason: string | null
   status: string
+  /** The reviewer — the column predates the rejection path and kept its name. */
+  approved_by?: string | null
+  reviewed_at?: string | null
+  decision_note?: string | null
 }
 
 export default function PermissionsPage() {
@@ -40,16 +46,21 @@ export default function PermissionsPage() {
   const { data: departments = [] } = useQuery({ queryKey: ['departments'], queryFn: getDepartments })
   const { data: employees = [] } = useQuery({ queryKey: ['employees'], queryFn: getEmployees })
 
+  // The response used to be parsed and treated as success whatever its status, so a
+  // refused decision still showed "updated".
+  const [rejectTarget, setRejectTarget] = useState<Permission | null>(null)
   const approveMutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: string }) =>
-      fetch(`/api/permissions/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      }).then(r => r.json()),
+    mutationFn: ({ id, status, note }: { id: number; status: 'approved' | 'rejected'; note?: string }) =>
+      decidePermission(id, status, note || null),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['permissions'] })
+      setRejectTarget(null)
       toast.success(t('updatedSuccess'))
+    },
+    onError: (err: Error) => {
+      // e.g. another admin already decided it: refresh so the row shows the real state.
+      queryClient.invalidateQueries({ queryKey: ['permissions'] })
+      toast.error(err.message || t('error'))
     },
   })
 
@@ -200,17 +211,27 @@ export default function PermissionsPage() {
                         ) : (
                           <Badge className="bg-amber-500/10 text-amber-500 border-0">{t('pending')}</Badge>
                         )}
+                        <DecisionTrace
+                          status={p.status}
+                          reviewed_by={p.approved_by}
+                          reviewed_at={p.reviewed_at}
+                          decision_note={p.decision_note}
+                        />
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-1">
                           {p.status === 'pending' && (
                             <>
                               <Button variant="ghost" size="icon" className="h-7 w-7 text-emerald-500 hover:bg-emerald-500/10"
+                                aria-label={t('approve')}
+                                disabled={approveMutation.isPending}
                                 onClick={() => approveMutation.mutate({ id: p.id, status: 'approved' })}>
                                 <CheckCircle className="h-3.5 w-3.5" />
                               </Button>
                               <Button variant="ghost" size="icon" className="h-7 w-7 text-rose-500 hover:bg-rose-500/10"
-                                onClick={() => approveMutation.mutate({ id: p.id, status: 'rejected' })}>
+                                aria-label={t('reject')}
+                                disabled={approveMutation.isPending}
+                                onClick={() => setRejectTarget(p)}>
                                 <XCircle className="h-3.5 w-3.5" />
                               </Button>
                             </>
@@ -229,6 +250,22 @@ export default function PermissionsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {rejectTarget && (
+        <DecisionDialog
+          key={rejectTarget.id}
+          open
+          onOpenChange={open => { if (!open) setRejectTarget(null) }}
+          mode="reject"
+          description={
+            <span dir="auto">
+              {rejectTarget.employee?.name} · <span className="font-mono" dir="ltr">{rejectTarget.date} {rejectTarget.leave_time?.slice(0, 5)}</span>
+            </span>
+          }
+          loading={approveMutation.isPending}
+          onConfirm={note => approveMutation.mutate({ id: rejectTarget.id, status: 'rejected', note })}
+        />
+      )}
 
       <ConfirmDialog
         open={deleteConfirm.open}

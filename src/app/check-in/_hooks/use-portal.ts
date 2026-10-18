@@ -2,8 +2,9 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import type { AttendanceCorrection, Holiday } from '@/lib/api'
-import type { Employee, LeaveType, Settings } from '@/lib/types'
+// The portal's corrections carry the decision (reviewer, date, note) as well.
+import type { Holiday, ReviewedCorrection as AttendanceCorrection } from '@/lib/api'
+import type { DecisionFields, Employee, LeaveType, Settings } from '@/lib/types'
 import { omanToday } from '@/lib/oman-date'
 import { leaveYears, inLeaveYear } from '@/lib/leave-year'
 import { resolveScheduleFrom, type WorkSchedule } from '@/lib/schedule-core'
@@ -70,7 +71,7 @@ export interface TardinessRow {
   notes?: string | null
 }
 
-export interface MyLeaveRequest {
+export interface MyLeaveRequest extends DecisionFields {
   id: number
   start_date: string
   end_date: string
@@ -101,6 +102,8 @@ export interface PermissionRecord {
   return_time?: string | null
   reason?: string | null
   status: string
+  reviewed_at?: string | null
+  decision_note?: string | null
 }
 
 export interface NotificationItem {

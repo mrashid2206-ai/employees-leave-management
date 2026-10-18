@@ -7,6 +7,14 @@ const timeStr = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, 'must be a HH:MM time
 // .passthrough() keeps unknown keys so validation only ever *adds* a guard against
 // missing/invalid required fields — it never rejects an existing valid payload.
 
+// An admin's remark on a decision. Optional to approve, required to reject — that rule
+// lives in the services (src/server/decision.ts) so every path, bulk included, enforces
+// it; the schema only bounds the length.
+const decisionNote = z
+  .string()
+  .max(500, 'must be at most 500 characters / يجب ألا تتجاوز 500 حرف')
+  .nullish()
+
 // ---- Leave ----------------------------------------------------------------------
 export const leaveCreateSchema = z
   .object({
@@ -26,7 +34,23 @@ export const leaveCreateSchema = z
   .passthrough()
 
 export const leaveStatusSchema = z
-  .object({ status: z.enum(['approved', 'rejected', 'pending']) })
+  .object({
+    status: z.enum(['approved', 'rejected', 'pending']),
+    note: decisionNote,
+    // Approve even though the department's absence limit is reached (the same override
+    // createLeave offers an admin).
+    force: z.boolean().optional(),
+  })
+  .passthrough()
+
+// Bulk decisions go through the same service call as a single one, item by item.
+export const leaveBulkStatusSchema = z
+  .object({
+    ids: z.array(id).min(1).max(200),
+    status: z.enum(['approved', 'rejected']),
+    note: decisionNote,
+    force: z.boolean().optional(),
+  })
   .passthrough()
 
 export const leaveEditSchema = z
@@ -110,6 +134,7 @@ export const permissionUpdateSchema = z
     // "I'm back, stamp it now" — what the portal sends instead of a time of its own.
     returned: z.literal(true).optional(),
     status: z.enum(['approved', 'rejected', 'pending']).optional(),
+    note: decisionNote,
   })
   .passthrough()
 
@@ -125,7 +150,7 @@ export const correctionCreateSchema = z
   .passthrough()
 
 export const correctionReviewSchema = z
-  .object({ status: z.enum(['approved', 'rejected']) })
+  .object({ status: z.enum(['approved', 'rejected']), note: decisionNote })
   .passthrough()
 
 // ---- People & reference data ----------------------------------------------------

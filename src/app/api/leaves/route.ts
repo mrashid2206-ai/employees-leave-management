@@ -33,6 +33,7 @@ export async function GET(request: Request) {
     SELECT lr.id, lr.employee_id, lr.leave_type_id,
       lr.start_date::text as start_date, lr.end_date::text as end_date,
       lr.days_count::float8 as days_count, lr.notes, lr.status, lr.created_at, lr.updated_at,
+      lr.reviewed_by, lr.reviewed_at, lr.decision_note,
       json_build_object('id', e.id, 'name', e.name, 'department_id', e.department_id) as employee,
       json_build_object('id', lt.id, 'name_ar', lt.name_ar, 'name_en', lt.name_en, 'color', lt.color) as leave_type
     FROM leave_requests lr
