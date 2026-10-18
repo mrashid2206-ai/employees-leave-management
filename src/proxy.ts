@@ -6,14 +6,34 @@ import { getJwtSecret } from '@/lib/jwt'
 // Fully public
 const PUBLIC_PATHS = ['/login', '/employee-login', '/api/auth']
 
+// Public files from /public that the browser requests on its own (install, push). An
+// exact list rather than "anything with an extension", so no route can opt out of auth
+// by accident.
+const PWA_ASSETS = new Set([
+  '/sw.js',
+  '/manifest.json',
+  '/icon.svg',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-maskable-512.png',
+  '/apple-touch-icon.png',
+])
+
 // Employee-only pages (require employee token)
 const EMPLOYEE_PATHS = ['/check-in', '/apply-leave']
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Allow static files
-  if (pathname.startsWith('/_next') || pathname.startsWith('/favicon')) {
+  // Allow static files. The PWA files must be reachable WITHOUT a session: the browser
+  // fetches the manifest and icons from the login page, and a service worker script
+  // behind a redirect (to /login or /check-in) is refused outright — so before this list
+  // the portal could never register its worker or be installed.
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/favicon') ||
+    PWA_ASSETS.has(pathname)
+  ) {
     return NextResponse.next()
   }
 

@@ -435,6 +435,10 @@ export function useNotifications() {
     queryFn: () => getJSON<NotificationItem[]>('/api/employee-notifications'),
     // The bell badge must not go stale while the employee moves between tabs.
     staleTime: 15 * 1000,
+    // Approvals arrive while the portal sits open on a desk. react-query pauses interval
+    // refetches while the document is hidden (refetchIntervalInBackground defaults to
+    // false), so a backgrounded tab or locked phone doesn't poll.
+    refetchInterval: 60 * 1000,
   })
 }
 
@@ -570,6 +574,16 @@ export function useMarkNotificationRead() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: number) => sendVoid('/api/employee-notifications', 'PUT', { id }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: portalKeys.notifications() })
+    },
+  })
+}
+
+export function useMarkAllNotificationsRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => sendVoid('/api/employee-notifications', 'PUT', { all: true }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: portalKeys.notifications() })
     },

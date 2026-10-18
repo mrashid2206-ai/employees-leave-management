@@ -16,8 +16,37 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return output
 }
 
-// Registers the service worker (making the portal installable) and lets the employee
-// opt in to push reminders. Renders nothing when push isn't supported or configured.
+// Detach a subscription from this employee: server row first, while the session cookie
+// still exists, then the browser side. If the DELETE fails, unsubscribing still makes the
+// push service answer 410 for the endpoint, and pushToEmployee prunes it on the next send.
+async function detach(sub: PushSubscription): Promise<void> {
+  await fetch('/api/push/subscribe', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint: sub.endpoint }),
+  }).catch(() => {})
+  await sub.unsubscribe()
+}
+
+/**
+ * Stop this device receiving the current employee's reminders. Called on logout: phones
+ * are shared, and without this the next person to pick it up keeps getting the previous
+ * employee's "you haven't checked in" pushes. Best-effort and time-boxed so logout can
+ * never hang on a push service or a worker that never activated.
+ */
+export async function unsubscribeThisDevice(timeoutMs = 3000): Promise<void> {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+  const work = (async () => {
+    const reg = await navigator.serviceWorker.getRegistration()
+    const sub = await reg?.pushManager?.getSubscription()
+    if (sub) await detach(sub)
+  })().catch(() => {})
+  await Promise.race([work, new Promise(resolve => setTimeout(resolve, timeoutMs))])
+}
+
+// Lets the employee opt in to push reminders. The service worker itself is registered by
+// the portal layout (ServiceWorkerRegistration); this waits for it rather than registering
+// again. Renders nothing when push isn't supported.
 export function PushSetup() {
   const t = useT()
   const [supported, setSupported] = useState(false)
@@ -29,7 +58,7 @@ export function PushSetup() {
     if (typeof window === 'undefined') return
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
 
-    navigator.serviceWorker.register('/sw.js')
+    navigator.serviceWorker.ready
       .then(async (reg) => {
         if (cancelled) return
         setSupported(true)
@@ -81,14 +110,7 @@ export function PushSetup() {
     try {
       const reg = await navigator.serviceWorker.ready
       const sub = await reg.pushManager.getSubscription()
-      if (sub) {
-        await fetch('/api/push/subscribe', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ endpoint: sub.endpoint }),
-        }).catch(() => {})
-        await sub.unsubscribe()
-      }
+      if (sub) await detach(sub)
       setEnabled(false)
       toast.success(t('remindersDisabled'))
     } catch {

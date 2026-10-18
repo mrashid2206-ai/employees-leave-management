@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Lock, User, Eye, EyeOff, CalendarDays, ClipboardCheck } from 'lucide-react'
 import { useLanguage, useT } from '@/lib/language-context'
 import { LanguageToggle } from '@/components/language-toggle'
+import { ServiceWorkerRegistration } from '@/components/service-worker-registration'
 
 export default function EmployeeLoginPage() {
   const t = useT()
@@ -17,6 +18,9 @@ export default function EmployeeLoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const usernameId = useId()
+  const passwordId = useId()
+  const errorId = useId()
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -54,14 +58,17 @@ export default function EmployeeLoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-background to-primary/5" dir={dir}>
-      <div className="absolute top-4 left-4">
+      {/* start-4, not left-4: the corner flips with the reading direction. */}
+      <div className="absolute top-4 start-4">
         <LanguageToggle />
       </div>
+      {/* The manifest's start_url is this page, so installing must work before login. */}
+      <ServiceWorkerRegistration />
 
       <Card className="w-full max-w-md border-0 shadow-2xl backdrop-blur-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
         <CardHeader className="text-center pb-2">
           <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-            <User className="h-8 w-8 text-primary" />
+            <User aria-hidden="true" className="h-8 w-8 text-primary" />
           </div>
           <CardTitle className="text-xl">
             {t('employeePortal')}
@@ -71,10 +78,15 @@ export default function EmployeeLoginPage() {
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <Label>{t('username')}</Label>
+              <Label htmlFor={usernameId}>{t('username')}</Label>
               <div className="relative">
-                <User className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <User aria-hidden="true" className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
+                  id={usernameId}
+                  name="username"
+                  autoComplete="username"
+                  aria-invalid={error ? true : undefined}
+                  aria-describedby={error ? errorId : undefined}
                   value={username}
                   onChange={e => setUsername(e.target.value.trim().toLowerCase())}
                   placeholder={t('enterUsername')}
@@ -87,10 +99,15 @@ export default function EmployeeLoginPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>{t('password')}</Label>
+              <Label htmlFor={passwordId}>{t('password')}</Label>
               <div className="relative">
-                <Lock className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Lock aria-hidden="true" className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
+                  id={passwordId}
+                  name="password"
+                  autoComplete="current-password"
+                  aria-invalid={error ? true : undefined}
+                  aria-describedby={error ? errorId : undefined}
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
@@ -98,17 +115,22 @@ export default function EmployeeLoginPage() {
                   className="ps-10 pe-10"
                   required
                 />
+                {/* A fixed name plus aria-pressed: "Show password, pressed" reads correctly in
+                    both states, where a label that flips would contradict the pressed state. */}
                 <button
                   type="button"
+                  aria-label={t('showPassword')}
+                  aria-pressed={showPassword}
+                  aria-controls={passwordId}
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  className="absolute end-1 top-1/2 -translate-y-1/2 p-2 rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showPassword ? <EyeOff aria-hidden="true" className="h-4 w-4" /> : <Eye aria-hidden="true" className="h-4 w-4" />}
                 </button>
               </div>
             </div>
             {error && (
-              <div className="text-sm text-rose-500 bg-rose-500/10 p-3 rounded-lg text-center">{error}</div>
+              <div id={errorId} role="alert" className="text-sm text-rose-500 bg-rose-500/10 p-3 rounded-lg text-center">{error}</div>
             )}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? t('loggingIn') : t('login')}
@@ -122,11 +144,11 @@ export default function EmployeeLoginPage() {
             </p>
             <div className="grid grid-cols-2 gap-2">
               <div className="flex items-center gap-2 p-2 rounded-lg bg-accent/30 text-sm">
-                <ClipboardCheck className="h-4 w-4 text-emerald-500" />
+                <ClipboardCheck aria-hidden="true" className="h-4 w-4 text-emerald-500" />
                 <span>{t('checkInBtn')}</span>
               </div>
               <div className="flex items-center gap-2 p-2 rounded-lg bg-accent/30 text-sm">
-                <CalendarDays className="h-4 w-4 text-primary" />
+                <CalendarDays aria-hidden="true" className="h-4 w-4 text-primary" />
                 <span>{t('applyLeave')}</span>
               </div>
             </div>
